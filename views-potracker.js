@@ -18,6 +18,10 @@ var poTrackerExpandedItems = {}; // soId -> เปิด/ปิดแผงร�
 var poTrackerExpandedStockEdit = {}; // soId -> เปิด/ปิดแผงปรับยอด Stock ด่วน (ซ้อนอยู่ในแผงรายการสินค้า ซ่อนไว้โดยปริยายกันรก)
 var poTrackerStockSnapshot = {}; // "soId|sku" -> เวลา stockLog ล่าสุดตอนเปิดแผง ใช้เช็ค conflict ก่อนบันทึกทับ
 var poTrackerSummarySelectedBuckets = []; // แท็ปสถานะที่เลือกไว้ในแผงสรุปรายการสินค้า — [] = เลือกทุกสถานะ (แท็ป "ทั้งหมด") เลือกได้พร้อมกันหลายแท็ป
+var POTRACKER_SUMMARY_VIEWMODE_LS_KEY = 'v7_poTracker_summaryViewMode';
+var poTrackerSummaryViewMode = 'product'; // product | so — จัดกลุ่มแผงสรุปรายการสินค้า จำค่าไว้ (localStorage) ต่อเครื่อง ค่าเริ่มต้น "สินค้า" กันพฤติกรรมเดิมเปลี่ยน
+try { poTrackerSummaryViewMode = localStorage.getItem(POTRACKER_SUMMARY_VIEWMODE_LS_KEY) || 'product'; } catch (e) {}
+var poTrackerSummaryCollapsedSO = {}; // soId -> พับ/กางอยู่ (เฉพาะโหมดดูตาม SO) ไม่มี key = กางอยู่ (ค่าเริ่มต้น)
 var poTrackerSelectMode = false; // โหมดเลือกหลายใบ — ใช้สำหรับปุ่ม "📦 สรุปของพร้อมส่งให้ลูกค้า" (เหมือนหน้า Sales Orders)
 var poTrackerSelected = {};
 var _poTrackerVisibleIds = [];
@@ -213,9 +217,11 @@ function _poTrackerClusterRowHtml(c, selectedBuckets) {
 // สินค้าที่แบ่งส่งหลายสถานะในใบเดียวกันจะโชว์เป็น progress bar ส่วนสินค้าเดียวกันที่มาจากหลาย SO จะรวมหัวข้อเดียวแล้วแตกเป็น
 // บรรทัดย่อยทีละ SO เรียงตามจำนวนวันที่ลูกค้ารอมากสุดก่อน จะได้รู้ว่าต้องเร่งติดตามรายการไหนก่อน
 function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
+  var sq = (poTrackerSearch || '').trim().toLowerCase();
   var flat = [];
   dealerRows.forEach(function(r) {
     (r.so.items || []).forEach(function(it) {
+      if (sq && !_poTrackerSummaryItemMatchesSearch(it, r.so, sq)) return;
       flat.push({ it: it, so: r.so, bucket: _poTrackerItemBucket(it, r.so) });
     });
   });
@@ -233,25 +239,18 @@ function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
   });
   var soGroups = soOrder.map(function(k) { return soMap[k]; });
 
-  // ชั้นที่ 2: รวมตาม sku/model เดียวกันข้าม SO เผื่อสินค้าชิ้นเดียวกันมาจากหลายใบคนละ SO
-  var clusterMap = {}, clusterOrder = [];
-  soGroups.forEach(function(sg) {
-    var key = sg.sku || sg.name;
-    if (!clusterMap[key]) { clusterMap[key] = { name: sg.name, sku: sg.sku, cat: sg.cat, soGroups: [], total: 0 }; clusterOrder.push(key); }
-    clusterMap[key].soGroups.push(sg);
-    clusterMap[key].total += sg.total;
-  });
-  var clusters = clusterOrder.map(function(k) { return clusterMap[k]; });
-  clusters.forEach(function(c) {
-    c.maxWait = Math.max.apply(null, c.soGroups.map(function(sg) { return _poTrackerSoWaitDays(sg.so); }));
-  });
-
   var allKeys = POTRACKER_ITEM_BUCKETS.map(function(b) { return b.key; });
   var selectedBuckets = (poTrackerSummarySelectedBuckets && poTrackerSummarySelectedBuckets.length) ? poTrackerSummarySelectedBuckets : allKeys;
   var allActive = selectedBuckets.length === allKeys.length;
 
   var html = '<div class="card" style="margin-bottom:10px;padding:14px">';
-  html += '<div style="font-weight:600;margin-bottom:10px">📊 สรุปรายการสินค้า — ' + sanitize(dealerName) + '</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+  html += '<div style="font-weight:600">📊 สรุปรายการสินค้า — ' + sanitize(dealerName) + '</div>';
+  html += '<div style="display:flex;gap:4px;align-items:center;font-size:11px;color:var(--text2)">';
+  html += 'จัดกลุ่มตาม:';
+  html += ' <button class="btn bsm ' + (poTrackerSummaryViewMode === 'product' ? 'bp' : 'bo') + '" onclick="poTrackerSetSummaryViewMode(\'product\')">สินค้า</button>';
+  html += ' <button class="btn bsm ' + (poTrackerSummaryViewMode === 'so' ? 'bp' : 'bo') + '" onclick="poTrackerSetSummaryViewMode(\'so\')">SO</button>';
+  html += '</div></div>';
 
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">';
   html += '<button class="btn bsm ' + (allActive ? 'bp' : 'bo') + '" onclick="poTrackerSummarySelectedBuckets=[];render()">ทั้งหมด (' + flat.length + ')</button>';
@@ -264,14 +263,44 @@ function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
   html += '</div>';
   if (!allActive) html += '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">กำลังดู ' + selectedBuckets.length + ' สถานะพร้อมกัน — กด "ทั้งหมด" เพื่อล้างตัวกรอง</div>';
 
+  if (sq && !flat.length) {
+    html += '<div style="font-size:12px;color:var(--text2)">ไม่พบรายการสินค้าที่ตรงกับ "' + sanitize(sq) + '"</div></div>';
+    return html;
+  }
+
+  html += (poTrackerSummaryViewMode === 'so')
+    ? _poTrackerSummaryBySOHtml(soGroups, selectedBuckets)
+    : _poTrackerSummaryByProductHtml(soGroups, selectedBuckets);
+
+  html += '</div>';
+  return html;
+}
+
+// เทียบ 1 รายการสินค้ากับคำค้นในช่องค้นหาของ PO Tracker (ชื่อ/SKU สินค้า หรือเลข SO/PO ลูกค้าของใบที่สินค้านั้นอยู่)
+function _poTrackerSummaryItemMatchesSearch(it, so, sq) {
+  var hay = ((it.model || '') + ' ' + (it.sku || '') + ' ' + (so.soNumber || '') + ' ' + (so.customerPO || '')).toLowerCase();
+  return hay.indexOf(sq) !== -1;
+}
+
+// โหมด "จัดกลุ่มตาม: สินค้า" (ค่าเริ่มต้นเดิม) — รวมสินค้าเดียวกันข้าม SO เป็นหัวข้อเดียว จัดหมวดหมู่สินค้า เรียงตามรอนานสุดก่อน
+function _poTrackerSummaryByProductHtml(soGroups, selectedBuckets) {
+  var clusterMap = {}, clusterOrder = [];
+  soGroups.forEach(function(sg) {
+    var key = sg.sku || sg.name;
+    if (!clusterMap[key]) { clusterMap[key] = { name: sg.name, sku: sg.sku, cat: sg.cat, soGroups: [], total: 0 }; clusterOrder.push(key); }
+    clusterMap[key].soGroups.push(sg);
+    clusterMap[key].total += sg.total;
+  });
+  var clusters = clusterOrder.map(function(k) { return clusterMap[k]; });
+  clusters.forEach(function(c) {
+    c.maxWait = Math.max.apply(null, c.soGroups.map(function(sg) { return _poTrackerSoWaitDays(sg.so); }));
+  });
+
   var shown = clusters.filter(function(c) {
     return c.soGroups.some(function(sg) { return sg.parts.some(function(p) { return selectedBuckets.indexOf(p.bucket) !== -1; }); });
   });
 
-  if (!shown.length) {
-    html += '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้าในสถานะที่เลือก</div></div>';
-    return html;
-  }
+  if (!shown.length) return '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้าในสถานะที่เลือก</div>';
 
   var byCat = {};
   shown.forEach(function(c) {
@@ -281,6 +310,7 @@ function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
   });
   Object.keys(byCat).forEach(function(k) { byCat[k].sort(function(a, b) { return b.maxWait - a.maxWait; }); });
 
+  var html = '';
   PRODUCT_CATEGORIES.forEach(function(cat) {
     var list = byCat[cat.id];
     if (!list || !list.length) return;
@@ -293,9 +323,126 @@ function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
     });
     html += '</div>';
   });
+  return html;
+}
 
+// โหมด "จัดกลุ่มตาม: SO" — หัวข้อละ 1 SO (เลข SO/PO ลูกค้า/Project ID ถ้ามี + จำนวนรายการแยกตามสถานะ + ยอดรวม) พับ/กางได้ทีละใบหรือทั้งหมด
+function _poTrackerSummaryBySOHtml(soGroups, selectedBuckets) {
+  var bySO = {}, soOrder = [];
+  soGroups.forEach(function(sg) {
+    var id = sg.so.id;
+    if (!bySO[id]) { bySO[id] = { so: sg.so, items: [] }; soOrder.push(id); }
+    bySO[id].items.push(sg);
+  });
+  soOrder.sort(function(a, b) { return _poTrackerSoWaitDays(bySO[b].so) - _poTrackerSoWaitDays(bySO[a].so); });
+
+  var groups = soOrder.map(function(id) { return bySO[id]; }).filter(function(g) {
+    return g.items.some(function(sg) { return sg.parts.some(function(p) { return selectedBuckets.indexOf(p.bucket) !== -1; }); });
+  });
+
+  if (!groups.length) return '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้าในสถานะที่เลือก</div>';
+
+  var itemCount = groups.reduce(function(sum, g) { return sum + g.items.length; }, 0);
+  var ids = groups.map(function(g) { return g.so.id; });
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
+  html += '<div style="font-size:11px;color:var(--text2)">📦 ' + groups.length + ' SO / ' + itemCount + ' รายการ</div>';
+  html += '<div style="display:flex;gap:6px">';
+  html += '<button class="btn bsm bo" onclick="poTrackerSetAllSummarySOCollapse(' + JSON.stringify(ids) + ',false)">▼ กางทั้งหมด</button>';
+  html += '<button class="btn bsm bo" onclick="poTrackerSetAllSummarySOCollapse(' + JSON.stringify(ids) + ',true)">▶ พับทั้งหมด</button>';
+  html += '</div></div>';
+
+  groups.forEach(function(g) {
+    html += _poTrackerSOGroupHtml(g.so, g.items, selectedBuckets);
+  });
+  return html;
+}
+
+// 1 หัวข้อ SO ในโหมด "จัดกลุ่มตาม: SO" — คลิกหัวข้อเพื่อพับ/กาง รายการสินค้าข้างใต้ใช้ชิปสถานะเดียวกับโหมดสินค้า
+function _poTrackerSOGroupHtml(so, items, selectedBuckets) {
+  var collapsed = !!poTrackerSummaryCollapsedSO[so.id];
+  var counts = {};
+  items.forEach(function(sg) { sg.parts.forEach(function(p) { counts[p.bucket] = (counts[p.bucket] || 0) + 1; }); });
+  var totalQty = items.reduce(function(s, sg) { return s + sg.total; }, 0);
+  var pid = (typeof _soDisplayProjectId === 'function') ? _soDisplayProjectId(so) : '';
+
+  var html = '<div style="border-radius:7px;background:var(--bg2);margin-bottom:6px;overflow:hidden">';
+  html += '<div style="padding:8px 10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap" onclick="poTrackerToggleSummarySOCollapse(\'' + so.id + '\')">';
+  html += '<div style="min-width:0;display:flex;align-items:center;gap:6px">';
+  html += '<span style="font-size:10px;color:var(--text3,var(--text2))">' + (collapsed ? '▶' : '▼') + '</span>';
+  html += '<div>';
+  html += '<div style="font-size:12px;font-weight:700" onclick="event.stopPropagation()">' + _poTrackerSoLinksHtml(so) + (so.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:11px">· PO ' + sanitize(so.customerPO) + '</span>' : '') + '</div>';
+  var sub = [];
+  if (pid) sub.push('Project ID ' + sanitize(pid));
+  if (sub.length) html += '<div style="font-size:10px;color:var(--text3,var(--text2));margin-top:1px">' + sub.join(' · ') + '</div>';
+  html += _poTrackerDateLineHtml(so);
+  html += '</div></div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">';
+  POTRACKER_ITEM_BUCKETS.forEach(function(b) {
+    if (!counts[b.key]) return;
+    html += '<span style="font-size:10px;font-weight:600;color:' + b.color + '">' + b.icon + ' ' + counts[b.key] + '</span>';
+  });
+  html += '<span style="font-weight:700;font-size:11px;background:var(--card,var(--bg));border:1px solid var(--border);border-radius:6px;padding:3px 8px;white-space:nowrap">รวม ' + totalQty + ' ชิ้น</span>';
+  html += _poTrackerWaitBadgeHtml(so);
+  html += '</div></div>';
+
+  if (!collapsed) {
+    html += '<div style="padding:0 10px 8px">';
+    items.forEach(function(sg) {
+      html += sg.parts.length > 1 ? _poTrackerSOItemSplitRowHtml(sg, selectedBuckets) : _poTrackerSOItemSimpleRowHtml(sg, selectedBuckets);
+    });
+    html += '</div>';
+  }
   html += '</div>';
   return html;
+}
+
+// แถวสินค้า 1 รายการใต้หัวข้อ SO — สถานะเดียว (ไม่ต้องซ้ำลิงก์ SO/วันที่รอ เพราะหัวข้อข้างบนมีแล้ว)
+function _poTrackerSOItemSimpleRowHtml(sg, selectedBuckets) {
+  var p = sg.parts[0];
+  var b = _poTrackerBucketInfo(p.bucket);
+  var op = selectedBuckets.indexOf(p.bucket) !== -1 ? '1' : '.4';
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;background:var(--card,var(--bg));margin-bottom:4px;flex-wrap:wrap;opacity:' + op + '">';
+  html += '<div style="font-size:12px;font-weight:600;min-width:0">' + sanitize(sg.name) + (sg.sku ? ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10px">' + sanitize(sg.sku) + '</span>' : '') + '</div>';
+  html += '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end">';
+  html += '<span style="font-size:10px;font-weight:600;color:' + b.color + '">' + b.icon + ' ' + b.label + '</span>';
+  html += '<span style="font-weight:700;font-size:11px;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:2px 7px;min-width:30px;text-align:center">×' + p.qty + '</span>';
+  html += '</div></div>';
+  return html;
+}
+
+// แถวสินค้า 1 รายการใต้หัวข้อ SO — แบ่งส่งหลายสถานะในใบเดียวกัน
+function _poTrackerSOItemSplitRowHtml(sg, selectedBuckets) {
+  var html = '<div style="padding:6px 8px;border-radius:6px;background:var(--card,var(--bg));margin-bottom:4px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">';
+  html += '<div style="font-size:12px;font-weight:600;min-width:0">' + sanitize(sg.name) + (sg.sku ? ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10px">' + sanitize(sg.sku) + '</span>' : '') + '</div>';
+  html += '<div style="display:flex;gap:7px;flex-wrap:wrap">';
+  sg.parts.forEach(function(p) {
+    var b = _poTrackerBucketInfo(p.bucket);
+    var op = selectedBuckets.indexOf(p.bucket) !== -1 ? '1' : '.4';
+    html += '<span style="font-size:10px;font-weight:600;color:' + b.color + ';opacity:' + op + '">' + b.icon + ' ' + p.qty + '</span>';
+  });
+  html += '</div></div></div>';
+  return html;
+}
+
+// toggle พับ/กางหัวข้อ 1 SO ในโหมด "จัดกลุ่มตาม: SO"
+function poTrackerToggleSummarySOCollapse(soId) {
+  poTrackerSummaryCollapsedSO[soId] = !poTrackerSummaryCollapsedSO[soId];
+  render();
+}
+
+// พับ/กางหัวข้อ SO ทั้งหมดที่กำลังแสดงอยู่ในคราวเดียว (ปุ่ม "กางทั้งหมด"/"พับทั้งหมด")
+function poTrackerSetAllSummarySOCollapse(soIds, collapsed) {
+  soIds.forEach(function(id) { poTrackerSummaryCollapsedSO[id] = collapsed; });
+  render();
+}
+
+// สลับโหมดจัดกลุ่มแผงสรุปรายการสินค้า (สินค้า/SO) — จำค่าไว้ต่อเครื่องด้วย localStorage
+function poTrackerSetSummaryViewMode(mode) {
+  poTrackerSummaryViewMode = mode;
+  try { localStorage.setItem(POTRACKER_SUMMARY_VIEWMODE_LS_KEY, mode); } catch (e) {}
+  render();
 }
 
 // toggle แท็ปสถานะในแผงสรุป — เลือกได้พร้อมกันหลายแท็ป ถ้าเลือกครบทุกสถานะแล้วกลับเป็นโหมด "ทั้งหมด" ให้อัตโนมัติ
