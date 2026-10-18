@@ -77,6 +77,30 @@ function _poTrackerItemRemark(it, so) {
   return '—';
 }
 
+// ลำดับความสำคัญของ bucket เวลาต้องเรียงให้รายการที่พร้อมส่ง/ส่งแล้วขึ้นก่อน (ใช้ตอน export Excel ชีต Dealer)
+var POTRACKER_BUCKET_SORT_PRIORITY = { shipped: 0, ready: 1, reserved: 2, pending_prpo: 3, not_sent: 4 };
+
+// ข้อมูลความพร้อมส่งของ 1 รายการ สำหรับ export Excel — ใช้ bucket เดียวกับหน้าจอ (_poTrackerItemBucket) และดึงจำนวน/วันที่จาก stockSOItemReadyInfo
+function _poTrackerItemReadinessForExport(it, so) {
+  var qty = Number(it.qty) || 0;
+  var bucket = _poTrackerItemBucket(it, so);
+  var b = _poTrackerBucketInfo(bucket);
+  var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, so) : null;
+  var delivered = info ? info.deliveredForThisSO : 0;
+  var remainingQty = Math.max(0, qty - delivered);
+  var readyNowQty = info ? Math.min(remainingQty, info.bookedForThisSO) : 0;
+  var shortageQty = info ? info.shortfall : remainingQty;
+  var canAcceptFirst = (bucket === 'ready' || bucket === 'shipped');
+  return {
+    bucket: bucket,
+    statusLabel: b.icon + ' ' + b.label,
+    canAcceptFirst: canAcceptFirst ? '✅ รับก่อนได้' : '',
+    readyNowQty: readyNowQty,
+    shortageQty: shortageQty,
+    waitUntilDate: (info && info.bookingExpiryDate) ? fD(info.bookingExpiryDate) : ''
+  };
+}
+
 function _poTrackerSOTotal(s) {
   return (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
 }
@@ -940,17 +964,22 @@ function _poTrackerExportXlsxImpl(soList, filenameSuffix) {
   wsOverview['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
 
   // ชีต 2: รายการสินค้าต่อบรรทัด — คอลัมน์ตรงกับ Excel ที่ทีมใช้จริง (No/SKU/รายการสินค้า/จำนวน/ราคาต่อหน่วย/ราคารวม/Remark)
-  var itemHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'Remark'];
+  // + คอลัมน์ความพร้อมส่ง (สถานะ/รับก่อนได้/พร้อมส่งตอนนี้/ขาดอีก/วันที่จองถึง) ใช้ตัดสินใจตอนส่งสรุปให้ลูกค้าว่ารับอันไหนก่อนได้
+  var itemHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม',
+    'สถานะความพร้อม', 'รับก่อนได้', 'จำนวนพร้อมส่งตอนนี้', 'จำนวนค้าง/ขาดอีก', 'วันที่พร้อม/จองถึง', 'Remark'];
   var itemRows = [];
   all.forEach(function(s) {
     (s.items || []).forEach(function(it, idx) {
       var qty = Number(it.qty) || 0;
       var price = Number(it.unitPrice) || 0;
-      itemRows.push([s.customerPO || '', s.soNumber || '', s.dealerName || '', idx + 1, it.sku || '', it.model || '', qty, price, qty * price, _poTrackerItemRemark(it, s)]);
+      var r = _poTrackerItemReadinessForExport(it, s);
+      itemRows.push([s.customerPO || '', s.soNumber || '', s.dealerName || '', idx + 1, it.sku || '', it.model || '', qty, price, qty * price,
+        r.statusLabel, r.canAcceptFirst, r.readyNowQty, r.shortageQty, r.waitUntilDate, _poTrackerItemRemark(it, s)]);
     });
   });
   var wsItems = XLSX.utils.aoa_to_sheet([itemHeader].concat(itemRows));
-  wsItems['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 34 }];
+  wsItems['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 },
+    { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 34 }];
 
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsOverview, 'ภาพรวม');
@@ -972,24 +1001,35 @@ function _poTrackerAddDealerSheets(wb, all) {
   });
   dealerOrder.sort();
 
-  var header = ['No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'ส่งแล้ว', 'คงเหลือ', 'Remark'];
+  // + คอลัมน์ความพร้อมส่ง เหมือนชีตรายการสินค้าหลัก — และเรียงรายการพร้อมส่ง/ส่งแล้วขึ้นก่อนในแต่ละ PO พร้อมสรุปจำนวนพร้อมส่งต่อ PO
+  // ใช้ตัดสินใจได้ไวตอนส่งสรุปให้ลูกค้าว่ารับอันไหนก่อนได้
+  var header = ['No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'ส่งแล้ว', 'คงเหลือ',
+    'สถานะความพร้อม', 'รับก่อนได้', 'จำนวนพร้อมส่งตอนนี้', 'จำนวนค้าง/ขาดอีก', 'วันที่พร้อม/จองถึง', 'Remark'];
   var usedNames = {};
   dealerOrder.forEach(function(dealerName) {
     var sos = byDealer[dealerName].slice().sort(function(a, b) { return (a.customerPO || '').localeCompare(b.customerPO || ''); });
     var rows = [header];
     sos.forEach(function(s) {
-      rows.push(['PO ' + (s.customerPO || '-') + (s.soNumber ? ' / SO ' + s.soNumber : ''), '', '', '', '', '', '', '', '']);
+      rows.push(['PO ' + (s.customerPO || '-') + (s.soNumber ? ' / SO ' + s.soNumber : ''), '', '', '', '', '', '', '', '', '', '', '', '', '']);
       var subtotal = 0;
-      (s.items || []).forEach(function(it, idx) {
+      var readyItemCount = 0, readyQtySum = 0;
+      var itemsWithReadiness = (s.items || []).map(function(it, idx) {
         var qty = Number(it.qty) || 0;
         var price = Number(it.unitPrice) || 0;
         var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, s) : null;
         var delivered = Math.min(qty, (info && info.deliveredForThisSO) || 0);
-        var amount = qty * price;
+        var r = _poTrackerItemReadinessForExport(it, s);
+        return { idx: idx, it: it, qty: qty, price: price, delivered: delivered, r: r };
+      }).sort(function(a, b) { return POTRACKER_BUCKET_SORT_PRIORITY[a.r.bucket] - POTRACKER_BUCKET_SORT_PRIORITY[b.r.bucket]; });
+      itemsWithReadiness.forEach(function(x) {
+        var amount = x.qty * x.price;
         subtotal += amount;
-        rows.push([idx + 1, it.sku || '', it.model || '', qty, price, amount, delivered, qty - delivered, _poTrackerItemRemark(it, s)]);
+        if (x.r.canAcceptFirst) { readyItemCount++; readyQtySum += x.qty; }
+        rows.push([x.idx + 1, x.it.sku || '', x.it.model || '', x.qty, x.price, amount, x.delivered, x.qty - x.delivered,
+          x.r.statusLabel, x.r.canAcceptFirst, x.r.readyNowQty, x.r.shortageQty, x.r.waitUntilDate, _poTrackerItemRemark(x.it, s)]);
       });
-      rows.push(['', '', 'รวม PO นี้', '', '', subtotal, '', '', '']);
+      rows.push(['', '', 'รวม PO นี้', '', '', subtotal, '', '',
+        readyItemCount ? '📦 พร้อมส่งแล้ว ' + readyItemCount + '/' + itemsWithReadiness.length + ' รายการ (' + readyQtySum + ' ชิ้น)' : 'ยังไม่มีรายการพร้อมส่ง', '', '', '', '', '']);
     });
 
     var sheetName = dealerName.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 31) || 'Dealer';
@@ -1001,7 +1041,8 @@ function _poTrackerAddDealerSheets(wb, all) {
     }
 
     var ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 9 }, { wch: 9 }, { wch: 34 }];
+    ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 9 }, { wch: 9 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 34 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 }
