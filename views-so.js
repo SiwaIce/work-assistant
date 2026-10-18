@@ -987,7 +987,9 @@ function rSODetail(el) {
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(Number(it.unitPrice)||0)) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(lineTotal)) + '</td>';
     html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
-    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s, it) : '') + '</td>';
+    html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s, it) : '') +
+      (!_soIsDone(s.status) ? '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showSOItemStatusM(\'' + s.id + '\',' + idx + ')" title="อัปเดตสถานะรายการนี้โดยไม่ต้องเปิดหน้าแก้ไขรายการทั้งหมด">🏷️ อัปเดตสถานะ</button>' : '') +
+      '</td>';
     html += '<td style="padding:10px;min-width:140px"><input type="text" value="' + sanitize(it.comment || '') + '" placeholder="พิมพ์โน้ต..." style="width:100%;font-size:11px" onblur="saveSOItemComment(\'' + s.id + '\',' + idx + ',this.value)"></td>';
     var itLinkSafe = /^https?:\/\//i.test(it.link || '') ? it.link : '';
     html += '<td style="padding:10px;min-width:150px"><input type="text" value="' + sanitize(it.link || '') + '" placeholder="วางลิงก์..." style="width:100%;font-size:11px" onblur="saveSOItemLink(\'' + s.id + '\',' + idx + ',this.value)">' +
@@ -1907,6 +1909,101 @@ function _soReadItemSourceFields(row) {
     out.reserveExpiryDate = resExpEl ? resExpEl.value : '';
   }
   return out;
+}
+
+// ปุ่ม "🏷️ อัปเดตสถานะ" ต่อแถวในหน้า SO detail — modal ย่อ มีแค่ dropdown สถานะ + ฟิลด์ย่อยเดียวกับฟอร์ม
+// "✏️ แก้ไขรายการสินค้า" (รียูส id แบบเดียวกันแต่ fix suffix เป็น "qs" แทน idx ของแถว เพื่อรียูส
+// _soItemSourceChanged/_soPrpoStatusChanged/_soReadItemSourceFields ตรงๆได้โดยไม่ต้องเขียนซ้ำ) ไม่ต้องเปิดฟอร์มแก้ไขทั้งชุด
+// (model/จำนวน/ราคา) แค่จะเปลี่ยนสถานะอย่างเดียว
+function showSOItemStatusM(soId, idx) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var it = s.items[idx];
+  var sourceType = it.sourceType || '';
+  var reserveDate = it.reserveDate || '';
+  var reserveExpiryDate = it.reserveExpiryDate || '';
+  var realLock = null;
+  if (it.sku && typeof stockSOItemReadyInfo === 'function') {
+    var stockInfo = stockSOItemReadyInfo(it.sku, it.qty, s);
+    if (stockInfo && stockInfo.tracked && stockInfo.bookedForThisSO > 0) {
+      realLock = stockInfo;
+      sourceType = 'reserve_1021';
+      reserveDate = stockInfo.reserveDate || reserveDate;
+      reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
+    }
+  }
+  var srcOptions = Object.keys(SO_ITEM_SOURCE_TYPES).map(function(k) {
+    return '<option value="' + k + '"' + (k === sourceType ? ' selected' : '') + '>' + SO_ITEM_SOURCE_TYPES[k].label + '</option>';
+  }).join('');
+  var body = '<div style="font-size:12px;margin-bottom:8px"><b>' + sanitize(it.model || '') + '</b> × ' + (it.qty||0) + '</div>';
+  var srcDisabledAttr = realLock ? ' disabled title="ล็อกไว้ตามคลังจริง — แก้ได้ที่หน้า จัดการคลัง เท่านั้น"' : '';
+  body += '<div class="fg"><label>สถานะ</label><select class="inp" id="soI_src_qs"' + srcDisabledAttr + ' onchange="_soItemSourceChanged(\'qs\')">' + srcOptions + '</select></div>';
+  if (realLock) {
+    body += '<div class="hint" style="font-size:10px;color:#16a34a;margin:2px 0 8px 2px">🔒 ซิงก์จากคลังจริงอัตโนมัติ (จองใน 1021 แล้ว ' + realLock.bookedForThisSO + ' ชิ้น) — แก้ไว้เป็นประเภทอื่นไม่ได้ที่นี่ ไปที่ "📦 จัดการคลัง" แทน แต่แก้วันจองได้ตรงนี้เลย จะอัปเดตกลับเข้า lot ในคลังจริงให้ทันที</div>';
+  }
+  var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
+  body += '<div id="soI_prpo_qs" style="display:' + prpoDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" title="วันที่ยื่น PR/PO" value="' + sanitize(it.prpoSubmittedDate || '') + '" id="soI_prpoDate_qs">' +
+    '<select class="inp" style="flex:2;min-width:160px" id="soI_prpoStatus_qs" onchange="_soPrpoStatusChanged(\'qs\')">' + _soPrpoStatusOptionsHtml(it.prpoStatusId || '') + '</select>' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(it.prpoExpectedDate || '') + '" id="soI_prpoExp_qs">' +
+    '</div>';
+  var restockDisplay = sourceType === 'restock' ? 'flex' : 'none';
+  body += '<div id="soI_restock_qs" style="display:' + restockDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" title="วันที่คาดว่าสินค้าจะเข้า stock" value="' + sanitize(it.restockExpectedDate || '') + '" id="soI_restockExp_qs">' +
+    '<span class="hint" style="font-size:10px">สินค้า Run rate — รอรอบสั่งเข้า stock ปกติ ไม่ต้องเปิด PR/PO ต่อใบ</span>' +
+    '</div>';
+  var resDisplay = (sourceType === 'reserve_1021' || sourceType === 'reserve_8d01') ? 'flex' : 'none';
+  body += '<div id="soI_res_qs" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" title="จองวันที่" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_qs">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" title="จองถึงวันที่" value="' + sanitize(reserveExpiryDate || '') + '" id="soI_resExp_qs">' +
+    '</div>';
+  if (!realLock && it.sku) {
+    body += '<div class="hint" style="font-size:10px;margin-top:6px">เลือก "จองจากคลัง 1021/8D01" แล้วบันทึก ถ้ายังไม่มีการจองจริงในคลัง ระบบจะเปิดหน้า "📦 จัดการคลัง" ให้ต่อเพื่อทำการจองจริงทันที</div>';
+  }
+  body += '<button class="btn bp btn-full" style="margin-top:10px" onclick="saveSOItemStatus(\'' + soId + '\',' + idx + ')">💾 บันทึกสถานะ</button>';
+  openM('🏷️ อัปเดตสถานะ — ' + sanitize(it.model || ''), body);
+}
+
+// บันทึกจาก modal ด้านบน — รียูส _soReadItemSourceFields อ่านจาก #mBd (เนื้อ modal) ตรงๆ แทนแถวในฟอร์มแก้ไขรายการทั้งชุด
+// ถ้าเลือกจองจากคลัง 1021/8D01 แต่ยังไม่มี lot จริงผูกไว้กับ SO นี้ (bookedForThisSO<=0) ต่อด้วยเปิดหน้า "จัดการคลัง"
+// (showStockAddLotM พรีฟิลด์ตำแหน่ง+SO ให้) ให้ทำการจองจริงต่อทันที ไม่ต้องกดปุ่มซ้ำอีกที — คลังจริงยังเป็น source
+// of truth เดิม ปุ่มนี้แค่ช่วยประกาศแผน/นำทางไปจองจริงให้สะดวกขึ้น ไม่ได้เขียนทับตรรกะคลังที่มีอยู่
+function saveSOItemStatus(soId, idx) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var it = s.items[idx];
+  var row = document.getElementById('mBd');
+  var fields = _soReadItemSourceFields(row);
+  var items = s.items.slice();
+  items[idx] = Object.assign({}, it, fields);
+
+  if (fields.sourceType === 'reserve_1021' && it.sku && typeof stockSyncSOItemReservation === 'function') {
+    stockSyncSOItemReservation(it.sku, soId, fields.reserveDate, fields.reserveExpiryDate);
+  }
+
+  var quotationId = s.quotationId;
+  if (quotationId && typeof _soSyncQuoteItems === 'function') _soSyncQuoteItems(quotationId, items);
+
+  var cfg = getConfig();
+  var logs = (s.logs || []).slice();
+  var stLabel = SO_ITEM_SOURCE_TYPES[fields.sourceType] ? SO_ITEM_SOURCE_TYPES[fields.sourceType].label : '— ยังไม่ระบุ —';
+  logs.push({ date: _td(), action: '🏷️ อัปเดตสถานะสินค้า ' + (it.model || ''), note: stLabel, by: cfg.saleName || '' });
+  var updatedSO = ST.update('salesOrders', soId, { items: items, quotationId: quotationId, updatedAt: new Date().toISOString(), logs: logs });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
+  closeMForce();
+  toast('💾 บันทึกสถานะแล้ว');
+
+  var needsRealStock = (fields.sourceType === 'reserve_1021' || fields.sourceType === 'reserve_8d01') && it.sku;
+  var alreadyBooked = false;
+  if (needsRealStock && typeof stockSOItemReadyInfo === 'function') {
+    var info = stockSOItemReadyInfo(it.sku, it.qty, s);
+    alreadyBooked = info && info.bookedForThisSO > 0;
+  }
+  if (needsRealStock && !alreadyBooked && typeof showStockAddLotM === 'function') {
+    showStockAddLotM(it.sku, fields.sourceType === 'reserve_1021' ? '1021' : '8D01', soId);
+  } else {
+    go('soDetail', { soId: soId });
+  }
 }
 
 // ชื่อสถานะ PR/PO ที่แสดงผล — ใช้ prpoStatusId ผูกกับ cfg.prpoStatuses ปัจจุบันก่อน ถ้าไม่มี (รายการเก่าก่อน
