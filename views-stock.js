@@ -461,6 +461,14 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
     }
     h += '</div>';
   }
+  // ชิปเสริม: สินค้า Run rate รอรอบสั่งเข้า stock (ไม่ได้เปิด PR/PO ต่อใบ) — ดึงจาก item.restockExpectedDate ที่กรอกไว้ในฟอร์มแก้ไขรายการ
+  // สีอำพันแยกจากชิป "รอ PR/PO" สีส้มแดงด้านล่าง เพราะเป็นคนละสถานะกัน (ดูสถานะจริงจากคลังเสมอ ชิปนี้แค่โชว์แผนที่พิมพ์ไว้)
+  if (item.sourceType === 'restock') {
+    h += '<div style="font-size:10px;margin-top:2px;margin-bottom:3px">';
+    h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fcd34d55;background:#fcd34d22;color:#92400e;display:inline-block;margin-right:4px">⏳ รอของเข้า (Run rate)</span>';
+    if (item.restockExpectedDate) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fcd34d55;background:#fcd34d22;color:#92400e;display:inline-block">คาดว่าเข้า stock ' + fD(item.restockExpectedDate) + '</span>';
+    h += '</div>';
+  }
   // ชิปเสริม: สถานะ PR/PO ต่อรายการ (ดึงจาก item.prpoStatusId/prpoSubmittedDate/prpoExpectedDate ที่กรอกไว้ในฟอร์มแก้ไขรายการ)
   if (item.sourceType === 'pr_po' && (item.prpoStatusId || item.prpoStatus || item.prpoSubmittedDate || item.prpoExpectedDate)) {
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(item) : (item.prpoStatus || '');

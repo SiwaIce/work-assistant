@@ -10,6 +10,7 @@ var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั�
 var poTrackerReadyFlt = '';  // '' | ready | notready
 var poTrackerCreditFlt = ''; // '' | yes | no
 var poTrackerPrpoFlt = '';   // '' | pending
+var poTrackerRestockFlt = ''; // '' | pending
 var poTrackerDateFrom = '';  // createdAt >= (YYYY-MM-DD)
 var poTrackerDateTo = '';    // createdAt <= (YYYY-MM-DD)
 var poTrackerSort = 'newest'; // newest | oldest | amount_desc | amount_asc | dealer | urgent
@@ -31,11 +32,12 @@ var _poTrackerVisibleIds = [];
 
 // 5 สถานะสรุปต่อรายการสินค้า (ใช้ในแผงสรุปตามบริษัท และหน้าแยก Dealer) — เรียงตามลำดับที่ควรแสดง
 var POTRACKER_ITEM_BUCKETS = [
-  { key: 'not_sent',     label: 'ยังไม่ส่ง',  icon: '⬜', color: '#94a3b8' },
-  { key: 'pending_prpo', label: 'รอ PR/PO',   icon: '🛒', color: '#ef4444' },
-  { key: 'reserved',     label: 'จอง',        icon: '📌', color: '#f59e0b' },
-  { key: 'ready',        label: 'พร้อมส่ง',   icon: '📦', color: '#3b82f6' },
-  { key: 'shipped',      label: 'ส่งแล้ว',    icon: '✅', color: '#22c55e' }
+  { key: 'not_sent',        label: 'ยังไม่ส่ง',   icon: '⬜', color: '#94a3b8' },
+  { key: 'pending_prpo',    label: 'รอ PR/PO',    icon: '🛒', color: '#ef4444' },
+  { key: 'pending_restock', label: 'รอของเข้า',   icon: '⏳', color: '#d97706' },
+  { key: 'reserved',        label: 'จอง',         icon: '📌', color: '#f59e0b' },
+  { key: 'ready',           label: 'พร้อมส่ง',    icon: '📦', color: '#3b82f6' },
+  { key: 'shipped',         label: 'ส่งแล้ว',     icon: '✅', color: '#22c55e' }
 ];
 
 // จัดรายการสินค้า 1 ชิ้นเข้า 1 ใน 5 bucket ด้านบน — ใช้ข้อมูลเดียวกับ _poTrackerItemRemark/_soSummaryItemStatusInfo
@@ -48,6 +50,7 @@ function _poTrackerItemBucket(it, so) {
     if (info.bookedForThisSO > 0) return 'reserved';
   }
   if (it.sourceType === 'pr_po') return 'pending_prpo';
+  if (it.sourceType === 'restock') return 'pending_restock';
   if (it.sourceType === 'reserve_1021' || it.sourceType === 'reserve_8d01') return 'reserved';
   if (it.sourceType === 'central_wh') return 'ready';
   if (info && info.shortfall === 0) return 'ready';
@@ -64,6 +67,11 @@ function _poTrackerItemRemark(it, so) {
     if (it.prpoExpectedDate) bits.push('คาดว่าได้ ' + fD(it.prpoExpectedDate));
     return bits.join(' — ');
   }
+  if (it.sourceType === 'restock') {
+    var rbits = ['⏳ รอของเข้า (Run rate) ' + qty + ' ชิ้น'];
+    if (it.restockExpectedDate) rbits.push('คาดว่าเข้า stock ' + fD(it.restockExpectedDate));
+    return rbits.join(' — ');
+  }
   if (it.sourceType === 'reserve_1021') return '📌 จองคลัง 1021 ' + qty + ' ชิ้น';
   if (it.sourceType === 'reserve_8d01') return '🧳 จองคลัง 8D01 ' + qty + ' ชิ้น';
   if (it.sourceType === 'central_wh') return '🏢 ส่งจากคลังกลาง';
@@ -78,7 +86,7 @@ function _poTrackerItemRemark(it, so) {
 }
 
 // ลำดับความสำคัญของ bucket เวลาต้องเรียงให้รายการที่พร้อมส่ง/ส่งแล้วขึ้นก่อน (ใช้ตอน export Excel ชีต Dealer)
-var POTRACKER_BUCKET_SORT_PRIORITY = { shipped: 0, ready: 1, reserved: 2, pending_prpo: 3, not_sent: 4 };
+var POTRACKER_BUCKET_SORT_PRIORITY = { shipped: 0, ready: 1, reserved: 2, pending_restock: 3, pending_prpo: 4, not_sent: 5 };
 
 // ข้อมูลความพร้อมส่งของ 1 รายการ สำหรับ export Excel — ใช้ bucket เดียวกับหน้าจอ (_poTrackerItemBucket) และดึงจำนวน/วันที่จาก stockSOItemReadyInfo
 function _poTrackerItemReadinessForExport(it, so) {
@@ -110,12 +118,14 @@ function _poTrackerBuildRow(s) {
   var credit = creditRequestOpenForSO(s.id);
   var total = _poTrackerSOTotal(s);
   var pendingPRPO = (s.items || []).filter(function(it) { return it.sourceType === 'pr_po'; }).length;
+  var pendingRestock = (s.items || []).filter(function(it) { return it.sourceType === 'restock'; }).length;
   return {
     so: s,
     total: total,
     readiness: readiness,
     credit: credit,
     pendingPRPO: pendingPRPO,
+    pendingRestock: pendingRestock,
     done: _soIsDone(s.status)
   };
 }
@@ -512,7 +522,7 @@ function poTrackerToggleSummaryBucketAndScroll(key) {
 }
 
 function poTrackerResetFilters() {
-  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = '';
+  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = '';
   poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = '';
   poTrackerSummarySelectedBuckets = []; poTrackerSummaryMinWaitDays = '';
   render();
@@ -582,6 +592,10 @@ function rPOTracker(el) {
     html += '<option value="">-- PR/PO: ทั้งหมด --</option>';
     html += '<option value="pending"' + (poTrackerPrpoFlt === 'pending' ? ' selected' : '') + '>🛒 รอ PR/PO</option>';
     html += '</select>';
+    html += '<select class="inp" style="max-width:170px" onchange="poTrackerRestockFlt=this.value;render()">';
+    html += '<option value="">-- รอของเข้า: ทั้งหมด --</option>';
+    html += '<option value="pending"' + (poTrackerRestockFlt === 'pending' ? ' selected' : '') + '>⏳ รอของเข้า</option>';
+    html += '</select>';
     html += '<div style="display:flex;gap:4px;align-items:center">';
     html += '<label class="lbl" style="margin:0;font-size:11px;color:var(--text2)">สร้างเมื่อ</label>';
     html += '<input type="date" class="inp" style="width:140px" value="' + sanitize(poTrackerDateFrom) + '" onchange="poTrackerDateFrom=this.value;render()">';
@@ -609,6 +623,7 @@ function rPOTracker(el) {
     if (poTrackerCreditFlt === 'yes' && !r.credit) return false;
     if (poTrackerCreditFlt === 'no' && r.credit) return false;
     if (poTrackerPrpoFlt === 'pending' && !r.pendingPRPO) return false;
+    if (poTrackerRestockFlt === 'pending' && !r.pendingRestock) return false;
     if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
     if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
     if (q) {
@@ -1242,7 +1257,7 @@ function _poTrackerDealerTableHtml(products) {
   html += '<div class="card" style="margin-bottom:12px;padding:0;overflow-x:auto">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap">';
   html += '<thead><tr style="border-bottom:1px solid var(--border);text-align:left">';
-  ['สินค้า', 'รวม', 'ส่งแล้ว', '🛒 รอ PR/PO', '📌 จองรอส่ง', 'อื่นๆ'].forEach(function(h, i) {
+  ['สินค้า', 'รวม', 'ส่งแล้ว', '🛒 รอ PR/PO', '⏳ รอของเข้า', '📌 จองรอส่ง', 'อื่นๆ'].forEach(function(h, i) {
     html += '<th style="padding:8px 10px;color:var(--text2);font-weight:600' + (i > 0 ? ';text-align:right' : '') + '">' + h + '</th>';
   });
   html += '</tr></thead><tbody>';
@@ -1253,6 +1268,7 @@ function _poTrackerDealerTableHtml(products) {
     html += '<td style="padding:7px 10px;text-align:right">' + p.totalQty + '</td>';
     html += '<td style="padding:7px 10px;text-align:right;color:#22c55e">' + (p.deliveredQty || '-') + '</td>';
     html += '<td style="padding:7px 10px;text-align:right;color:#ef4444">' + (p.byBucket.pending_prpo || '-') + '</td>';
+    html += '<td style="padding:7px 10px;text-align:right;color:#d97706">' + (p.byBucket.pending_restock || '-') + '</td>';
     html += '<td style="padding:7px 10px;text-align:right;color:#f59e0b">' + (p.byBucket.reserved || '-') + '</td>';
     html += '<td style="padding:7px 10px;text-align:right;color:var(--text2)">' + (other || '-') + '</td>';
     html += '</tr>';

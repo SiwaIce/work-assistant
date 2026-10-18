@@ -308,6 +308,9 @@ function _soSummaryItemStatusInfo(it, s) {
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
     if (stLabel) note = stLabel;
     if (it.prpoExpectedDate) note = (note ? note + ' — ' : '') + 'คาดว่าได้ ' + fD(it.prpoExpectedDate);
+  } else if (it.sourceType === 'restock') {
+    status = '⏳ รอของเข้า (Run rate)';
+    if (it.restockExpectedDate) note = 'คาดว่าเข้า stock ' + fD(it.restockExpectedDate);
   } else if (it.sourceType === 'reserve_1021') {
     status = '📌 จองคลัง 1021 (' + qty + ' ชิ้น)';
     if (it.reserveExpiryDate) note = 'จองถึง ' + fD(it.reserveExpiryDate);
@@ -1780,13 +1783,14 @@ function _soFillFromPipe(pipeId) {
   window._soQuoteItemsSnapshot = null;
 }
 
-// sourceType ต่อรายการ: reserve_1021 (จองจากคลัง 1021) | reserve_8d01 (จองจากคลัง 8D01) | central_wh (ส่งจากคลังกลางเลย) | pr_po (ต้องเปิด PR/PO เพิ่ม)
+// sourceType ต่อรายการ: reserve_1021 (จองจากคลัง 1021) | reserve_8d01 (จองจากคลัง 8D01) | central_wh (ส่งจากคลังกลางเลย) | pr_po (ต้องเปิด PR/PO เพิ่ม) | restock (สินค้า Run rate รอรอบสั่งเข้า stock ปกติ ไม่ได้เปิด PR/PO ต่อใบ)
 var SO_ITEM_SOURCE_TYPES = {
   '':            { label: '— ยังไม่ระบุ —' },
   reserve_1021:  { label: '📌 จองจากคลัง 1021' },
   reserve_8d01:  { label: '🧳 จองจากคลัง 8D01' },
   central_wh:    { label: '🏢 ส่งจากคลังกลาง' },
-  pr_po:         { label: '🛒 ต้องเปิด PR/PO เพิ่ม' }
+  pr_po:         { label: '🛒 ต้องเปิด PR/PO เพิ่ม' },
+  restock:       { label: '⏳ รอของเข้า (Run rate)' }
 };
 
 // ตัวเลือก "สถานะ PR/PO" ดึงจาก cfg.prpoStatuses (แก้ไข/เพิ่ม/ลบ/เรียงลำดับได้ที่ ⚙️ ตั้งค่า) — ให้เพิ่มสถานะใหม่สดๆ
@@ -1856,6 +1860,11 @@ function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
     '<select class="inp" style="flex:2;min-width:160px" id="soI_prpoStatus_' + idx + '" onchange="_soPrpoStatusChanged(\'' + idx + '\')">' + _soPrpoStatusOptionsHtml(item.prpoStatusId || '') + '</select>' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะถึง" title="วันที่คาดว่าจะได้ของ" value="' + sanitize(item.prpoExpectedDate || '') + '" id="soI_prpoExp_' + idx + '">' +
     '</div>';
+  var restockDisplay = sourceType === 'restock' ? 'flex' : 'none';
+  h += '<div id="soI_restock_' + idx + '" style="display:' + restockDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="คาดว่าจะเข้า stock" title="วันที่คาดว่าสินค้าจะเข้า stock รอบนี้ (ไม่บังคับ)" value="' + sanitize(item.restockExpectedDate || '') + '" id="soI_restockExp_' + idx + '">' +
+    '<span class="hint" style="font-size:10px">สินค้า Run rate — รอรอบสั่งเข้า stock ปกติ ไม่ต้องเปิด PR/PO ต่อใบ</span>' +
+    '</div>';
   var resDisplay = (sourceType === 'reserve_1021' || sourceType === 'reserve_8d01') ? 'flex' : 'none';
   h += '<div id="soI_res_' + idx + '" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
     '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่ — แก้ตรงนี้ได้ ' + (realLock ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_' + idx + '">' +
@@ -1869,9 +1878,11 @@ function _soItemSourceChanged(idx) {
   var sel = document.getElementById('soI_src_' + idx);
   var prpoBox = document.getElementById('soI_prpo_' + idx);
   var resBox = document.getElementById('soI_res_' + idx);
+  var restockBox = document.getElementById('soI_restock_' + idx);
   if (!sel) return;
   if (prpoBox) prpoBox.style.display = sel.value === 'pr_po' ? 'flex' : 'none';
   if (resBox) resBox.style.display = (sel.value === 'reserve_1021' || sel.value === 'reserve_8d01') ? 'flex' : 'none';
+  if (restockBox) restockBox.style.display = sel.value === 'restock' ? 'flex' : 'none';
 }
 
 // อ่านฟิลด์ sourceType/PR-PO/วันจองถึง จากแถวรายการสินค้า — ใช้ร่วมกันตอนบันทึกทั้งสร้างใหม่และแก้ไข
@@ -1885,6 +1896,9 @@ function _soReadItemSourceFields(row) {
     out.prpoSubmittedDate = dateEl ? dateEl.value : '';
     out.prpoStatusId = (statusEl && statusEl.value !== '__new__') ? statusEl.value : '';
     out.prpoExpectedDate = expEl ? expEl.value : '';
+  } else if (out.sourceType === 'restock') {
+    var restockExpEl = row.querySelector('[id^="soI_restockExp_"]');
+    out.restockExpectedDate = restockExpEl ? restockExpEl.value : '';
   } else if (out.sourceType === 'reserve_1021' || out.sourceType === 'reserve_8d01') {
     var resDateEl = row.querySelector('[id^="soI_resDate_"]');
     var resExpEl = row.querySelector('[id^="soI_resExp_"]');
