@@ -805,15 +805,16 @@ function _bulkExportSO_impl() {
   var ids = Object.keys(soSelected);
   if (!ids.length) return;
   var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);
-  var headers = ['SO No.', 'Dealer', 'สถานะ', 'สินค้า', 'มูลค่า', 'PO', 'Invoice', 'สร้างเมื่อ'];
+  var headers = ['SO No.', 'Dealer', 'เลขที่โครงการ (Project ID)', 'ชื่อโครงการ', 'สถานะ', 'สินค้า', 'มูลค่า', 'PO', 'Invoice', 'สร้างเมื่อ'];
   var rows = [headers].concat(list.map(function(s) {
     var total = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
     var models = (s.items || []).map(function(it) { return it.model; }).filter(Boolean).join(', ');
-    return [s.soNumber || '', s.dealerName || '', (SO_STATUS[s.status] || {}).label || s.status || '', models, total, s.customerPO || '', s.invoiceNumber || '', s.createdAt ? s.createdAt.slice(0, 10) : ''];
+    var pid = (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || ''));
+    return [s.soNumber || '', s.dealerName || '', pid, s.projectName || '', (SO_STATUS[s.status] || {}).label || s.status || '', models, total, s.customerPO || '', s.invoiceNumber || '', s.createdAt ? s.createdAt.slice(0, 10) : ''];
   }));
   var wb = XLSX.utils.book_new();
   var ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
+  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 18 }, { wch: 22 }, { wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Sales Orders');
   XLSX.writeFile(wb, 'so-selected-' + _td() + '.xlsx');
   toast('📥 Export ' + list.length + ' รายการที่เลือก');
