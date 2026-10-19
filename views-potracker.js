@@ -960,12 +960,14 @@ function _poTrackerExportXlsxImpl(soList, filenameSuffix) {
   if (!all.length) { toast('ไม่มี SO ให้ export'); return; }
 
   // ชีต 1: ภาพรวมต่อ PO/SO
-  var overviewHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'สถานะ', 'พร้อมส่ง', 'เครดิต', 'จำนวนวันเครดิต', 'ผู้อนุมัติเครดิต', 'PR ภายใน', 'DO Number', 'Invoice Number', 'วันที่ Invoice', 'ยอดรวม (ไม่รวม VAT)', 'สร้างเมื่อ'];
+  var overviewHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'เลขที่โครงการ (Project ID)', 'ชื่อโครงการ', 'สถานะ', 'พร้อมส่ง', 'เครดิต', 'จำนวนวันเครดิต', 'ผู้อนุมัติเครดิต', 'PR ภายใน', 'DO Number', 'Invoice Number', 'วันที่ Invoice', 'ยอดรวม (ไม่รวม VAT)', 'สร้างเมื่อ'];
   var overviewRows = all.map(function(s) {
     var readiness = soComputeReadiness(s);
     var credit = creditRequestOpenForSO(s.id);
     return [
-      s.customerPO || '', s.soNumber || '', s.dealerName || '', (SO_STATUS[s.status] || {}).label || s.status || '',
+      s.customerPO || '', s.soNumber || '', s.dealerName || '',
+      (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || '')), s.projectName || '',
+      (SO_STATUS[s.status] || {}).label || s.status || '',
       readiness.total ? (readiness.readyCount + '/' + readiness.total) : '-',
       credit ? credit.status : 'ยังไม่ได้ขอ',
       credit ? (credit.creditDaysRequested || '') : '',
@@ -976,24 +978,25 @@ function _poTrackerExportXlsxImpl(soList, filenameSuffix) {
     ];
   });
   var wsOverview = XLSX.utils.aoa_to_sheet([overviewHeader].concat(overviewRows));
-  wsOverview['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
+  wsOverview['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 16 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
 
   // ชีต 2: รายการสินค้าต่อบรรทัด — คอลัมน์ตรงกับ Excel ที่ทีมใช้จริง (No/SKU/รายการสินค้า/จำนวน/ราคาต่อหน่วย/ราคารวม/Remark)
   // + คอลัมน์ความพร้อมส่ง (สถานะ/รับก่อนได้/พร้อมส่งตอนนี้/ขาดอีก/วันที่จองถึง) ใช้ตัดสินใจตอนส่งสรุปให้ลูกค้าว่ารับอันไหนก่อนได้
-  var itemHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม',
+  var itemHeader = ['PO ลูกค้า', 'SO Number', 'Dealer', 'เลขที่โครงการ (Project ID)', 'ชื่อโครงการ', 'No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม',
     'สถานะความพร้อม', 'รับก่อนได้', 'จำนวนพร้อมส่งตอนนี้', 'จำนวนค้าง/ขาดอีก', 'วันที่พร้อม/จองถึง', 'Remark'];
   var itemRows = [];
   all.forEach(function(s) {
+    var pid = (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || ''));
     (s.items || []).forEach(function(it, idx) {
       var qty = Number(it.qty) || 0;
       var price = Number(it.unitPrice) || 0;
       var r = _poTrackerItemReadinessForExport(it, s);
-      itemRows.push([s.customerPO || '', s.soNumber || '', s.dealerName || '', idx + 1, it.sku || '', it.model || '', qty, price, qty * price,
+      itemRows.push([s.customerPO || '', s.soNumber || '', s.dealerName || '', pid, s.projectName || '', idx + 1, it.sku || '', it.model || '', qty, price, qty * price,
         r.statusLabel, r.canAcceptFirst, r.readyNowQty, r.shortageQty, r.waitUntilDate, _poTrackerItemRemark(it, s)]);
     });
   });
   var wsItems = XLSX.utils.aoa_to_sheet([itemHeader].concat(itemRows));
-  wsItems['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 },
+  wsItems['!cols'] = [{ wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 5 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 },
     { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 34 }];
 
   var wb = XLSX.utils.book_new();
@@ -1019,13 +1022,14 @@ function _poTrackerAddDealerSheets(wb, all) {
   // + คอลัมน์ความพร้อมส่ง เหมือนชีตรายการสินค้าหลัก — และเรียงรายการพร้อมส่ง/ส่งแล้วขึ้นก่อนในแต่ละ PO พร้อมสรุปจำนวนพร้อมส่งต่อ PO
   // ใช้ตัดสินใจได้ไวตอนส่งสรุปให้ลูกค้าว่ารับอันไหนก่อนได้
   var header = ['No.', 'SKU', 'รายการสินค้า', 'จำนวน', 'ราคาต่อหน่วย', 'ราคารวม', 'ส่งแล้ว', 'คงเหลือ',
-    'สถานะความพร้อม', 'รับก่อนได้', 'จำนวนพร้อมส่งตอนนี้', 'จำนวนค้าง/ขาดอีก', 'วันที่พร้อม/จองถึง', 'Remark'];
+    'สถานะความพร้อม', 'รับก่อนได้', 'จำนวนพร้อมส่งตอนนี้', 'จำนวนค้าง/ขาดอีก', 'วันที่พร้อม/จองถึง', 'Remark', 'เลขที่โครงการ (Project ID)', 'ชื่อโครงการ'];
   var usedNames = {};
   dealerOrder.forEach(function(dealerName) {
     var sos = byDealer[dealerName].slice().sort(function(a, b) { return (a.customerPO || '').localeCompare(b.customerPO || ''); });
     var rows = [header];
     sos.forEach(function(s) {
-      rows.push(['PO ' + (s.customerPO || '-') + (s.soNumber ? ' / SO ' + s.soNumber : ''), '', '', '', '', '', '', '', '', '', '', '', '', '']);
+      var pid = (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || ''));
+      rows.push(['PO ' + (s.customerPO || '-') + (s.soNumber ? ' / SO ' + s.soNumber : ''), '', '', '', '', '', '', '', '', '', '', '', '', '', pid, s.projectName || '']);
       var subtotal = 0;
       var readyItemCount = 0, readyQtySum = 0;
       var itemsWithReadiness = (s.items || []).map(function(it, idx) {
@@ -1041,10 +1045,10 @@ function _poTrackerAddDealerSheets(wb, all) {
         subtotal += amount;
         if (x.r.canAcceptFirst) { readyItemCount++; readyQtySum += x.qty; }
         rows.push([x.idx + 1, x.it.sku || '', x.it.model || '', x.qty, x.price, amount, x.delivered, x.qty - x.delivered,
-          x.r.statusLabel, x.r.canAcceptFirst, x.r.readyNowQty, x.r.shortageQty, x.r.waitUntilDate, _poTrackerItemRemark(x.it, s)]);
+          x.r.statusLabel, x.r.canAcceptFirst, x.r.readyNowQty, x.r.shortageQty, x.r.waitUntilDate, _poTrackerItemRemark(x.it, s), pid, s.projectName || '']);
       });
       rows.push(['', '', 'รวม PO นี้', '', '', subtotal, '', '',
-        readyItemCount ? '📦 พร้อมส่งแล้ว ' + readyItemCount + '/' + itemsWithReadiness.length + ' รายการ (' + readyQtySum + ' ชิ้น)' : 'ยังไม่มีรายการพร้อมส่ง', '', '', '', '', '']);
+        readyItemCount ? '📦 พร้อมส่งแล้ว ' + readyItemCount + '/' + itemsWithReadiness.length + ' รายการ (' + readyQtySum + ' ชิ้น)' : 'ยังไม่มีรายการพร้อมส่ง', '', '', '', '', '', '', '']);
     });
 
     var sheetName = dealerName.replace(/[\\/?*[\]:]/g, ' ').trim().slice(0, 31) || 'Dealer';
@@ -1057,7 +1061,7 @@ function _poTrackerAddDealerSheets(wb, all) {
 
     var ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = [{ wch: 26 }, { wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 9 }, { wch: 9 },
-      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 34 }];
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 18 }, { wch: 22 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
 }
