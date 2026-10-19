@@ -1581,38 +1581,57 @@ function _soRunrateNote() {
 // พิมพ์เลขที่ยังไม่มีถังของ Dealer นี้ = เคลียร์ hidden id ไว้ก่อน รอสร้างถังใหม่ให้ตอนกด "สร้าง SO" (ดู saveCreateSO)
 var _soRunrateProjIdDirty = false;
 function _soRunrateProjIdTouched() { _soRunrateProjIdDirty = true; }
-function _soRunrateSearch(q) {
-  var menu = document.getElementById('soN_runrateAcMenu');
-  var idEl = document.getElementById('soN_runrateId');
-  if (!menu) return;
-  var dealerId = (document.getElementById('soN_dealerId') || {}).value || '';
-  var typed = (q || '').trim();
+// แกนกลางของช่อง Project ID (Run rate) แบบพิมพ์ค้นหา/สร้างใหม่ — ใช้ร่วมกันทั้งฟอร์มสร้าง SO (soN_*) และ
+// ฟอร์มแก้ไข SO (soE_*) ต่างกันแค่ id ของ input/menu/hidden-field และชื่อฟังก์ชัน pick ที่จะเรียกตอนคลิกเลือก
+function _soRunrateSearchCore(inputId, menuId, idInputId, dealerId, pickFnName) {
+  var menu = document.getElementById(menuId);
+  var idEl = document.getElementById(idInputId);
+  var inp  = document.getElementById(inputId);
+  if (!menu || !inp) return;
+  var typed = (inp.value || '').trim();
   // พิมพ์เปลี่ยนจนไม่ตรงกับถังที่ hidden id ชี้อยู่แล้ว — เคลียร์ไว้ก่อน กันผูกผิดถังเงียบๆ (เลือกใหม่จากลิสต์ค่อยผูกใหม่)
   if (idEl && idEl.value) {
     var cur = ST.getOne('runrate', idEl.value);
     if (!cur || pidNorm(cur.projectId).toLowerCase() !== typed.toLowerCase()) idEl.value = '';
   }
-  _soRunrateNote();
   if (!typed) { menu.innerHTML = ''; return; }
   var matches = ST.getAll('runrate').filter(function(r) {
     return (!dealerId || r.dealerId === dealerId) && (r.projectId || '').toLowerCase().indexOf(typed.toLowerCase()) !== -1;
   }).slice(0, 8);
   if (!matches.length) {
-    menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบถังเดิมที่ตรงกับเลขนี้ — กด "สร้าง SO" จะสร้างถัง Run rate ใหม่ให้อัตโนมัติ</div></div>';
+    menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบถังเดิมที่ตรงกับเลขนี้ — เลขใหม่จะสร้างถัง Run rate ให้อัตโนมัติตอนบันทึก</div></div>';
     return;
   }
   menu.innerHTML = '<div class="ac-menu">' + matches.map(function(r) {
     var n = (typeof _rrSOs === 'function') ? _rrSOs(r.id).length : 0;
     var amt = (typeof _rrTotal === 'function') ? _rrTotal(r.id) : 0;
     var closed = (r.status || 'active') !== 'active' ? ' · 🔒 ปิดแล้ว' : '';
-    return '<div class="ac-item" onclick="_soRunratePick(\'' + r.id + '\')"><div class="info"><div class="n">' + sanitize(r.projectId || '(ไม่มีเลข)') + '</div><div class="m">มี ' + n + ' SO ฿' + fmtMoney(amt) + closed + '</div></div></div>';
+    return '<div class="ac-item" onclick="' + pickFnName + '(\'' + r.id + '\')"><div class="info"><div class="n">' + sanitize(r.projectId || '(ไม่มีเลข)') + '</div><div class="m">มี ' + n + ' SO ฿' + fmtMoney(amt) + closed + '</div></div></div>';
   }).join('') + '</div>';
 }
-function _soRunratePick(rrId) {
-  var menu = document.getElementById('soN_runrateAcMenu');
+function _soRunratePickCore(inputId, menuId, idInputId, rrId) {
+  var r = rrId ? ST.getOne('runrate', rrId) : null;
+  var inp = document.getElementById(inputId), idEl = document.getElementById(idInputId), menu = document.getElementById(menuId);
+  if (inp)  inp.value  = r ? (r.projectId || '') : '';
+  if (idEl) idEl.value = r ? r.id : '';
   if (menu) menu.innerHTML = '';
+}
+function _soRunrateSearch(q) {
+  _soRunrateSearchCore('soN_runrateProjectId', 'soN_runrateAcMenu', 'soN_runrateId', (document.getElementById('soN_dealerId') || {}).value || '', '_soRunratePick');
+  _soRunrateNote();
+}
+function _soEditRunrateSearch(q) {
+  _soRunrateSearchCore('soE_runrateProjectId', 'soE_runrateAcMenu', 'soE_runrateId', (document.getElementById('soE_dealer') || {}).value || '', '_soEditRunratePick');
+  _soEditLinkNote();
+}
+function _soRunratePick(rrId) {
   _soRunrateProjIdDirty = true;
-  _soRRPick(rrId);
+  _soRunratePickCore('soN_runrateProjectId', 'soN_runrateAcMenu', 'soN_runrateId', rrId);
+  _soRunrateNote();
+}
+function _soEditRunratePick(rrId) {
+  _soRunratePickCore('soE_runrateProjectId', 'soE_runrateAcMenu', 'soE_runrateId', rrId);
+  _soEditLinkNote();
 }
 // ช่อง Dealer แบบพิมพ์ค้นหา (soN_dealerName) — พิมพ์ตรงกับชื่อ dealer ที่มีอยู่แล้วเป๊ะๆ (ไม่สนตัวพิมพ์เล็ก/ใหญ่)
 // ก็ถือว่าเลือก dealer นั้น เติม hidden soN_dealerId ให้ แล้วกรอง project/run rate/ที่อยู่ตามเดิม — พิมพ์ชื่อที่ยังไม่
@@ -2649,8 +2668,16 @@ function _soEditTypeToggle(type) {
 function _soEditDealerChanged(dealerId) {
   var pSel = document.getElementById('soE_pipelineId');
   if (pSel) { var kp = pSel.value; pSel.innerHTML = _soPipelineOptionsHtml(dealerId, kp); if (pSel.value !== kp) pSel.value = ''; }
-  var rSel = document.getElementById('soE_runrateId');
-  if (rSel) { var kr = rSel.value; rSel.innerHTML = _soRunrateOptionsHtml(dealerId, kr); if (rSel.value !== kr) rSel.value = ''; }
+  // เปลี่ยน Dealer ใหม่แล้ว — ถ้าถัง Run rate ที่ผูกอยู่ไม่ใช่ของ Dealer ใหม่นี้ ให้เคลียร์ทิ้ง (เลือก/พิมพ์ใหม่เอง)
+  var rrIdEl = document.getElementById('soE_runrateId');
+  if (rrIdEl && rrIdEl.value) {
+    var rr = ST.getOne('runrate', rrIdEl.value);
+    if (!rr || rr.dealerId !== dealerId) {
+      rrIdEl.value = '';
+      var rrPidEl = document.getElementById('soE_runrateProjectId');
+      if (rrPidEl) rrPidEl.value = '';
+    }
+  }
   _soFilterAddressByDealer(dealerId);
   _soEditLinkNote();
 }
@@ -2663,26 +2690,8 @@ function _soEditLinkNote() {
   var type = (document.getElementById('soE_type') || {}).value || 'project';
   var pipeId = (document.getElementById('soE_pipelineId') || {}).value || '';
   var rrId = (document.getElementById('soE_runrateId') || {}).value || '';
-
-  // SO แบบ run rate ไม่ถือ Project ID ของตัวเอง — เลขคือของถัง (ดู saveCreateSO ที่ล้าง projectId ทิ้ง)
-  // ช่องนี้จึงต้องอ่านอย่างเดียวและสะท้อนเลขของถังที่เลือก ไม่งั้นพิมพ์ลงไปแล้วค่าหายเงียบๆ ตอนบันทึก
+  var rrTyped = pidNorm((document.getElementById('soE_runrateProjectId') || {}).value);
   var pidEl = document.getElementById('soE_projectId');
-  if (pidEl) {
-    if (type === 'runrate') {
-      // เก็บเลขของโหมดโครงการไว้ก่อนทับ เผื่อสลับกลับมา — ไม่งั้นสลับไปกลับทีเดียวเลขที่กรอกไว้หายเลย
-      if (!pidEl.readOnly) window._soEditProjIdDraft = pidEl.value;
-      var rr = rrId ? ST.getOne('runrate', rrId) : null;
-      pidEl.readOnly = true;
-      pidEl.style.opacity = '.7';
-      pidEl.value = rr ? (rr.projectId || '') : '';
-      pidEl.placeholder = 'มาจากถังที่เลือก';
-    } else {
-      if (pidEl.readOnly) pidEl.value = window._soEditProjIdDraft || '';
-      pidEl.readOnly = false;
-      pidEl.style.opacity = '';
-      pidEl.placeholder = '20260912-0005';
-    }
-  }
   var typed = pidNorm((pidEl || {}).value);
 
   var msgs = [], hasWarn = false;
@@ -2696,7 +2705,16 @@ function _soEditLinkNote() {
     hasWarn = true;
   }
   if (type === 'runrate') {
-    msgs.push('ℹ️ Run rate ใช้ Project ID ของถัง — แก้เลขได้ที่ตัวถัง (เมนู Run Rate) ไม่ใช่ที่ SO ใบนี้');
+    var rr = rrId ? ST.getOne('runrate', rrId) : null;
+    if (rr) {
+      var n = (typeof _rrSOs === 'function') ? _rrSOs(rr.id).length : 0;
+      msgs.push('ℹ️ ยอดของ SO ใบนี้จะไปรวมใน ' + (rr.projectId || '(ไม่มีเลข)') + ' — ตอนนี้มี ' + n + ' ใบอยู่ในถังแล้ว' +
+        ((rr.status || 'active') !== 'active' ? '  ·  ⚠️ ถังนี้ปิดอยู่' : ''));
+    } else if (rrTyped) {
+      msgs.push('↩︎ ยังไม่มีถังนี้ — ตอนกด "บันทึก" จะสร้างถัง Run rate ใหม่เลขนี้ให้อัตโนมัติ');
+    }
+    var fmtRR = pidFormatWarning(rrTyped);
+    if (fmtRR) { msgs.push('⚠️ ' + fmtRR); hasWarn = true; }
   }
   if (type === 'project' && typed) {
     var p = pipeId ? ST.getOne('pipeline', pipeId) : null;
@@ -2747,22 +2765,27 @@ function showSOEditModal(soId) {
   // เดิมแก้ได้แค่ตอนสร้าง SO เท่านั้น พอได้เลข CRM มาทีหลัง (ซึ่งเป็นเรื่องปกติ) เลยเติมไม่ได้ ต้องไปแก้ที่
   // Pipeline แทน — และ SO ที่ผูกถังผิดก็ย้ายถังไม่ได้เลย ต้องลบทิ้งแล้วเปิดใหม่
   var curType = s.type || (s.runrateId ? 'runrate' : 'project');
+  var curRRProjectId = s.runrateProjectId || ((s.runrateId && (ST.getOne('runrate', s.runrateId) || {}).projectId) || '');
   html += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">';
-  html += '<div style="display:flex;gap:8px">';
-  html += '<div style="flex:1"><label class="lbl">ประเภท</label><select id="soE_type" class="inp" onchange="_soEditTypeToggle(this.value)">' +
+  html += '<div><label class="lbl">ประเภท</label><select id="soE_type" class="inp" onchange="_soEditTypeToggle(this.value)">' +
     '<option value="project"' + (curType === 'project' ? ' selected' : '') + '>📋 Project</option>' +
     '<option value="runrate"' + (curType === 'runrate' ? ' selected' : '') + '>🏪 Run rate</option>' +
     '</select></div>';
-  html += '<div class="ac-wrap" style="flex:1"><label class="lbl">Project ID <span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ')</span></label>' +
-    '<input id="soE_projectId" class="inp" autocomplete="off" value="' + sanitize(s.projectId || '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote();_soEditProjectIdSearch(this.value)" onfocus="_soEditProjectIdSearch(this.value)">' +
-    '<div id="soE_projectIdAcMenu"></div></div>';
-  html += '</div>';
   html += '<div id="soE_pipeSec"' + (curType !== 'project' ? ' style="display:none"' : '') + '>' +
     '<label class="lbl">Pipeline Project</label>' +
-    '<select id="soE_pipelineId" class="inp" onchange="_soEditLinkNote()">' + _soPipelineOptionsHtml(s.dealerId, s.pipelineId || '') + '</select></div>';
+    '<select id="soE_pipelineId" class="inp" onchange="_soEditLinkNote()">' + _soPipelineOptionsHtml(s.dealerId, s.pipelineId || '') + '</select>' +
+    '<div class="ac-wrap" style="margin-top:8px"><label class="lbl">Project ID <span style="font-size:10px;color:var(--text2)">(' + PROJECT_ID_HINT + ')</span></label>' +
+    '<input id="soE_projectId" class="inp" autocomplete="off" value="' + sanitize(curType !== 'runrate' ? (s.projectId || '') : '') + '" placeholder="20260912-0005" oninput="_soEditLinkNote();_soEditProjectIdSearch(this.value)" onfocus="_soEditProjectIdSearch(this.value)">' +
+    '<div id="soE_projectIdAcMenu"></div></div>' +
+    '</div>';
+  // ช่อง Project ID (Run rate) แบบพิมพ์ค้นหา/สร้างใหม่ได้เลย เหมือนฟอร์มสร้าง SO (ดู _soRunrateSearchCore) —
+  // เดิมเป็น <select> เลือกได้แต่ถังที่มีอยู่แล้ว พิมพ์เลขใหม่เองไม่ได้ ต้องไปสร้างถังที่เมนู Run Rate ก่อน
   html += '<div id="soE_rrSec"' + (curType !== 'runrate' ? ' style="display:none"' : '') + '>' +
-    '<label class="lbl">ถังรับยอด Run rate</label>' +
-    '<select id="soE_runrateId" class="inp" onchange="_soEditLinkNote()">' + _soRunrateOptionsHtml(s.dealerId, s.runrateId || '') + '</select></div>';
+    '<div class="ac-wrap"><label class="lbl">Project ID (Run rate) <span style="font-size:10px;color:var(--text2)">(เลขที่ลูกค้าสร้างไว้รับยอด — พิมพ์เลขเดิมที่เคยใช้กับ Dealer นี้เพื่อเลือก หรือพิมพ์เลขใหม่เพื่อสร้างถังใหม่ตอนบันทึก)</span></label>' +
+    '<input id="soE_runrateProjectId" class="inp" autocomplete="off" value="' + sanitize(curRRProjectId) + '" placeholder="20260912-0005" oninput="_soEditLinkNote();_soEditRunrateSearch(this.value)" onfocus="_soEditRunrateSearch(this.value)">' +
+    '<div id="soE_runrateAcMenu"></div>' +
+    '<input type="hidden" id="soE_runrateId" value="' + sanitize(s.runrateId || '') + '"></div>' +
+    '</div>';
   html += '<div id="soE_linkNote" class="hint" style="font-size:11px"></div>';
   html += '</div>';
 
@@ -2780,7 +2803,6 @@ function showSOEditModal(soId) {
   openM('✏️ แก้ไข SO', html);
   // เก็บสภาพเดิมไว้เทียบว่าการผูกงานเปลี่ยนไปไหม — อ่านจากฟอร์มอย่างเดียวไม่รู้ว่าย้ายมาจากไหน
   window._soEditOrig = s;
-  window._soEditProjIdDraft = s.projectId || '';
   _soEditLinkNote();
 }
 
@@ -2795,8 +2817,29 @@ function saveSOEdit(soId) {
   var linkType   = (document.getElementById('soE_type')||{}).value || s.type || (s.runrateId ? 'runrate' : 'project');
   var pipelineId = (document.getElementById('soE_pipelineId')||{}).value || '';
   var runrateId  = (document.getElementById('soE_runrateId') ||{}).value || '';
+  var runrateProjectId = ((document.getElementById('soE_runrateProjectId')||{}).value || '').trim();
   var projectId  = pidNorm((document.getElementById('soE_projectId')||{}).value);
   if (linkType === 'runrate') { pipelineId = ''; projectId = ''; } else { runrateId = ''; }
+
+  // ถัง Run rate: ช่อง Project ID อาจชี้ถังเดิม (runrateId มี hidden id มาแล้ว) หรือพิมพ์เลขใหม่ที่ยังไม่มีถัง —
+  // หาถังเดิมของ Dealer นี้ที่ตรงเลขก่อน ไม่เจอค่อยสร้างถังใหม่ให้อัตโนมัติ (กติกาเดียวกับ saveCreateSO)
+  if (linkType === 'runrate' && runrateProjectId) {
+    var rrMatch = runrateId ? ST.getOne('runrate', runrateId) : null;
+    if (!rrMatch || pidNorm(rrMatch.projectId) !== pidNorm(runrateProjectId)) {
+      rrMatch = ST.getAll('runrate').filter(function(r) { return r.dealerId === dealerId && pidSame(r.projectId, runrateProjectId); })[0] || null;
+    }
+    if (!rrMatch) {
+      var dupRR = (typeof _rrFindByProjectId === 'function') ? _rrFindByProjectId(runrateProjectId, null) : null;
+      if (dupRR && !confirm('Project ID "' + runrateProjectId + '" ถูกใช้เป็นถัง Run rate ของ ' +
+          ((typeof _rrDealerName === 'function' && _rrDealerName(dupRR.dealerId)) || 'Dealer อื่น') + ' อยู่แล้ว\n\n' +
+          'ต้องการสร้างถังใหม่เลขเดียวกันนี้แยกให้ ' + (dealer ? dealer.name : 'Dealer นี้') + 'ไหม?\n\n' +
+          'ตกลง = สร้างถังใหม่ (เลขซ้ำกันคนละถัง)  ยกเลิก = กลับไปแก้เลข')) return;
+      var newRR = ST.add('runrate', { dealerId: dealerId, projectId: runrateProjectId, status: 'active', createdAt: new Date().toISOString() });
+      if (typeof syncItemToFirebase === 'function') syncItemToFirebase('runrate', newRR);
+      rrMatch = newRR;
+    }
+    runrateId = rrMatch.id;
+  }
 
   // ยอดของถัง/โครงการคำนวณสดจาก SO ที่ผูกอยู่ (ดู _rrTotal) การย้ายจึงมีผลทันทีกับตัวเลขสองฝั่ง
   // — ต้องบอกให้ชัดก่อนว่าเงินก้อนไหนกำลังย้ายจากไหนไปไหน ไม่ใช่เปลี่ยนเงียบๆ
