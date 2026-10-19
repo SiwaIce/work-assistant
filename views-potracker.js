@@ -5,6 +5,7 @@
 
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
+var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว)
 var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
 var poTrackerReadyFlt = '';  // '' | ready | notready
@@ -608,8 +609,16 @@ function rPOTracker(el) {
   html += '</div>';
 
   if (poTrackerDealerFlt) {
-    var dealerRows = rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt; });
-    html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
+    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+    html += '<button class="btn bsm ' + (poTrackerMainTab === 'summary' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'summary\';render()">📊 สรุปรายการสินค้า</button>';
+    html += '<button class="btn bsm ' + (poTrackerMainTab === 'cards' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'cards\';render()">🗂️ PO/SO Cards</button>';
+    html += '</div>';
+    if (poTrackerMainTab === 'summary') {
+      var dealerRows = rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt; });
+      html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
+      el.innerHTML = html;
+      return;
+    }
   }
 
   var q = poTrackerSearch.trim().toLowerCase();
@@ -852,9 +861,10 @@ function _poTrackerCardSummaryHtml(s) {
     html += '</div>';
   }
 
+  html += '<button class="btn bsm bo" style="margin-bottom:6px" onclick="poTrackerCopyItemsTableTSV(\'' + s.id + '\',event)" title="คัดลอกตารางนี้แบบ TSV ไปวางต่อใน Excel/Google Sheets ได้เลย">📋 Copy ตาราง (วางลง Excel ได้)</button>';
   html += '<div style="overflow-x:auto"><table class="fcd-table" style="min-width:100%">';
-  html += '<thead><tr><th>SKU</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th><th>สถานะ</th></tr></thead><tbody>';
-  items.forEach(function(it) {
+  html += '<thead><tr><th>SKU</th><th>Model</th><th style="text-align:center">QTY</th><th style="text-align:right">มูลค่า</th><th>สถานะ</th><th style="min-width:140px">คอมเมนต์</th></tr></thead><tbody>';
+  items.forEach(function(it, idx) {
     var qty = Number(it.qty) || 0;
     var amt = qty * (Number(it.unitPrice) || 0);
     var b = _poTrackerBucketInfo(_poTrackerItemBucket(it, s));
@@ -863,16 +873,38 @@ function _poTrackerCardSummaryHtml(s) {
     html += '<td>' + sanitize(it.model || '-') + '</td>';
     html += '<td style="text-align:center">' + qty + '</td>';
     html += '<td style="text-align:right">฿' + nmI(amt) + '</td>';
-    html += '<td><span style="font-size:10px;font-weight:600;color:' + b.color + '">' + b.icon + ' ' + b.label + '</span></td>';
+    html += '<td><span style="font-size:10px;font-weight:600;color:' + b.color + '">' + b.icon + ' ' + b.label + '</span>' +
+      (!_soIsDone(s.status) ? ' <a href="#" onclick="event.stopPropagation();showSOItemStatusM(\'' + s.id + '\',' + idx + ');return false" style="font-size:10px;color:var(--accent)" title="แก้ไขสถานะรายการนี้">✏️</a>' : '') + '</td>';
+    html += '<td><input type="text" value="' + sanitize(it.comment || '') + '" placeholder="พิมพ์โน้ต..." style="width:100%;font-size:11px" onclick="event.stopPropagation()" onblur="poTrackerDealerUpdateItemField(\'' + s.id + '\',' + idx + ',\'comment\',this.value)"></td>';
     html += '</tr>';
   });
-  html += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="2">รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">฿' + nmI(totalAmt) + '</td><td></td></tr>';
+  html += '<tr style="font-weight:700;border-top:2px solid var(--border)"><td colspan="2">รวม</td><td style="text-align:center">' + totalQty + '</td><td style="text-align:right">฿' + nmI(totalAmt) + '</td><td></td><td></td></tr>';
   html += '</tbody></table></div>';
 
   var stockOpen = !!poTrackerExpandedStockEdit[s.id];
   html += '<button class="btn bsm bo" style="margin-top:8px" onclick="poTrackerToggleStockEdit(\'' + s.id + '\',event)">' + (stockOpen ? '▲ ซ่อนช่องปรับยอด Stock' : '🔧 ปรับยอด Stock') + '</button>';
   if (stockOpen) html += _poTrackerItemsPanelHtml(s);
   return html;
+}
+
+// คัดลอกตารางรายการสินค้าของ SO ใบนี้เป็น TSV (คั่นด้วย Tab) — วางลง Excel/Google Sheets ได้เลยทั้งตาราง รวมแถวหัวและแถวรวม
+function poTrackerCopyItemsTableTSV(soId, ev) {
+  if (ev) ev.stopPropagation();
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !(s.items || []).length) { toast('ไม่มีรายการสินค้า'); return; }
+  var clean = function(v) { return String(v == null ? '' : v).replace(/[\t\n\r]+/g, ' ').trim(); };
+  var totalQty = 0, totalAmt = 0;
+  var lines = [['SKU', 'Model', 'QTY', 'มูลค่า', 'สถานะ', 'คอมเมนต์'].join('\t')];
+  s.items.forEach(function(it) {
+    var qty = Number(it.qty) || 0;
+    var amt = qty * (Number(it.unitPrice) || 0);
+    totalQty += qty;
+    totalAmt += amt;
+    var b = _poTrackerBucketInfo(_poTrackerItemBucket(it, s));
+    lines.push([clean(it.sku || '-'), clean(it.model || '-'), qty, amt, b.label, clean(it.comment || '')].join('\t'));
+  });
+  lines.push(['รวม', '', totalQty, totalAmt, '', ''].join('\t'));
+  copyText(lines.join('\n'), '📋 คัดลอกตารางรายการสินค้าแล้ว (วางลง Excel ได้เลย)');
 }
 
 // เปิด/ปิดแผงปรับยอด Stock ด่วน (ซ้อนในแผงสรุปรายการสินค้า) — เปิดครั้งแรกจำเวลา stockLog ล่าสุดไว้เช็ค conflict เหมือนเดิม
