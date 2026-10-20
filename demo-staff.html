@@ -2470,11 +2470,11 @@ function _bkRowActionsHtml(it) {
     }
     var pend = PENDING_EDITS[u.id];
     if (pend && pend.loanAction) {
-      return bell + detailBtn + '<span style="color:var(--text3);font-style:italic;font-size:12px" title="รอเปิด Lotus Note กด &quot;รับเข้า&quot;">⏳ ส่งคำขอแล้ว</span>';
+      return bell + detailBtn + '<span style="color:var(--text3);font-style:italic;font-size:12px" title="มีผลในหน้านี้ทันทีแล้ว ข้อมูลจริงฝั่ง Lotus Note จะอัปเดตตามให้เองอัตโนมัติ">✅ ' + esc(_laLabel(pend.loanAction.type)) + 'แล้ว</span>';
     }
     return bell + detailBtn +
-      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน (ผ่าน Lotus Note)">⏩</button>' +
-      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์ (ผ่าน Lotus Note)">🔄</button>' +
+      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'extend\')" title="เลื่อนกำหนดคืน (มีผลทันที)">⏩</button>' +
+      '<button class="detail-btn icon-btn" onclick="askLoanAction(\'' + u.id + '\',\'transfer\')" title="โอนผู้ยืม/ผู้คีย์ (มีผลทันที)">🔄</button>' +
       '<button class="detail-btn icon-btn" onclick="showLendConflictM(\'' + u.id + '\',\'' + _scIso(b.s) + '\',\'' + _scIso(b.e) + '\')" title="แก้ผู้ยืม/ผู้คีย์/ใบจอง/เหตุผล">✏️</button>';
   }
   return bell + detailBtn;
@@ -2730,17 +2730,17 @@ function returnRowHtml(cls, l, compact) {
       (u && u.note ? '<br>📝 หมายเหตุเครื่อง: ' + esc(u.note) : '') + '</div>';
   }
   if (u) h += _waitingNoteHtml(u.id);
-  // ใบที่มาจาก Lotus Note ไม่มี doc ใน publicDemoLoans จึงอัปเดตจากหน้านี้ไม่ได้ — บอกให้ชัดว่าต้องไปกดที่ไหน
-  // (โหมด compact ตัดคำอธิบายทั่วไปออก เพราะสรุปไว้ที่หัวใบแล้ว — เหลือไว้แค่สถานะ "ส่งคำขอแล้ว" ของ
-  // เครื่องนั้นๆ ซึ่งเป็นข้อมูลเฉพาะเครื่อง ไม่ใช่ของทั้งใบ)
+  // ใบที่มาจาก Lotus Note ไม่มี doc ใน publicDemoLoans จึงแก้ตัวจริงจากหน้านี้ไม่ได้ — แต่คืน/เลื่อน/โอนที่กด
+  // จากหน้านี้มีผลในหน้านี้ทันทีแล้ว (ไม่ต้องรอ Lotus Note อีกขั้น ดูคอมเมนต์ที่ PENDING_EDITS ด้านบน)
+  // (โหมด compact ตัดคำอธิบายทั่วไปออก เพราะสรุปไว้ที่หัวใบแล้ว — เหลือไว้แค่สถานะของเครื่องนั้นๆ)
   if (l.src === 'app') {
     var pend = PENDING_EDITS[l.unitId];
     var pa = pend && pend.loanAction;
     if (pa) {
-      h += '<div class="rt-src queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
-        ' — รอเปิด Lotus Note กด “รับเข้า” · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิกคำขอ</button></div>';
+      h += '<div class="rt-src queued">✅ ' + esc(_laLabel(pa.type)) + 'แล้ว' + (pa.by ? ' โดย ' + esc(pa.by) : '') +
+        ' — มีผลทันทีในหน้านี้ · <button class="btn btn-ghost btn-sm" onclick="cancelLoanAction(\'' + l.unitId + '\')">ยกเลิก</button></div>';
     } else if (!compact) {
-      h += '<div class="rt-src" title="ยืมออกจากอีกระบบหนึ่ง (Lotus Note ของบริษัท) — แก้ไขตรงนี้ไม่ได้ ต้องส่งคำขอแล้วรอมีคนไปกดยืนยันใน Lotus Note">📲 คีย์จาก Lotus Note — ส่งคำขอได้จากปุ่มด้านขวา</div>';
+      h += '<div class="rt-src" title="ยืมออกจากอีกระบบหนึ่ง (Lotus Note ของบริษัท) — แก้ข้อมูลเครื่องตรงนี้ไม่ได้ แต่คืน/เลื่อน/โอนทำได้จากปุ่มด้านขวา มีผลทันที">📲 คีย์จาก Lotus Note — ทำรายการได้จากปุ่มด้านขวา</div>';
     }
   }
   h += '</div>';
@@ -2760,8 +2760,8 @@ function returnRowHtml(cls, l, compact) {
     var pe = PENDING_EDITS[l.unitId];
     if (!(pe && pe.loanAction)) {
       h += '<button class="btn btn-primary btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'return\')">✅ รับคืน</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'extend\')" title="ขอเลื่อนกำหนดคืน">⏩</button>' +
-        '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'transfer\')" title="ขอโอนผู้ยืม/ผู้คีย์">🔄</button>';
+        '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'extend\')" title="เลื่อนกำหนดคืน (มีผลทันที)">⏩</button>' +
+        '<button class="btn btn-ghost btn-sm" onclick="askLoanAction(\'' + l.unitId + '\',\'transfer\')" title="โอนผู้ยืม/ผู้คีย์ (มีผลทันที)">🔄</button>';
     }
     // แก้ผู้ยืม/ผู้คีย์/เลขใบจอง/เหตุผลของใบนี้ — ในมุมมองตามใบจอง ปุ่มนี้ย้ายไปรวมไว้ที่หัวใบแทน (ดู
     // renderReturnTabBySlip) จึงไม่ต้องมีซ้ำอีกตรงนี้เวลาแสดงแบบ compact
@@ -2798,7 +2798,7 @@ function _rtSlipItemRowHtml(l, slipEndIso) {
   if (l.src === 'app') {
     var pend = PENDING_EDITS[l.unitId];
     pa = pend && pend.loanAction;
-    if (pa) h += '<span class="rt-crow2-exc queued">⏳ ส่งคำขอ' + esc(_laLabel(pa.type)) + 'แล้ว — รอ Lotus Note รับเข้า</span>';
+    if (pa) h += '<span class="rt-crow2-exc queued">✅ ' + esc(_laLabel(pa.type)) + 'แล้ว — มีผลทันทีในหน้านี้</span>';
   }
   h += '</span><span class="row-acts">';
   if (late || due) {
@@ -2840,20 +2840,14 @@ function askLoanAction(unitId, type) {
   h += '<div class="field"><label>📝 เหตุผล / หมายเหตุ' + (type === 'return' ? '' : ' *') + '</label><input type="text" id="la_reason" placeholder="' +
     (type === 'return' ? 'เช่น ลูกค้าส่งคืนที่ออฟฟิศแล้ว' : 'เช่น ลูกค้าขอใช้ต่อ / สมชายลาออก') + '"></div>';
   h += '<div class="field"><label>✍️ คนที่ทำเรื่อง *</label><input type="text" id="la_by" list="laKeyerList" autocomplete="off" placeholder="เลือกจากรายชื่อ หรือพิมพ์เอง">' + scKeyerDatalist('laKeyerList') + '</div>';
-  if (type === 'return') {
-    h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface2);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
-      '✅ กดแล้วปิดใบจองนี้ทันทีในหน้านี้ เครื่องจะว่างให้จองต่อได้เลย — ไม่ต้องรอใครไปกดรับเข้าที่ Lotus Note อีกขั้น ' +
-      '(ข้อมูลจริงฝั่ง Lotus Note จะอัปเดตตามให้เองอัตโนมัติ ไม่ต้องทำอะไรเพิ่ม)</div>';
-  } else {
-    h += '<div style="font-size:11.5px;color:var(--warn);background:var(--warn-soft);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
-      '⚠️ ใบนี้คีย์จาก Lotus Note หน้านี้เปลี่ยนตัวจริงไม่ได้ — กดส่งแล้วจะเข้าคิวไว้ ' +
-      'ต้องไปเปิดเมนู Demo Equipment ใน Lotus Note แล้วกด “รับเข้า” อีกครั้งถึงจะมีผลจริง</div>';
-  }
+  h += '<div style="font-size:11.5px;color:var(--text2);background:var(--surface2);border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.55">' +
+    '✅ กดแล้วมีผลทันทีในหน้านี้ — ไม่ต้องรอใครไปกดรับเข้าที่ Lotus Note อีกขั้น ' +
+    '(ข้อมูลจริงฝั่ง Lotus Note จะอัปเดตตามให้เองอัตโนมัติ ไม่ต้องทำอะไรเพิ่ม)</div>';
   h += '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-    '<button class="btn btn-primary" onclick="saveLoanAction(\'' + unitId + '\',\'' + type + '\')">' +
-    (type === 'return' ? '✅ คืนเลย' : '📤 ส่งคำขอ' + _laLabel(type)) + '</button>' +
+    '<button class="btn btn-primary" onclick="saveLoanAction(\'' + unitId + '\',\'' + type + '\')">✅ ' +
+    (type === 'return' ? 'คืนเลย' : _laLabel(type) + 'เลย') + '</button>' +
     '<button class="btn btn-ghost" onclick="closeSm()">ยกเลิก</button></div>';
-  openSm(type === 'return' ? '✅ รับคืน' : '📤 ขอ' + _laLabel(type) + ' (ผ่าน Lotus Note)', h);
+  openSm('✅ ' + _laLabel(type), h);
 }
 function saveLoanAction(unitId, type) {
   var by = (document.getElementById('la_by').value || '').trim();
@@ -2883,7 +2877,10 @@ function saveLoanAction(unitId, type) {
     }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
     return;
   }
-  var la = { type: type, by: by, reason: reason, at: new Date().toISOString() };
+  // la.start/la.end = ช่วง busyRange ปัจจุบันของเครื่อง ณ ตอนกดส่ง — applyEditOverlay ใช้จับคู่ว่าจะ
+  // overlay ผลของคำขอนี้ลงช่วงไหนทันที (ดูคอมเมนต์ที่ PENDING_EDITS ด้านบน) เหมือนที่ 'return' ทำอยู่แล้ว
+  var ar2 = unitAppRangeOn(unitId, _td());
+  var la = { type: type, by: by, reason: reason, start: ar2 && ar2.start, end: ar2 && ar2.end, at: new Date().toISOString() };
   if (type === 'extend') {
     la.newEnd = (document.getElementById('la_end').value || '').trim();
     if (!la.newEnd) { alert('เลือกกำหนดคืนใหม่ก่อนนะครับ'); return; }
@@ -2901,8 +2898,10 @@ function saveLoanAction(unitId, type) {
     editedAt: firebase.firestore.FieldValue.serverTimestamp(),
     unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
   }, { merge: true }).then(function() {
+    _logEditHistory(unitId, u.model || u.name || '', u.rentalDbNo || '', type,
+      [(type === 'extend' ? 'เลื่อนกำหนดคืนเป็น ' + _scD(la.newEnd) : 'โอนผู้ยืม/ผู้คีย์') + (reason ? ' · ' + reason : '')], by);
     closeSm();
-    toastMock('📤 ส่งคำขอแล้ว — รอ Lotus Note กดรับเข้า');
+    toastMock('✅ ' + (type === 'extend' ? 'เลื่อนกำหนดคืนแล้ว' : 'โอนแล้ว') + ' — มีผลทันทีในหน้านี้');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 // ---- คืน/เลื่อน ทั้งใบจอง ----
@@ -2924,10 +2923,11 @@ function _rtSelectedRows(rows) {
   return rows.filter(function(l) { return checked[_rtRowKey(l)]; });
 }
 // checkable = false ใช้ตอนแค่โชว์สรุป ไม่ต้องเลือก (ตอนนี้ไม่มีจุดเรียกแบบนั้นแล้ว แต่เผื่อไว้)
-// mode = 'return' ใช้ตอนเรียกจาก openSlipReturnM — เครื่องที่คีย์จาก Lotus Note ก็ปิดใบจองในหน้านี้ได้ทันที
-// (ดูคอมเมนต์ที่ PENDING_EDITS ด้านบน) เลยไม่ต้องขึ้นป้าย "ส่งคำขอ" เหมือนตอนเลื่อน/โอนที่ยังต้องรอ Lotus Note
+// mode = 'return'/'extend' ใช้ตอนเรียกจาก openSlipReturnM/openSlipExtendM — เครื่องที่คีย์จาก Lotus Note
+// ก็มีผลในหน้านี้ได้ทันที (ดูคอมเมนต์ที่ PENDING_EDITS ด้านบน) เลยไม่ต้องขึ้นป้าย "ส่งคำขอ"/ข้อความรอ
 function _rtSlipHead(key, rows, checkable, mode) {
   if (checkable === undefined) checkable = true;
+  var instant = mode === 'return' || mode === 'extend';
   var j = key.charAt(0) === 'J' ? key.slice(2) : '';
   var nApp = rows.filter(function(l) { return l.src === 'app'; }).length;
   var h = '<div class="sm-sec">' + (j ? '📄 ใบจอง ' + esc(j) : '📄 ชุดนี้ไม่มีเลขใบจอง') + ' · ' + rows.length + ' เครื่อง</div>';
@@ -2939,11 +2939,11 @@ function _rtSlipHead(key, rows, checkable, mode) {
       esc(u.model || u.name || l.model || '-') +
       (u.rentalDbNo ? ' <span class="rt-rent">เช่า ' + esc(u.rentalDbNo) + '</span>' : '') +
       _snLineHtml(u) +
-      (l.src === 'app' && mode !== 'return' ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') +
+      (l.src === 'app' && !instant ? ' <span class="rt-viareq">ส่งคำขอ</span>' : '') +
       (checkable ? '</label>' : '</span>') + '</li>';
   }).join('') + '</ul>';
-  if (nApp && mode !== 'return') h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจาก Lotus Note หน้านี้แก้ตัวจริงไม่ได้ — จะส่งเป็นคำขอเข้าคิวให้ รอ Lotus Note กด “รับเข้า”</div>';
-  else if (nApp) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจาก Lotus Note — กดคืนแล้วปิดใบจองในหน้านี้ทันที ไม่ต้องรอ Lotus Note กด “รับเข้า”</div>';
+  if (nApp && !instant) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจาก Lotus Note หน้านี้แก้ตัวจริงไม่ได้ — จะส่งเป็นคำขอเข้าคิวให้ รอ Lotus Note กด “รับเข้า”</div>';
+  else if (nApp) h += '<div class="hint">' + nApp + ' เครื่องคีย์มาจาก Lotus Note — มีผลในหน้านี้ทันที ไม่ต้องรอ Lotus Note กด “รับเข้า”</div>';
   // กลุ่มที่ไม่มีเลขใบจองคือการเดา ไม่ใช่ใบจริง — เตือนก่อนกดทีเดียวหลายเครื่อง
   if (!j && rows.length > 1) {
     h += '<div class="rt-warn">⚠️ ชุดนี้<b>ไม่มีเลขใบจอง</b> ระบบเดากลุ่มจากผู้ยืมและช่วงวันที่ตรงกัน ' +
@@ -3126,7 +3126,7 @@ function openSlipExtendM(key) {
   var rows = _rtSlipRows(key);
   if (!rows.length) { alert('ไม่มีเครื่องในใบนี้ที่ทำรายการได้ตอนนี้'); return; }
   var maxEnd = rows.map(function(l) { return l.end; }).sort().pop();
-  var h = _rtSlipHead(key, rows);
+  var h = _rtSlipHead(key, rows, true, 'extend');
   h += '<div class="hint">กำหนดคืนในใบนี้ตอนนี้ช้าสุดคือ ' + _scD(maxEnd) + ' — เลื่อนแล้วทุกเครื่องที่เลือกจะใช้วันใหม่วันเดียวกัน</div>';
   h += '<div class="field"><label>📅 กำหนดคืนใหม่ *</label><input type="date" id="se_end" value="' + maxEnd + '" onchange="seRecalcConflicts(\'' + _scEsq(key) + '\')"></div>';
   h += '<div id="seConflictBox"></div>';
@@ -3193,9 +3193,11 @@ function saveSlipExtend(key) {
       nDirect++;
     } else {
       var u = UNITS.filter(function(x) { return x.id === l.unitId; })[0] || {};
+      // เก็บ start/end ของช่วงเดิมไว้คู่กับ loanAction — applyEditOverlay ใช้จับคู่ overlay กำหนดคืนใหม่ลง
+      // busyRanges ทันที ไม่ต้องรอแอปหลักประมวลผลคิวก่อนเหมือนที่ 'return' ทำอยู่แล้ว
       batch.set(db.collection('publicDemoEdits').doc(l.unitId), {
         unitId: l.unitId, editedBy: by,
-        loanAction: { type: 'extend', by: by, newEnd: end, reason: why + suffix, at: new Date().toISOString() },
+        loanAction: { type: 'extend', by: by, newEnd: end, reason: why + suffix, start: l.start, end: l.end, at: new Date().toISOString() },
         editedAt: firebase.firestore.FieldValue.serverTimestamp(),
         unitLabel: u.model || u.name || '', rentalDbNo: u.rentalDbNo || ''
       }, { merge: true });
@@ -3204,7 +3206,7 @@ function saveSlipExtend(key) {
   });
   batch.commit().then(function() {
     closeSm();
-    toastMock('⏩ ' + (nDirect ? 'เลื่อน ' + nDirect + ' เครื่อง' : '') + (nDirect && nReq ? ' · ' : '') + (nReq ? 'ส่งคำขอ ' + nReq + ' เครื่อง' : ''));
+    toastMock('⏩ เลื่อนแล้ว ' + (nDirect + nReq) + ' เครื่อง — มีผลทันทีในหน้านี้');
   }).catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
@@ -3269,10 +3271,10 @@ function saveSlipTransfer(key) {
 }
 
 function cancelLoanAction(unitId) {
-  if (!confirm('ยกเลิกคำขอนี้?')) return;
+  if (!confirm('ยกเลิกรายการนี้? (ที่เคยมีผลในหน้านี้จะย้อนกลับเป็นค่าเดิม)')) return;
   db.collection('publicDemoEdits').doc(unitId).update({
     loanAction: firebase.firestore.FieldValue.delete()
-  }).then(function() { toastMock('✕ ยกเลิกคำขอแล้ว'); })
+  }).then(function() { toastMock('✕ ยกเลิกแล้ว'); })
     .catch(function(e) { alert('ผิดพลาด: ' + e.message); });
 }
 
@@ -7367,7 +7369,7 @@ function showHelpGuideM() {
 
   h += sec('อื่นๆ ที่ควรรู้');
   h += row('🔍', 'ช่องค้นหาบนสุด', 'ค้นได้ทุกอย่างพร้อมกันทุกแท็บ — รุ่น, เลขเครื่องเช่า, S/N, ผู้ยืม, ผู้คีย์เบิก, เลขใบจอง');
-  h += row('📲', 'ป้าย "คีย์จาก Lotus Note"', 'เครื่องที่มีป้ายนี้ แก้ข้อมูลจริงตรงนี้ไม่ได้ ถ้าขอเลื่อน/โอน ต้องส่งคำขอเข้าคิวแล้วรอ Lotus Note กด "รับเข้า" — แต่ถ้ากด "คืน" ปิดใบจองในหน้านี้ได้ทันที ไม่ต้องรอ');
+  h += row('📲', 'ป้าย "คีย์จาก Lotus Note"', 'เครื่องที่มีป้ายนี้ แก้ข้อมูลจริงตรงนี้ไม่ได้ (เช่น ชื่อ/SKU) แต่คืน/เลื่อนกำหนดคืน/โอนผู้ยืม ทำจากปุ่มของรายการนั้นได้เลย มีผลในหน้านี้ทันที — ข้อมูลจริงฝั่ง Lotus Note จะอัปเดตตามให้เองอัตโนมัติ ไม่ต้องรอใครไปกด "รับเข้า"');
 
   openSm('📖 คู่มือการใช้งานเมนูต่างๆ', h, true);
 }
@@ -7391,14 +7393,30 @@ function applyEditOverlay() {
     var p = PENDING_EDITS[id];
     if (p.type === 'add' && !rawIds[id]) mapped.push(Object.assign({ id: id, status: 'available' }, p.fields || {}));
   });
-  // ตัด busyRanges ที่กดคืนไปแล้วออกตั้งแต่ตรงนี้ จุดเดียว ทุกที่ที่อ่าน u.busyRanges (ติดตามคืน/ใบจอง/
-  // ปฏิทิน/รายงานการใช้งาน) จะเห็นว่าเครื่องว่างแล้วพร้อมกันหมด ไม่ต้องไปกรองซ้ำทีละจุด
+  // คืน/เลื่อน/โอน ที่กดจากหน้านี้มีผลลง busyRanges ตรงนี้จุดเดียว ทุกที่ที่อ่าน u.busyRanges (ติดตามคืน/
+  // ใบจอง/ปฏิทิน/รายงานการใช้งาน) จะเห็นผลพร้อมกันหมดทันที ไม่ต้องรอแอปหลักประมวลผลคิวก่อน ไม่ต้องกรอง/
+  // overlay ซ้ำทีละจุด — คืน: ตัดช่วงนั้นออกไปเลย, เลื่อน: แก้วันกำหนดคืนของช่วงนั้น, โอน: แก้ผู้ยืม/ผู้คีย์
   mapped.forEach(function(u) {
     if (!u.busyRanges || !u.busyRanges.length) return;
     var pend = PENDING_EDITS[u.id];
     var la = pend && pend.loanAction;
-    if (!(la && la.type === 'return')) return;
-    u.busyRanges = u.busyRanges.filter(function(r) { return !(r.start === la.start && r.end === la.end); });
+    if (!la || !la.type) return;
+    if (la.type === 'return') {
+      u.busyRanges = u.busyRanges.filter(function(r) { return !(r.start === la.start && r.end === la.end); });
+    } else if (la.type === 'extend') {
+      u.busyRanges = u.busyRanges.map(function(r) {
+        if (r.start !== la.start || r.end !== la.end) return r;
+        return Object.assign({}, r, { end: la.newEnd });
+      });
+    } else if (la.type === 'transfer') {
+      u.busyRanges = u.busyRanges.map(function(r) {
+        if (r.start !== la.start || r.end !== la.end) return r;
+        var next = Object.assign({}, r);
+        if (la.borrower) next.borrower = la.borrower;
+        if (la.keyedBy) next.approver = la.keyedBy;
+        return next;
+      });
+    }
   });
   UNITS = mapped.filter(function(u) { var p = PENDING_EDITS[u.id]; return !(p && p.type === 'delete'); });
 }
