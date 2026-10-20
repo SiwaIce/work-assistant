@@ -7401,16 +7401,29 @@ function applyEditOverlay() {
     var pend = PENDING_EDITS[u.id];
     var la = pend && pend.loanAction;
     if (!la || !la.type) return;
+    // รายการเก่าก่อนแก้ครั้งนี้ไม่มี la.start/la.end (ฟีเจอร์นี้เพิ่งมี) — ถ้าไม่มีให้ fallback ไปจับช่วงที่ยังไม่ครบกำหนดคืนซึ่งใกล้ครบที่สุดของเครื่องนั้นแทน
+    var hasRange = la.start !== undefined && la.end !== undefined;
+    var fallback = null;
+    if (!hasRange) {
+      var today = _td();
+      var active = u.busyRanges.filter(function(r) { return _rangeStillOut(r, today); });
+      active.sort(function(a, b) { return String(a.end).localeCompare(String(b.end)); });
+      fallback = active[0] || null;
+    }
+    var matches = function(r) {
+      if (hasRange) return r.start === la.start && r.end === la.end;
+      return !!fallback && r.start === fallback.start && r.end === fallback.end;
+    };
     if (la.type === 'return') {
-      u.busyRanges = u.busyRanges.filter(function(r) { return !(r.start === la.start && r.end === la.end); });
+      u.busyRanges = u.busyRanges.filter(function(r) { return !matches(r); });
     } else if (la.type === 'extend') {
       u.busyRanges = u.busyRanges.map(function(r) {
-        if (r.start !== la.start || r.end !== la.end) return r;
+        if (!matches(r)) return r;
         return Object.assign({}, r, { end: la.newEnd });
       });
     } else if (la.type === 'transfer') {
       u.busyRanges = u.busyRanges.map(function(r) {
-        if (r.start !== la.start || r.end !== la.end) return r;
+        if (!matches(r)) return r;
         var next = Object.assign({}, r);
         if (la.borrower) next.borrower = la.borrower;
         if (la.keyedBy) next.approver = la.keyedBy;
