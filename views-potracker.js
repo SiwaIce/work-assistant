@@ -5,7 +5,7 @@
 
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
-var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว)
+var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว) | reserve1021 — แท็บติดตามการจองคลัง 1021 (แสดงได้ทุกเมื่อ ไม่ต้องเลือก Dealer)
 var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
 var poTrackerReadyFlt = '';  // '' | ready | notready
@@ -571,6 +571,7 @@ function rPOTracker(el) {
   html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
   html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
+  html += '<button class="btn ' + (poTrackerMainTab === 'reserve1021' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'reserve1021\'?\'summary\':\'reserve1021\');render()">🔖 จองคลัง 1021</button>';
   html += '</div>';
 
   if (poTrackerMoreFlt) {
@@ -607,6 +608,21 @@ function rPOTracker(el) {
     html += '</div>';
   }
   html += '</div>';
+
+  if (poTrackerMainTab === 'reserve1021') {
+    var rsvQ = poTrackerSearch.trim().toLowerCase();
+    var rsvBaseRows = rows.filter(function(r) {
+      if (poTrackerDealerFlt && r.so.dealerName !== poTrackerDealerFlt) return false;
+      if (rsvQ) {
+        var hay = ((r.so.soNumber || '') + ' ' + (r.so.customerPO || '') + ' ' + (r.so.dealerName || '')).toLowerCase();
+        if (hay.indexOf(rsvQ) === -1) return false;
+      }
+      return true;
+    });
+    html += _poTrackerReserve1021Html(rsvBaseRows);
+    el.innerHTML = html;
+    return;
+  }
 
   if (poTrackerDealerFlt) {
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
@@ -1096,6 +1112,125 @@ function _poTrackerAddDealerSheets(wb, all) {
       { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 34 }, { wch: 18 }, { wch: 22 }];
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
   });
+}
+
+// ---------------------------------------------------------------- แท็บ "จองคลัง 1021" — สรุปรายการสินค้าที่จองคลัง 1021 ทุก SO เรียงใกล้ครบกำหนดก่อน
+// ดึงจาก item.reserveDate/reserveExpiryDate/link ที่กรอกไว้ในแต่ละรายการอยู่แล้ว (sync กับ lot จริงผ่าน stockSOItemReadyInfo เหมือนหน้า SO) ไม่มี collection ใหม่
+function _poTrackerReserve1021Days(dateStr) {
+  if (!dateStr) return null;
+  return Math.round((new Date(dateStr) - new Date(_td())) / 86400000);
+}
+function _poTrackerReserve1021Status(days) {
+  if (days === null) return { key: 'unknown', color: '#94a3b8', label: 'ไม่ระบุวันครบกำหนด' };
+  if (days <= 2) return { key: 'danger', color: '#ef4444', label: days < 0 ? 'เลยกำหนด ' + Math.abs(days) + ' วัน' : (days === 0 ? 'ครบกำหนดวันนี้' : 'เหลือ ' + days + ' วัน') };
+  if (days <= 7) return { key: 'warn', color: '#d97706', label: 'เหลือ ' + days + ' วัน' };
+  return { key: 'ok', color: '#16a34a', label: 'เหลือ ' + days + ' วัน' };
+}
+function _poTrackerReserve1021Flatten(baseRows) {
+  var list = [];
+  baseRows.forEach(function(r) {
+    var so = r.so;
+    (so.items || []).forEach(function(it, idx) {
+      if (it.sourceType !== 'reserve_1021') return;
+      var qty = Number(it.qty) || 0;
+      var reserveDate = it.reserveDate || '';
+      var reserveExpiryDate = it.reserveExpiryDate || '';
+      if (it.sku && typeof stockSOItemReadyInfo === 'function') {
+        var info = stockSOItemReadyInfo(it.sku, qty, so);
+        if (info) {
+          reserveDate = info.reserveDate || reserveDate;
+          reserveExpiryDate = info.bookingExpiryDate || reserveExpiryDate;
+        }
+      }
+      list.push({ so: so, idx: idx, name: it.model || it.sku || '-', sku: it.sku || '', qty: qty, reserveDate: reserveDate, reserveExpiryDate: reserveExpiryDate, link: it.link || '' });
+    });
+  });
+  list.sort(function(a, b) {
+    var da = _poTrackerReserve1021Days(a.reserveExpiryDate), db = _poTrackerReserve1021Days(b.reserveExpiryDate);
+    if (da === null && db === null) return 0;
+    if (da === null) return 1;
+    if (db === null) return -1;
+    return da - db;
+  });
+  return list;
+}
+function _poTrackerReserve1021Html(baseRows) {
+  var list = _poTrackerReserve1021Flatten(baseRows);
+  var cDanger = 0, cWarn = 0, cOk = 0, cNoLink = 0;
+  list.forEach(function(x) {
+    var s = _poTrackerReserve1021Status(_poTrackerReserve1021Days(x.reserveExpiryDate)).key;
+    if (s === 'danger') cDanger++;
+    if (s === 'warn') cWarn++;
+    if (s === 'ok') cOk++;
+    if (!x.link) cNoLink++;
+  });
+  var html = '<div class="card" style="margin-bottom:12px;padding:16px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
+  html += '<div style="font-weight:600;font-size:14px">🔖 รายการจองคลัง 1021 ทั้งหมด (' + list.length + ' รายการ)</div>';
+  html += '<button class="btn bo" onclick="poTrackerExportReserve1021Xlsx()">📤 Export Excel</button>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">';
+  html += '<div><div style="font-size:20px;font-weight:600;color:#ef4444">' + cDanger + '</div><div style="font-size:11px;color:var(--text2)">เลยกำหนด / เหลือ ≤2 วัน</div></div>';
+  html += '<div><div style="font-size:20px;font-weight:600;color:#d97706">' + cWarn + '</div><div style="font-size:11px;color:var(--text2)">ใกล้ครบกำหนด (≤7 วัน)</div></div>';
+  html += '<div><div style="font-size:20px;font-weight:600;color:#16a34a">' + cOk + '</div><div style="font-size:11px;color:var(--text2)">ยังมีเวลา</div></div>';
+  html += '<div><div style="font-size:20px;font-weight:600;color:var(--text2)">' + cNoLink + '</div><div style="font-size:11px;color:var(--text2)">ยังไม่มีลิงก์แนบ</div></div>';
+  html += '</div>';
+  if (!list.length) {
+    html += '<div style="color:var(--text2);font-size:12.5px;padding:10px 0">ไม่มีรายการที่จองคลัง 1021 อยู่ตามตัวกรองด้านบน (เลือก Dealer/ค้นหาใหม่ หรือยังไม่มีรายการที่ตั้ง "แหล่งที่มา" เป็นจองคลัง 1021)</div>';
+    html += '</div>';
+    return html;
+  }
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:720px">';
+  html += '<thead><tr style="text-align:left;color:var(--text2);font-size:11px">';
+  ['สินค้า', 'SKU', 'จำนวน', 'SO / Dealer', 'จองวันที่ → ถึงวันที่', 'เหลือเวลา', 'ลิงก์แนบ', ''].forEach(function(h) {
+    html += '<th style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + h + '</th>';
+  });
+  html += '</tr></thead><tbody>';
+  list.forEach(function(x) {
+    var days = _poTrackerReserve1021Days(x.reserveExpiryDate);
+    var st = _poTrackerReserve1021Status(days);
+    var rowBg = st.key === 'danger' ? 'background:#ef44441a' : (st.key === 'warn' ? 'background:#d977061a' : '');
+    html += '<tr style="' + rowBg + '">';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);font-weight:600">' + sanitize(x.name) + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);font-family:monospace;font-size:11px;color:var(--text2)">' + sanitize(x.sku) + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);text-align:center">' + x.qty + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border)">' + _poTrackerSoLinksHtml(x.so) + '<div style="font-size:10px;color:var(--text2);margin-top:1px">' + sanitize(x.so.dealerName || '-') + '</div></td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (x.reserveDate ? fD(x.reserveDate) : '-') + ' → ' + (x.reserveExpiryDate ? fD(x.reserveExpiryDate) : '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border)"><span style="font-weight:700;color:' + st.color + '">' + st.label + '</span></td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border)">' + (x.link ? '<a href="' + sanitize(x.link) + '" target="_blank" rel="noopener" style="color:var(--accent)">🔗 เปิดลิงก์</a>' : '<span style="color:var(--text2);font-size:11px">—</span>') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border)"><a href="#" onclick="showSOEditItemsModal(\'' + x.so.id + '\');return false" style="font-size:11px;color:var(--accent)">✏️ แก้ไขวันจอง</a></td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+function poTrackerExportReserve1021Xlsx() {
+  ensureXLSX().then(function() {
+    _poTrackerExportReserve1021XlsxImpl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+function _poTrackerExportReserve1021XlsxImpl() {
+  var all = ST.getAll('salesOrders').slice();
+  var baseRows = all.map(_poTrackerBuildRow);
+  var list = _poTrackerReserve1021Flatten(baseRows);
+  if (!list.length) { toast('ไม่มีรายการจองคลัง 1021'); return; }
+  var header = ['SKU', 'รายการสินค้า', 'จำนวน', 'SO Number', 'PO ลูกค้า', 'Dealer', 'จองวันที่', 'จองถึงวันที่', 'เหลือเวลา (วัน)', 'สถานะ', 'ลิงก์แนบ'];
+  var dataRows = list.map(function(x) {
+    var days = _poTrackerReserve1021Days(x.reserveExpiryDate);
+    var st = _poTrackerReserve1021Status(days);
+    return [x.sku, x.name, x.qty, x.so.soNumber || '', x.so.customerPO || '', x.so.dealerName || '',
+      x.reserveDate ? fD(x.reserveDate) : '', x.reserveExpiryDate ? fD(x.reserveExpiryDate) : '',
+      days === null ? '' : days, st.label, x.link || ''];
+  });
+  var ws = XLSX.utils.aoa_to_sheet([header].concat(dataRows));
+  ws['!cols'] = [{ wch: 14 }, { wch: 28 }, { wch: 8 }, { wch: 14 }, { wch: 16 }, { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 34 }];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'จองคลัง 1021');
+  XLSX.writeFile(wb, 'po-tracker-จองคลัง-1021-' + _td() + '.xlsx');
+  toast('📤 Export รายการจองคลัง 1021 แล้ว (' + list.length + ' รายการ)');
 }
 
 // ================================================================
