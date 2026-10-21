@@ -157,7 +157,7 @@ function soAllShipmentRounds() {
     var shipments = _soMigrateLegacyShipment(s);
     shipments.forEach(function(sh) {
       out.push({
-        soId: s.id, soNumber: s.soNumber, dealerName: s.dealerName,
+        id: sh.id, soId: s.id, soNumber: s.soNumber, dealerName: s.dealerName,
         date: sh.date, doNumber: sh.doNumber || '', invoiceNumber: sh.invoiceNumber || '', invoiceDate: sh.invoiceDate || '',
         note: sh.note || '', items: sh.items || [], soItems: s.items || []
       });
@@ -167,12 +167,81 @@ function soAllShipmentRounds() {
 }
 
 // sh.items เก็บแค่ sku/model/qty ที่ส่งจริง (ไม่มีราคา) — จับคู่ราคาต่อหน่วยจาก s.items ปัจจุบันของ SO นั้น
+// รอบเก่าที่ย้ายมาจากข้อมูลก่อนรองรับแบ่งส่ง (legacy) ไม่มี items[] เลย — fallback ไปใช้รายการทั้งหมดของ SO แทน (ตั้ง estimated:true) กันโชว์ 0 รายการ/0 บาททั้งที่มีของจริง
 function _soShipRoundItemsWithPrice(round) {
-  return (round.items || []).map(function(it) {
+  var items = round.items || [];
+  if (!items.length && (round.soItems || []).length) {
+    return (round.soItems || []).filter(function(x) { return x.sku; }).map(function(src) {
+      var price = Number(src.unitPrice) || 0;
+      var qty = Number(src.qty) || 0;
+      return { sku: src.sku, model: src.model, qty: qty, unitPrice: price, total: price * qty, estimated: true };
+    });
+  }
+  return items.map(function(it) {
     var src = (round.soItems || []).filter(function(x) { return x.sku === it.sku; })[0];
     var price = src ? (Number(src.unitPrice) || 0) : 0;
     return { sku: it.sku, model: it.model, qty: it.qty || 0, unitPrice: price, total: price * (it.qty || 0) };
   });
+}
+
+// แก้ไขข้อมูลรอบส่งมอบที่บันทึกไว้แล้ว (DO/Invoice/วันที่/หมายเหตุ) — ใช้จากหน้า Track Invoice
+// ตั้งเลข Invoice ให้ตรงกับรอบอื่นได้เพื่อรวมเข้า invoice เดียวกัน (soGroupShipmentsByInvoice group ตามเลขอัตโนมัติ)
+// field เดิมระดับ SO (s.doNumber/invoiceNumber/invoiceDate) มีไว้ mirror รอบล่าสุดเสมอ (ตามที่ soRecordShipmentRound ทำ) — คำนวณใหม่จากรอบสุดท้ายทุกครั้งที่แก้ กันข้อมูลสองที่ไม่ตรงกัน
+function soUpdateShipmentRound(soId, roundId, fields) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s).slice();
+  var idx = -1;
+  shipments.forEach(function(sh, i) { if (sh.id === roundId) idx = i; });
+  if (idx === -1) return;
+  shipments[idx] = Object.assign({}, shipments[idx], fields);
+  var last = shipments[shipments.length - 1];
+  var update = {
+    shipments: shipments,
+    doNumber: last.doNumber || '',
+    invoiceNumber: last.invoiceNumber || '',
+    invoiceDate: last.invoiceDate || ''
+  };
+  var updated = ST.update('salesOrders', soId, update);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  return updated;
+}
+
+// ---------------------------------------------------------------- แก้ไขรอบส่งมอบ (จากหน้า Track Invoice)
+
+function showSOEditShipmentRoundModal(soId, roundId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s);
+  var sh = shipments.filter(function(x) { return x.id === roundId; })[0];
+  if (!sh) { toast('⚠️ ไม่พบรอบส่งมอบนี้แล้ว'); return; }
+  var itemsLine = (sh.items || []).length
+    ? (sh.items || []).map(function(it) { return sanitize(it.model || it.sku) + ' ×' + (it.qty || 0); }).join(', ')
+    : '<span style="color:var(--text2)">ไม่มีรายละเอียดรายการ (ย้ายจากข้อมูลเดิมก่อนรองรับแบ่งส่ง)</span>';
+  var html = '<div class="hint" style="margin-bottom:10px">' + sanitize(s.soNumber || '') + (sh.date ? ' · ส่งวันที่ ' + fD(sh.date) : '') + '<br>' + itemsLine + '</div>';
+  html += '<div style="display:flex;gap:8px"><div style="flex:1"><label class="lbl">DO Number</label><input id="soEr_do" class="inp" value="' + sanitize(sh.doNumber || '') + '"></div>';
+  html += '<div style="flex:1"><label class="lbl">Invoice Number</label><input id="soEr_inv" class="inp" value="' + sanitize(sh.invoiceNumber || '') + '" list="soEr_invList"></div></div>';
+  var allInv = {};
+  soAllShipmentRounds().forEach(function(r) { if (r.invoiceNumber) allInv[r.invoiceNumber] = true; });
+  html += '<datalist id="soEr_invList">' + Object.keys(allInv).map(function(n) { return '<option value="' + sanitize(n) + '">'; }).join('') + '</datalist>';
+  html += '<div style="display:flex;gap:8px;margin-top:8px"><div style="flex:1"><label class="lbl">Invoice Date</label><input id="soEr_invDate" type="date" class="inp" value="' + sanitize(sh.invoiceDate || '') + '"></div>';
+  html += '<div style="flex:1"><label class="lbl">หมายเหตุ</label><input id="soEr_note" class="inp" value="' + sanitize(sh.note || '') + '"></div></div>';
+  html += '<div class="hint" style="margin-top:6px;font-size:11px">💡 ตั้งเลข Invoice ให้ตรงกับ Invoice ที่มีอยู่แล้ว เพื่อรวมรอบนี้เข้า Invoice เดียวกัน</div>';
+  html += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSOEditShipmentRound(\'' + soId + '\',\'' + roundId + '\')">💾 บันทึก</button>';
+  openM('✏️ แก้ไขข้อมูลรอบส่งมอบ', html);
+}
+
+function _saveSOEditShipmentRound(soId, roundId) {
+  var fields = {
+    doNumber: (document.getElementById('soEr_do').value || '').trim(),
+    invoiceNumber: (document.getElementById('soEr_inv').value || '').trim(),
+    invoiceDate: document.getElementById('soEr_invDate').value || '',
+    note: (document.getElementById('soEr_note').value || '').trim()
+  };
+  soUpdateShipmentRound(soId, roundId, fields);
+  closeMForce();
+  toast('💾 บันทึกข้อมูลรอบส่งมอบแล้ว');
+  if (typeof render === 'function') render();
 }
 
 // group ทุกรอบส่งมอบ (ที่มีเลข Invoice) ข้ามทุก SO ตามเลข Invoice เดียวกัน — ใหม่สุดก่อน — ใช้โดยหน้า Track ตาม Invoice
