@@ -1198,7 +1198,12 @@ function _poTrackerInvoiceTrackHtml() {
     });
   }
   var html = '<div class="card" style="padding:16px">';
-  html += '<div style="font-weight:600;margin-bottom:10px">🧾 Track ตาม Invoice (รวมข้ามหลาย SO ที่ใช้เลขเดียวกัน)</div>';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">';
+  html += '<div style="font-weight:600">🧾 Track ตาม Invoice (รวมข้ามหลาย SO ที่ใช้เลขเดียวกัน)</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
+  html += '<button class="btn bsm bo" onclick="poTrackerExportInvoiceSNXlsx()" title="Export รายการต่อหน่วย พร้อม Serial ที่มีอยู่แล้ว เอาไปกรอกใน Excel">📤 Export SN</button>';
+  html += '<button class="btn bsm bo" onclick="showImportInvoiceSNModal()" title="นำเข้าไฟล์ Excel ที่กรอก Serial แล้วกลับเข้าระบบ">📥 Import SN</button>';
+  html += '</div></div>';
   if (!groups.length) {
     html += '<div class="hint">ยังไม่มี Invoice ที่บันทึกไว้' + (q ? ' ตรงกับคำค้นหา' : '') + '</div></div>';
     return html;
@@ -1257,6 +1262,186 @@ function _poTrackerInvoiceTrackHtml() {
   });
   html += '</div>';
   return html;
+}
+
+// ================================================================
+// Export/Import SN (Serial) จากหน้า Track Invoice — 1 แถว = 1 หน่วยสินค้า
+// ไม่มีระบบผูก serial กับรอบส่งมอบโดยตรง (it.serials เก็บเป็น flat list ต่อ SO+SKU เดียว ไม่แยกรอบ)
+// จึงอิงตำแหน่งสะสม: หน่วยที่ 1..N ของ SO+SKU หนึ่ง เรียงตามลำดับรอบส่งมอบจริง (soSkuShipmentTimeline) แล้ว map เข้า it.serials[หน่วยที่-1]
+// ข้ามรอบ legacy ที่ไม่มีรายละเอียดรายการจริง (estimated) เพราะไม่รู้ว่าหน่วยไหนอยู่ใน invoice ไหน — ให้กรอกผ่าน 🔢 แก้ไข Serial ตรงๆ แทน
+// ================================================================
+function poTrackerExportInvoiceSNXlsx() {
+  ensureXLSX().then(function() {
+    _poTrackerExportInvoiceSNXlsxImpl();
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _poTrackerExportInvoiceSNXlsxImpl() {
+  var groups = (typeof soGroupShipmentsByInvoice === 'function') ? soGroupShipmentsByInvoice() : [];
+  var q = poTrackerSearch.trim().toLowerCase();
+  if (q) {
+    groups = groups.filter(function(g) {
+      var hay = (g.invoiceNumber + ' ' + g.rounds.map(function(r) { return (r.soNumber || '') + ' ' + (r.dealerName || ''); }).join(' ')).toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+  if (!groups.length) { toast('⚠️ ไม่มี Invoice ให้ export ตามตัวกรองนี้'); return; }
+
+  var rows = [];
+  var seenSoSku = {}; // soId+sku → กันออกซ้ำถ้า SKU เดียวกันโผล่หลายรอบ/หลาย invoice ที่ถูก filter มาพร้อมกัน (ออกครบทุกหน่วยของ SO+SKU นั้นในรอบเดียว)
+  groups.forEach(function(g) {
+    g.rounds.forEach(function(r) {
+      var items = (typeof _soShipRoundItemsWithPrice === 'function') ? _soShipRoundItemsWithPrice(r) : [];
+      items.forEach(function(it) {
+        if (!it.sku || it.estimated) return;
+        var key = r.soId + '|' + it.sku;
+        if (seenSoSku[key]) return;
+        seenSoSku[key] = true;
+        var timeline = (typeof soSkuShipmentTimeline === 'function') ? soSkuShipmentTimeline(r.soId, it.sku) : [];
+        var s = ST.getOne('salesOrders', r.soId);
+        var soItem = s ? (s.items || []).filter(function(x) { return x.sku === it.sku; })[0] : null;
+        var serials = soItem ? ((typeof _soItemSerials === 'function') ? _soItemSerials(soItem) : (soItem.serials || [])) : [];
+        var unit = 0;
+        timeline.forEach(function(round) {
+          for (var i = 0; i < round.qty; i++) {
+            unit++;
+            rows.push({
+              'SO ID': r.soId, 'SO': r.soNumber, 'Dealer': r.dealerName, 'Invoice': round.invoiceNumber,
+              'วันที่ Invoice': round.invoiceDate, 'DO': round.doNumber, 'SKU': it.sku, 'สินค้า': it.model,
+              'หน่วยที่': unit, 'Serial': serials[unit - 1] || ''
+            });
+          }
+        });
+      });
+    });
+  });
+  if (!rows.length) { toast('⚠️ ไม่มีรายการสินค้าที่ export SN ได้ (รอบที่เป็นข้อมูลเก่าไม่มีรายละเอียด ให้กรอกผ่าน 🔢 แก้ไข Serial โดยตรง)'); return; }
+
+  var ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 16 }, { wch: 13 }, { wch: 16 }, { wch: 16 }, { wch: 26 }, { wch: 8 }, { wch: 22 }];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'SN');
+  XLSX.writeFile(wb, 'track-invoice-sn-' + _td() + '.xlsx');
+  toast('📤 Export SN แล้ว (' + rows.length + ' หน่วย)');
+}
+
+function showImportInvoiceSNModal() {
+  var html = '<div class="hint" style="margin-bottom:8px">ใช้ไฟล์ที่ได้จากปุ่ม "📤 Export SN" เท่านั้น (ต้องมีคอลัมน์ SO ID, SKU, หน่วยที่, Serial) — กรอกคอลัมน์ Serial ที่ว่างอยู่ แล้วอัปโหลดไฟล์เดิมกลับมาที่นี่</div>';
+  html += '<input type="file" id="invSnImpFile" accept=".xlsx,.xls" class="fi" onchange="previewInvoiceSNImport(this)">';
+  html += '<div id="invSnImpPreview"></div>';
+  html += '<button class="btn bp btn-full" id="invSnImpBtn" style="margin-top:8px;display:none" onclick="importInvoiceSNExcel()">💾 บันทึก Serial ทั้งหมด</button>';
+  openM('📥 Import SN จาก Excel (Track Invoice)', html);
+}
+
+function previewInvoiceSNImport(input) {
+  ensureXLSX().then(function() {
+    _previewInvoiceSNImport_impl(input);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _previewInvoiceSNImport_impl(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wb = XLSX.read(e.target.result, { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    var prev = document.getElementById('invSnImpPreview');
+    if (!prev) return;
+    if (!rows.length) { prev.innerHTML = '<div style="color:#ef4444;font-size:12px">ไม่พบข้อมูลในไฟล์</div>'; return; }
+
+    var bySoSku = {};
+    var invalid = 0;
+    rows.forEach(function(r) {
+      var soId = String(r['SO ID'] || '').trim();
+      var sku = String(r['SKU'] || '').trim();
+      var unit = parseInt(r['หน่วยที่'], 10);
+      var sn = String(r['Serial'] || '').trim();
+      if (!soId || !sku || !unit) { invalid++; return; }
+      var key = soId + '|' + sku;
+      bySoSku[key] = bySoSku[key] || { soId: soId, sku: sku, max: 0, vals: {} };
+      bySoSku[key].max = Math.max(bySoSku[key].max, unit);
+      if (sn) bySoSku[key].vals[unit] = sn;
+    });
+
+    var groups = Object.keys(bySoSku).map(function(k) { return bySoSku[k]; });
+    var changeCount = 0, missingCount = 0;
+    groups.forEach(function(g) {
+      var s = ST.getOne('salesOrders', g.soId);
+      g.so = s;
+      var it = s ? (s.items || []).filter(function(x) { return x.sku === g.sku; })[0] : null;
+      g.item = it;
+      if (!s || !it) { missingCount++; return; }
+      var existing = (typeof _soItemSerials === 'function') ? _soItemSerials(it) : (it.serials || []);
+      var next = [];
+      for (var i = 1; i <= g.max; i++) {
+        var v = g.vals.hasOwnProperty(i) ? g.vals[i] : (existing[i - 1] || '');
+        if (v) next.push(v);
+      }
+      g.oldSerials = existing;
+      g.newSerials = next;
+      if (JSON.stringify(existing) !== JSON.stringify(next)) changeCount++;
+    });
+    window._invSnImportPending = groups;
+
+    var h = '<div style="font-size:12px;color:var(--text2);background:#0f172a;border-radius:6px;padding:8px;margin:8px 0">' +
+      '✅ พบ <strong>' + groups.length + '</strong> รายการสินค้า (SO+SKU) — ' +
+      '<strong style="color:#f59e0b">✏️ ' + changeCount + ' มีการเปลี่ยนแปลง</strong>' +
+      (missingCount ? ' · <span style="color:#ef4444">⚠️ ' + missingCount + ' หา SO/SKU ไม่เจอ (ข้าม)</span>' : '') +
+      (invalid ? ' · <span style="color:#ef4444">⚠️ ' + invalid + ' แถวข้อมูลไม่ครบ (ข้าม)</span>' : '') +
+      '</div>';
+    h += '<div style="max-height:320px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
+    groups.forEach(function(g) {
+      if (!g.so || !g.item) return;
+      var changed = JSON.stringify(g.oldSerials) !== JSON.stringify(g.newSerials);
+      if (!changed) return;
+      h += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b;font-size:11.5px">';
+      h += '<div style="font-weight:600;margin-bottom:3px">' + sanitize(g.so.soNumber || '') + ' — ' + sanitize(g.item.model || g.sku) + '</div>';
+      h += '<div style="color:var(--text2)">เดิม: ' + (g.oldSerials.length ? sanitize(g.oldSerials.join(', ')) : '(ว่าง)') + '</div>';
+      h += '<div style="color:#22c55e">ใหม่: ' + (g.newSerials.length ? sanitize(g.newSerials.join(', ')) : '(ว่าง)') + '</div>';
+      h += '</div>';
+    });
+    if (!changeCount) h += '<div style="padding:10px;font-size:12px;color:var(--text2)">ไม่มี Serial ใหม่ที่ต่างจากเดิม</div>';
+    h += '</div>';
+    prev.innerHTML = h;
+    var btn = document.getElementById('invSnImpBtn');
+    if (btn) btn.style.display = changeCount ? 'block' : 'none';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function importInvoiceSNExcel() {
+  var groups = window._invSnImportPending;
+  if (!groups) return;
+  var saved = 0;
+  groups.forEach(function(g) {
+    if (!g.so || !g.item) return;
+    if (JSON.stringify(g.oldSerials) === JSON.stringify(g.newSerials)) return;
+    var s = ST.getOne('salesOrders', g.soId);
+    if (!s) return;
+    var newItems = (s.items || []).map(function(it) {
+      if (it.sku !== g.sku) return it;
+      var clone = JSON.parse(JSON.stringify(it));
+      clone.serials = g.newSerials;
+      delete clone.serialsReceived;
+      delete clone.serialsShipped;
+      return clone;
+    });
+    var cfg = getConfig();
+    var logs = (s.logs || []).slice();
+    logs.push({ date: _td(), action: '🔢 นำเข้า Serial จาก Excel (Track Invoice)', note: g.sku, by: cfg.saleName || '' });
+    var updated = ST.update('salesOrders', g.soId, { items: newItems, logs: logs, updatedAt: new Date().toISOString() });
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+    saved++;
+  });
+  closeMForce();
+  toast('💾 นำเข้า Serial แล้ว (' + saved + ' รายการสินค้า)');
+  if (typeof render === 'function') render();
 }
 
 function _poTrackerReserve1021Html(baseRows) {
