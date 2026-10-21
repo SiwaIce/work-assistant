@@ -596,6 +596,8 @@ function rPOTracker(el) {
   html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
   html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
+  html += '<button class="btn bo" onclick="poTrackerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขที่เอากลับมา Import ได้ (ต่างจาก Export Excel ปกติที่เป็นรายงานอ่านอย่างเดียว)">📝 Export แบบฟอร์มแก้ไข</button>';
+  html += '<button class="btn bo" onclick="showPoTrackerImportModal()" title="นำเข้าแบบฟอร์มแก้ไขที่กรอกแล้วกลับเข้าระบบ">📥 Import แก้ไข</button>';
   html += '<button class="btn ' + (poTrackerMainTab === 'reserve1021' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'reserve1021\'?\'summary\':\'reserve1021\');render()">🔖 จองคลัง 1021</button>';
   html += '<button class="btn ' + (poTrackerMainTab === 'invoice' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'invoice\'?\'summary\':\'invoice\');render()">🧾 Track Invoice</button>';
   html += '</div>';
@@ -1148,6 +1150,402 @@ function _poTrackerAddDealerSheets(wb, all) {
   });
 }
 
+// ==================================================================
+// Export/Import "แบบฟอร์มแก้ไข" ของ PO Tracker — ต่างจาก Export Excel ปกติ (ซึ่งเป็นรายงานอ่านอย่างเดียว
+// มีคอลัมน์คำนวณจาก stock จริงปนอยู่) ไฟล์นี้ออกแบบมาให้แก้ค่าแล้ว import กลับเข้าระบบได้โดยตรง
+// - คอลัมน์ SO_ID/ITEM_IDX/SKU เป็น key ซ่อน ห้ามแก้ — ใช้ยืนยันว่าแถวที่ import กลับมาคือ item เดิมจริงๆ
+//   (ไลบรารี SheetJS รุ่น community ที่ใช้อยู่ไม่รองรับ sheet protection/data validation ตอนเขียนไฟล์ จึงป้องกัน
+//   ด้วยการเช็ค SKU ตรงกับของเดิมตอน import แทน ถ้าไม่ตรงถือว่าแถวถูกสลับ/แทรก แล้ว reject ทั้งแถว)
+// - คอลัมน์ 🔒 เป็นค่าจาก stock จริง (เหมือนหน้า Export Excel ปกติ) ใส่มาให้ดูอ้างอิงเท่านั้น ไม่ถูกอ่านตอน import
+// - คอลัมน์ enum (สถานะ SO/ประเภทแหล่งที่มา/สถานะ PR/PO) ไม่มี dropdown จริงในไฟล์ (ข้อจำกัดไลบรารี) ต้องกรอกเป็น
+//   label ให้ตรงกับชีต "📖 คำแนะนำ" เท่านั้น — ถ้าไม่ตรง import จะ reject แถวนั้น ไม่เดาค่าให้
+// - ทุกการ import ต้องผ่านหน้า preview (เดิม→ใหม่ ทุกฟิลด์ที่เปลี่ยน + รายการที่ถูก reject พร้อมเหตุผล) และติ๊ก
+//   ยืนยันก่อนบันทึกจริง แล้วมีปุ่ม Undo ย้อนกลับได้ทันทีหลัง apply (เก็บ snapshot ไว้ในตัวแปร session เท่านั้น)
+var POTRACKER_IMPORT_HEADERS = {
+  soId: 'SO_ID (ห้ามแก้)', itemIdx: 'ITEM_IDX (ห้ามแก้)', sku: 'SKU (ห้ามแก้)',
+  po: 'PO ลูกค้า', soNumber: 'SO Number', dealer: 'Dealer', product: 'สินค้า',
+  readyStatus: '🔒 สถานะความพร้อม (อ้างอิงอย่างเดียว)', readyDate: '🔒 วันที่พร้อม/จองถึง (อ้างอิงอย่างเดียว)',
+  status: 'สถานะ SO', sourceType: 'ประเภทแหล่งที่มา', qty: 'จำนวน', unitPrice: 'ราคาต่อหน่วย',
+  comment: 'คอมเมนต์', link: 'Link', prNumber: 'เลขที่ PR ภายใน', prpoStatus: 'สถานะ PR/PO',
+  reserveDate: 'วันที่จอง', reserveExpiryDate: 'วันที่หมดจอง/ครบกำหนด'
+};
+
+function poTrackerExportEditTemplateXlsx(soList, filenameSuffix) {
+  ensureXLSX().then(function() {
+    _poTrackerExportEditTemplateXlsxImpl(soList, filenameSuffix);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _poTrackerSourceTypeLabel(key) { return (SO_ITEM_SOURCE_TYPES[key || ''] || {}).label || (key || ''); }
+function _poTrackerSoStatusLabel(key) { return (SO_STATUS[key] || {}).label || (key || ''); }
+
+function _poTrackerExportEditTemplateXlsxImpl(soList, filenameSuffix) {
+  var all = soList || ST.getAll('salesOrders').slice().sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  if (!all.length) { toast('ไม่มี SO ให้ export'); return; }
+  var cfg = getConfig();
+  var H = POTRACKER_IMPORT_HEADERS;
+
+  var rows = [];
+  all.forEach(function(s) {
+    (s.items || []).forEach(function(it, idx) {
+      var r = _poTrackerItemReadinessForExport(it, s);
+      var row = {};
+      row[H.soId] = s.id; row[H.itemIdx] = idx; row[H.sku] = it.sku || '';
+      row[H.po] = s.customerPO || ''; row[H.soNumber] = s.soNumber || ''; row[H.dealer] = s.dealerName || ''; row[H.product] = it.model || it.sku || '';
+      row[H.readyStatus] = r.statusLabel; row[H.readyDate] = r.waitUntilDate;
+      row[H.status] = _poTrackerSoStatusLabel(s.status);
+      row[H.sourceType] = _poTrackerSourceTypeLabel(it.sourceType);
+      row[H.qty] = Number(it.qty) || 0;
+      row[H.unitPrice] = Number(it.unitPrice) || 0;
+      row[H.comment] = it.comment || '';
+      row[H.link] = it.link || '';
+      row[H.prNumber] = it.prNumber || '';
+      row[H.prpoStatus] = (cfg.prpoStatuses || []).filter(function(p) { return p.id === it.prpoStatus; }).map(function(p) { return p.name; })[0] || '';
+      row[H.reserveDate] = it.reserveDate || '';
+      row[H.reserveExpiryDate] = it.reserveExpiryDate || '';
+      rows.push(row);
+    });
+  });
+  if (!rows.length) { toast('⚠️ ไม่มีรายการสินค้าให้ export'); return; }
+
+  var wb = XLSX.utils.book_new();
+
+  // ชีตคำแนะนำ + รายชื่อค่าที่ใส่ได้ของแต่ละคอลัมน์ enum (ไม่มี dropdown จริงเพราะข้อจำกัดไลบรารี ต้อง copy label ให้ตรง)
+  var guide = [];
+  guide.push(['📖 คำแนะนำการแก้ไขและ Import กลับ']);
+  guide.push(['']);
+  guide.push(['1. ห้ามแก้ 3 คอลัมน์แรก (SO_ID / ITEM_IDX / SKU) ของชีต "แก้ไขรายการ" — ใช้ยืนยันว่าเป็นแถวเดิม ถ้าแก้ import จะ reject แถวนั้น']);
+  guide.push(['2. คอลัมน์ที่ขึ้นต้นด้วย 🔒 เป็นข้อมูลอ้างอิงจาก stock จริง ดูได้อย่างเดียว แก้แล้วไม่มีผลตอน import']);
+  guide.push(['3. ห้ามลบ/เพิ่ม/สลับแถว — ถ้าต้องการเพิ่ม/ลบรายการสินค้าให้ทำผ่านหน้าเว็บตามปกติ']);
+  guide.push(['4. คอลัมน์ "สถานะ SO", "ประเภทแหล่งที่มา", "สถานะ PR/PO" ต้องกรอกเป็นข้อความให้ตรงกับรายการด้านล่างทุกตัวอักษร (ไม่มี dropdown ให้เลือกในไฟล์นี้) ถ้าพิมพ์ไม่ตรง ระบบจะปฏิเสธการแก้ไขค่านั้นแถวนั้น ไม่เดาค่าให้']);
+  guide.push(['5. เว้นคอลัมน์ "จำนวน"/"ราคาต่อหน่วย" ไว้ว่าง = ไม่แก้ค่าเดิม ถ้ากรอกต้องเป็นเลข ≥ 0']);
+  guide.push(['6. เว้นคอลัมน์ข้อความ (คอมเมนต์/Link/เลขที่ PR) ไว้ว่าง = ลบค่าเดิมให้เป็นค่าว่าง (เพราะตอน export เติมค่าเดิมมาให้แล้ว)']);
+  guide.push(['7. ก่อน import จริงจะมีหน้าสรุปให้ตรวจทุกการเปลี่ยนแปลง (เดิม→ใหม่) และรายการที่ถูกปฏิเสธ ต้องติ๊กยืนยันก่อนบันทึก']);
+  guide.push(['']);
+  guide.push(['ค่าที่ใส่ได้ — สถานะ SO']);
+  Object.keys(SO_STATUS).forEach(function(k) { guide.push(['', SO_STATUS[k].label]); });
+  guide.push(['']);
+  guide.push(['ค่าที่ใส่ได้ — ประเภทแหล่งที่มา']);
+  Object.keys(SO_ITEM_SOURCE_TYPES).forEach(function(k) { guide.push(['', SO_ITEM_SOURCE_TYPES[k].label]); });
+  guide.push(['']);
+  guide.push(['ค่าที่ใส่ได้ — สถานะ PR/PO (ค่า ณ ตอน export นี้ — ถ้ามีการเพิ่ม/แก้ที่ ⚙️ ตั้งค่าหลังจากนี้ ให้ export ใหม่)']);
+  (cfg.prpoStatuses || []).forEach(function(p) { guide.push(['', p.name]); });
+  guide.push(['', '(เว้นว่าง = ยังไม่ระบุ)']);
+  var wsGuide = XLSX.utils.aoa_to_sheet(guide);
+  wsGuide['!cols'] = [{ wch: 4 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(wb, wsGuide, '📖 คำแนะนำ');
+
+  var ws = XLSX.utils.json_to_sheet(rows, { header: Object.keys(H).map(function(k) { return H[k]; }) });
+  ws['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 26 },
+    { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 28 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'แก้ไขรายการ');
+
+  XLSX.writeFile(wb, 'po-tracker-edit-template' + (filenameSuffix || '') + '-' + _td() + '.xlsx');
+  toast('📝 Export แบบฟอร์มแก้ไขแล้ว (' + rows.length + ' รายการ) — อ่านชีต "📖 คำแนะนำ" ก่อนแก้');
+}
+
+function showPoTrackerImportModal() {
+  var html = '<div class="hint" style="margin-bottom:8px">ใช้ไฟล์ที่ได้จากปุ่ม "📝 Export แบบฟอร์มแก้ไข" เท่านั้น (ต้องมีชีต "แก้ไขรายการ" พร้อมคอลัมน์ SO_ID/ITEM_IDX/SKU) — ห้ามแก้ 3 คอลัมน์นั้น แก้ได้แค่คอลัมน์อื่น แล้วอัปโหลดไฟล์กลับมาที่นี่</div>';
+  html += '<input type="file" id="poTrkImpFile" accept=".xlsx,.xls" class="fi" onchange="previewPoTrackerImport(this)">';
+  html += '<div id="poTrkImpPreview"></div>';
+  html += '<label class="hint" id="poTrkImpConfirmWrap" style="display:none;margin-top:10px;display:flex;gap:6px;align-items:flex-start">' +
+    '<input type="checkbox" id="poTrkImpConfirm" style="margin-top:3px"> <span>ฉันตรวจสอบรายการเปลี่ยนแปลงด้านบนแล้ว และต้องการบันทึกทับข้อมูลเดิม</span></label>';
+  html += '<button class="btn bp btn-full" id="poTrkImpBtn" style="margin-top:8px;display:none" onclick="applyPoTrackerImport()">💾 บันทึกการแก้ไขทั้งหมด</button>';
+  html += '<div id="poTrkImpUndoWrap"></div>';
+  openM('📥 Import แบบฟอร์มแก้ไข PO Tracker', html);
+}
+
+function previewPoTrackerImport(input) {
+  ensureXLSX().then(function() {
+    _previewPoTrackerImport_impl(input);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+// เลขวันที่จาก Excel มาได้ทั้ง string / serial number / Date object ขึ้นกับการตั้งค่าเครื่องผู้ใช้ — แปลงให้เป็น YYYY-MM-DD เสมอ
+function _poTrackerParseDateCell(v) {
+  if (v === '' || v === null || v === undefined) return { ok: true, val: '' };
+  if (v instanceof Date && !isNaN(v)) return { ok: true, val: v.toISOString().slice(0, 10) };
+  if (typeof v === 'number') {
+    var d = (typeof XLSX !== 'undefined' && XLSX.SSF && XLSX.SSF.parse_date_code) ? XLSX.SSF.parse_date_code(v) : null;
+    if (d) return { ok: true, val: d.y + '-' + String(d.m).padStart(2, '0') + '-' + String(d.d).padStart(2, '0') };
+    return { ok: false };
+  }
+  var s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return { ok: true, val: s.slice(0, 10) };
+  var parsed = new Date(s);
+  if (!isNaN(parsed)) return { ok: true, val: parsed.toISOString().slice(0, 10) };
+  return { ok: false };
+}
+
+function _poTrackerFindEnumKeyByLabel(map, label) {
+  var want = String(label || '').trim();
+  if (!want) return { ok: true, key: '' };
+  var found = Object.keys(map).filter(function(k) { return (map[k].label || '').trim() === want; })[0];
+  return found !== undefined ? { ok: true, key: found } : { ok: false };
+}
+
+function _previewPoTrackerImport_impl(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var H = POTRACKER_IMPORT_HEADERS;
+  var cfg = getConfig();
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+    var sheetName = wb.SheetNames.indexOf('แก้ไขรายการ') !== -1 ? 'แก้ไขรายการ' : wb.SheetNames[0];
+    var ws = wb.Sheets[sheetName];
+    var rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    var prev = document.getElementById('poTrkImpPreview');
+    if (!prev) return;
+    if (!rows.length) { prev.innerHTML = '<div style="color:#ef4444;font-size:12px">ไม่พบข้อมูลในไฟล์</div>'; return; }
+
+    var changedBySO = {}; // soId -> { so, changes: [{idx, fields:[{key,label,old,new,big}]}] }
+    var rejects = []; // { rowNum, reason }
+    var soStatusCandidates = {}; // soId -> { value: count }
+
+    rows.forEach(function(r, i) {
+      var rowNum = i + 2; // +1 header, +1 1-indexed
+      var soId = String(r[H.soId] || '').trim();
+      var itemIdx = parseInt(r[H.itemIdx], 10);
+      var sku = String(r[H.sku] || '').trim();
+      if (!soId || isNaN(itemIdx)) { rejects.push({ rowNum: rowNum, reason: 'ไม่มี SO_ID/ITEM_IDX (แถวนี้อาจถูกแก้คอลัมน์ key)' }); return; }
+      var so = ST.getOne('salesOrders', soId);
+      if (!so) { rejects.push({ rowNum: rowNum, reason: 'ไม่พบ SO (SO_ID=' + soId + ')' }); return; }
+      var it = (so.items || [])[itemIdx];
+      if (!it) { rejects.push({ rowNum: rowNum, reason: 'ไม่พบรายการสินค้าลำดับนี้ใน SO ' + (so.soNumber || soId) + ' (แถว/ลำดับอาจถูกลบหรือสลับไปแล้ว)' }); return; }
+      if ((it.sku || '') !== sku) { rejects.push({ rowNum: rowNum, reason: 'SKU ไม่ตรงกับแถวเดิมใน SO ' + (so.soNumber || soId) + ' (ไฟล์มี "' + sku + '" ของจริงคือ "' + (it.sku || '') + '") — ข้ามทั้งแถวเพื่อความปลอดภัย' }); return; }
+
+      var fields = [];
+      var rowRejects = [];
+
+      // สถานะ SO — เก็บ candidate ไว้ก่อน ตัดสินใจทีหลังตอนรวมทุกแถวของ SO เดียวกัน (กันกรณีแก้ไม่ตรงกันในหลายแถว)
+      var statusLookup = _poTrackerFindEnumKeyByLabel(SO_STATUS, r[H.status]);
+      if (!statusLookup.ok) {
+        rowRejects.push('สถานะ SO ไม่ถูกต้อง: "' + r[H.status] + '" (ไม่ตรงกับรายการในชีตคำแนะนำ)');
+      } else if (!statusLookup.key) {
+        rowRejects.push('สถานะ SO ห้ามเว้นว่าง');
+      } else {
+        soStatusCandidates[soId] = soStatusCandidates[soId] || {};
+        soStatusCandidates[soId][statusLookup.key] = (soStatusCandidates[soId][statusLookup.key] || 0) + 1;
+      }
+
+      // ประเภทแหล่งที่มา
+      var srcLookup = _poTrackerFindEnumKeyByLabel(SO_ITEM_SOURCE_TYPES, r[H.sourceType]);
+      if (!srcLookup.ok) {
+        rowRejects.push('ประเภทแหล่งที่มาไม่ถูกต้อง: "' + r[H.sourceType] + '"');
+      } else if (srcLookup.key !== (it.sourceType || '')) {
+        fields.push({ key: 'sourceType', label: 'ประเภทแหล่งที่มา', old: _poTrackerSourceTypeLabel(it.sourceType), newVal: srcLookup.key, newLabel: _poTrackerSourceTypeLabel(srcLookup.key) });
+      }
+
+      // จำนวน / ราคาต่อหน่วย — ว่าง = ไม่แก้, ต้อง >= 0
+      [['qty', H.qty, 'จำนวน'], ['unitPrice', H.unitPrice, 'ราคาต่อหน่วย']].forEach(function(t) {
+        var key = t[0], raw = r[t[1]], label = t[2];
+        if (raw === '' || raw === null || raw === undefined) return;
+        var num = Number(raw);
+        if (isNaN(num) || num < 0) { rowRejects.push(label + 'ไม่ถูกต้อง: "' + raw + '" (ต้องเป็นเลข ≥ 0 หรือเว้นว่างไว้ถ้าไม่แก้)'); return; }
+        var old = Number(it[key]) || 0;
+        if (num !== old) {
+          var big = old > 0 && Math.abs(num - old) / old > 0.5;
+          fields.push({ key: key, label: label, old: old, newVal: num, newLabel: String(num), big: big });
+        }
+      });
+
+      // ข้อความอิสระ — ว่าง = ลบค่าเดิม (เพราะ export เติมค่าเดิมมาให้แล้ว)
+      [['comment', H.comment, 'คอมเมนต์'], ['link', H.link, 'Link'], ['prNumber', H.prNumber, 'เลขที่ PR ภายใน']].forEach(function(t) {
+        var key = t[0], raw = String(r[t[1]] || '').trim(), label = t[2];
+        var old = String(it[key] || '').trim();
+        if (raw !== old) fields.push({ key: key, label: label, old: old || '(ว่าง)', newVal: raw, newLabel: raw || '(ว่าง)' });
+      });
+
+      // สถานะ PR/PO
+      var prpoRaw = String(r[H.prpoStatus] || '').trim();
+      var prpoMatch = !prpoRaw ? { ok: true, id: '' } : (function() {
+        var f = (cfg.prpoStatuses || []).filter(function(p) { return p.name === prpoRaw; })[0];
+        return f ? { ok: true, id: f.id } : { ok: false };
+      })();
+      if (!prpoMatch.ok) {
+        rowRejects.push('สถานะ PR/PO ไม่ถูกต้อง: "' + prpoRaw + '"');
+      } else if ((prpoMatch.id || '') !== (it.prpoStatus || '')) {
+        fields.push({ key: 'prpoStatus', label: 'สถานะ PR/PO', old: prpoRaw ? '' : (it.prpoStatus || '(ว่าง)'), newVal: prpoMatch.id, newLabel: prpoRaw || '(ว่าง)',
+          oldLabelResolved: (cfg.prpoStatuses || []).filter(function(p) { return p.id === it.prpoStatus; }).map(function(p) { return p.name; })[0] || '(ว่าง)' });
+      }
+
+      // วันที่จอง / วันที่หมดจอง
+      [['reserveDate', H.reserveDate, 'วันที่จอง'], ['reserveExpiryDate', H.reserveExpiryDate, 'วันที่หมดจอง/ครบกำหนด']].forEach(function(t) {
+        var key = t[0], label = t[2];
+        var parsed = _poTrackerParseDateCell(r[t[1]]);
+        if (!parsed.ok) { rowRejects.push(label + 'ไม่ถูกต้อง: "' + r[t[1]] + '" (ต้องเป็นวันที่ หรือเว้นว่างไว้)'); return; }
+        var old = it[key] || '';
+        if (parsed.val !== old) fields.push({ key: key, label: label, old: old || '(ว่าง)', newVal: parsed.val, newLabel: parsed.val || '(ว่าง)' });
+      });
+
+      if (rowRejects.length) { rejects.push({ rowNum: rowNum, reason: rowRejects.join('; ') }); return; }
+      if (!fields.length) return;
+
+      changedBySO[soId] = changedBySO[soId] || { so: so, items: [] };
+      changedBySO[soId].items.push({ idx: itemIdx, it: it, fields: fields });
+    });
+
+    // รวมสถานะ SO: ถ้าแถวของ SO เดียวกันแก้ไม่ตรงกัน ให้ reject การแก้สถานะของ SO นั้นทั้งหมด (ฟิลด์อื่นยังแก้ได้ตามปกติ)
+    var statusBySO = {};
+    Object.keys(soStatusCandidates).forEach(function(soId) {
+      var cand = soStatusCandidates[soId];
+      var keys = Object.keys(cand);
+      if (keys.length === 1) {
+        var so = ST.getOne('salesOrders', soId);
+        if (so && keys[0] !== so.status) statusBySO[soId] = { from: so.status, to: keys[0] };
+      } else if (keys.length > 1) {
+        rejects.push({ rowNum: '-', reason: 'SO ' + soId + ': คอลัมน์ "สถานะ SO" ถูกแก้ไม่ตรงกันในหลายแถวของใบเดียวกัน (' + keys.map(function(k){return SO_STATUS[k].label;}).join(' / ') + ') — ข้ามการแก้สถานะของใบนี้ทั้งหมด' });
+      }
+    });
+
+    window._poTrkImportPending = { changedBySO: changedBySO, statusBySO: statusBySO, rejects: rejects };
+
+    var soIds = Object.keys(changedBySO);
+    var itemChangeCount = soIds.reduce(function(n, id) { return n + changedBySO[id].items.length; }, 0);
+    var statusChangeCount = Object.keys(statusBySO).length;
+    var bigChangeCount = soIds.reduce(function(n, id) { return n + changedBySO[id].items.reduce(function(m, x) { return m + x.fields.filter(function(f){return f.big;}).length; }, 0); }, 0);
+
+    var h = '<div style="font-size:12px;color:var(--text2);background:#0f172a;border-radius:6px;padding:8px;margin:8px 0">' +
+      '✅ มีการเปลี่ยนแปลง <strong style="color:#f59e0b">' + itemChangeCount + ' รายการสินค้า</strong>' +
+      (statusChangeCount ? ' + สถานะ SO <strong style="color:#f59e0b">' + statusChangeCount + ' ใบ</strong>' : '') +
+      (bigChangeCount ? ' · <span style="color:#ef4444">⚠️ ' + bigChangeCount + ' ค่าที่เปลี่ยนมากกว่า 50% (จำนวน/ราคา) ตรวจสอบดีๆ</span>' : '') +
+      (rejects.length ? ' · <span style="color:#ef4444">⚠️ ' + rejects.length + ' แถว/ใบถูกข้าม (ดูเหตุผลด้านล่าง)</span>' : '') +
+      '</div>';
+
+    if (statusChangeCount) {
+      h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px">การเปลี่ยนสถานะ SO</div>';
+      h += '<div style="max-height:140px;overflow-y:auto;border:1px solid #334155;border-radius:8px;margin-bottom:10px">';
+      Object.keys(statusBySO).forEach(function(soId) {
+        var c = statusBySO[soId], so = ST.getOne('salesOrders', soId);
+        h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11.5px">' + sanitize(so.soNumber || soId) +
+          ': <span style="color:var(--text2)">' + sanitize(_poTrackerSoStatusLabel(c.from)) + '</span> → <span style="color:#22c55e">' + sanitize(_poTrackerSoStatusLabel(c.to)) + '</span></div>';
+      });
+      h += '</div>';
+    }
+
+    if (itemChangeCount) {
+      h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px">การเปลี่ยนแปลงรายการสินค้า</div>';
+      h += '<div style="max-height:320px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
+      soIds.forEach(function(soId) {
+        var g = changedBySO[soId];
+        g.items.forEach(function(x) {
+          h += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b;font-size:11.5px">';
+          h += '<div style="font-weight:600;margin-bottom:3px">' + sanitize(g.so.soNumber || soId) + ' — ' + sanitize(x.it.model || x.it.sku || '') + '</div>';
+          x.fields.forEach(function(f) {
+            h += '<div' + (f.big ? ' style="color:#ef4444"' : '') + '>' + (f.big ? '⚠️ ' : '') + sanitize(f.label) + ': ' +
+              '<span style="color:var(--text2)">' + sanitize(String(f.old)) + '</span> → <span style="color:#22c55e">' + sanitize(String(f.newLabel)) + '</span></div>';
+          });
+          h += '</div>';
+        });
+      });
+      h += '</div>';
+    }
+
+    if (rejects.length) {
+      h += '<div style="font-weight:600;font-size:12px;margin:10px 0 4px;color:#ef4444">แถว/รายการที่ถูกข้าม (ไม่ import)</div>';
+      h += '<div style="max-height:200px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
+      rejects.forEach(function(rj) {
+        h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11.5px;color:#ef4444">แถว ' + rj.rowNum + ': ' + sanitize(rj.reason) + '</div>';
+      });
+      h += '</div>';
+    }
+
+    if (!itemChangeCount && !statusChangeCount) h = '<div style="padding:10px;font-size:12px;color:var(--text2)">ไม่มีค่าที่เปลี่ยนจากเดิม</div>' + h;
+    prev.innerHTML = h;
+
+    var canApply = itemChangeCount > 0 || statusChangeCount > 0;
+    var wrap = document.getElementById('poTrkImpConfirmWrap');
+    var chk = document.getElementById('poTrkImpConfirm');
+    var btn = document.getElementById('poTrkImpBtn');
+    if (wrap) wrap.style.display = canApply ? 'flex' : 'none';
+    if (chk) chk.checked = false;
+    if (btn) { btn.style.display = 'none'; btn.disabled = true; }
+    if (chk && btn) chk.onchange = function() { btn.style.display = canApply ? 'block' : 'none'; btn.disabled = !chk.checked; };
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function applyPoTrackerImport() {
+  var pending = window._poTrkImportPending;
+  if (!pending) return;
+  var chk = document.getElementById('poTrkImpConfirm');
+  if (!chk || !chk.checked) { toast('⚠️ ต้องติ๊กยืนยันก่อนบันทึก'); return; }
+
+  var cfg = getConfig();
+  var undoSnapshot = []; // [{soId, items, status}] ของ SO ที่จะถูกแก้ ก่อนแก้ — ใช้ย้อนกลับได้
+  var soIds = {};
+  Object.keys(pending.changedBySO).forEach(function(id) { soIds[id] = true; });
+  Object.keys(pending.statusBySO).forEach(function(id) { soIds[id] = true; });
+  if (!Object.keys(soIds).length) { toast('ไม่มีอะไรให้บันทึก'); return; }
+
+  var itemChangeCount = 0, soTouchedCount = 0;
+  Object.keys(soIds).forEach(function(soId) {
+    var so = ST.getOne('salesOrders', soId);
+    if (!so) return;
+    undoSnapshot.push({ soId: soId, items: JSON.parse(JSON.stringify(so.items || [])), status: so.status });
+
+    var items = (so.items || []).slice();
+    var g = pending.changedBySO[soId];
+    var fieldSummary = [];
+    if (g) {
+      g.items.forEach(function(x) {
+        var item = Object.assign({}, items[x.idx]);
+        x.fields.forEach(function(f) { item[f.key] = f.newVal; fieldSummary.push(f.label); });
+        items[x.idx] = item;
+        itemChangeCount++;
+      });
+    }
+    var update = { items: items, updatedAt: new Date().toISOString() };
+    var statusChange = pending.statusBySO[soId];
+    if (statusChange) { update.status = statusChange.to; fieldSummary.push('สถานะ SO → ' + _poTrackerSoStatusLabel(statusChange.to)); }
+
+    var logs = (so.logs || []).slice();
+    logs.push({ date: _td(), action: '📥 Import Excel แก้ไขรายการ (PO Tracker)', note: fieldSummary.join(', '), by: cfg.saleName || '' });
+    update.logs = logs;
+
+    var updated = ST.update('salesOrders', soId, update);
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+    soTouchedCount++;
+  });
+
+  window._poTrkImportUndo = undoSnapshot;
+  toast('💾 Import แล้ว ' + itemChangeCount + ' รายการสินค้า ใน ' + soTouchedCount + ' SO');
+
+  var undoWrap = document.getElementById('poTrkImpUndoWrap');
+  if (undoWrap) {
+    undoWrap.innerHTML = '<button class="btn bsm bo btn-full" style="margin-top:8px" onclick="undoPoTrackerImport()">↩️ ย้อนกลับการ Import นี้</button>';
+  }
+  var btn = document.getElementById('poTrkImpBtn');
+  if (btn) btn.style.display = 'none';
+  var wrap = document.getElementById('poTrkImpConfirmWrap');
+  if (wrap) wrap.style.display = 'none';
+  render();
+}
+
+// ย้อนกลับการ import ล่าสุด — ใช้ snapshot ที่เก็บไว้ใน memory ตอน apply (คงอยู่แค่ session นี้ ไม่ใช่ backup ถาวร
+// ถ้าต้องการสำรองถาวรให้ใช้ปุ่ม export backup เต็มรูปแบบของระบบ ก่อน import ไฟล์ใหญ่)
+function undoPoTrackerImport() {
+  var snap = window._poTrkImportUndo;
+  if (!snap || !snap.length) { toast('⚠️ ไม่มีการ import ล่าสุดให้ย้อนกลับแล้ว'); return; }
+  var cfg = getConfig();
+  snap.forEach(function(s) {
+    var so = ST.getOne('salesOrders', s.soId);
+    if (!so) return;
+    var logs = (so.logs || []).slice();
+    logs.push({ date: _td(), action: '↩️ ย้อนกลับการ Import Excel (PO Tracker)', note: '', by: cfg.saleName || '' });
+    var updated = ST.update('salesOrders', s.soId, { items: s.items, status: s.status, logs: logs, updatedAt: new Date().toISOString() });
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  });
+  window._poTrkImportUndo = null;
+  toast('↩️ ย้อนกลับแล้ว ' + snap.length + ' SO');
+  render();
+}
+
 // ---------------------------------------------------------------- แท็บ "จองคลัง 1021" — สรุปรายการสินค้าที่จองคลัง 1021 ทุก SO เรียงใกล้ครบกำหนดก่อน
 // ดึงจาก item.reserveDate/reserveExpiryDate/link ที่กรอกไว้ในแต่ละรายการอยู่แล้ว (sync กับ lot จริงผ่าน stockSOItemReadyInfo เหมือนหน้า SO) ไม่มี collection ใหม่
 function _poTrackerReserve1021Days(dateStr) {
@@ -1663,6 +2061,7 @@ function rPOTrackerDealer(el) {
   html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'card' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'card\';render()">🗂️ การ์ด</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerCopySummary()">📋 คัดลอกสรุปของค้าง</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerExportXlsx()">📤 Export Excel (Dealer นี้)</button>';
+  html += '<button class="btn bsm bo" onclick="poTrackerDealerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขเฉพาะ Dealer นี้ ที่เอากลับมา Import ได้">📝 Export แบบฟอร์มแก้ไข (Dealer นี้)</button>';
   html += '<input class="inp" style="flex:1;min-width:160px;max-width:260px" placeholder="🔎 ค้นหาสินค้า/SKU" value="' + sanitize(poTrackerDealerSearch) + '" oninput="poTrackerDealerSearch=this.value;render()">';
   html += '</div>';
 
@@ -1749,6 +2148,16 @@ function poTrackerDealerExportXlsx() {
   }).catch(function(e) {
     if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
   });
+}
+
+// export แบบฟอร์มแก้ไข (import กลับได้) เฉพาะ SO ของ Dealer ที่เลือกอยู่
+function poTrackerDealerExportEditTemplateXlsx() {
+  if (!poTrackerDealerPageFlt) return;
+  var dealerSOs = ST.getAll('salesOrders').filter(function(s) { return s.dealerName === poTrackerDealerPageFlt; })
+    .sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  if (!dealerSOs.length) { toast('ไม่มี SO ให้ export'); return; }
+  var slug = poTrackerDealerPageFlt.replace(/[^a-zA-Z0-9ก-๙]+/g, '-').slice(0, 40);
+  poTrackerExportEditTemplateXlsx(dealerSOs, '-' + slug);
 }
 
 // มุมมองตาราง — ตารางสรุปต่อสินค้า (รวม/ส่งแล้ว/รอ PR/PO/จองรอส่ง/อื่นๆ) + ตารางรายละเอียดต่อ PO/SO แยกบรรทัด พร้อมวันที่
