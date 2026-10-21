@@ -746,7 +746,8 @@ function stockUndoMarkRegistrationComplete(sku, productName, snapshot) {
 
 // เลื่อนกำหนดจอง — ใช้ได้เฉพาะคลังที่ตั้งเป็น 'penalty' (เลื่อนได้) เท่านั้น คลังแบบ 'free' เลื่อนไม่ได้ตามที่ตั้งใจ
 // approvedBy เป็น free text (ไม่มีระบบสิทธิ์ผู้อนุมัติ) เช่น "อนุมัติโดยหัวหน้า A" — เก็บไว้เป็นประวัติการเลื่อนล่าสุด
-function stockExtendBooking(sku, productName, lotId, newDate, approvedBy) {
+// silent: ข้าม toast/render ต่อครั้ง — ใช้ตอนเลื่อนหลายรายการรวดเดียว (ดู saveSOBulkExtendBooking) ผู้เรียกจะ toast/render เองครั้งเดียวหลังวนครบ
+function stockExtendBooking(sku, productName, lotId, newDate, approvedBy, silent) {
   if (!newDate) return;
   var lots = stockGetLots(sku).slice();
   var idx = lots.findIndex(function(l) { return l.id === lotId; });
@@ -757,8 +758,7 @@ function stockExtendBooking(sku, productName, lotId, newDate, approvedBy) {
   history.push({ fromDate: lot.bookingExpiryDate || '', toDate: newDate, approvedBy: approvedBy || '', date: _nw() });
   lots[idx] = Object.assign({}, lot, { bookingExpiryDate: newDate, extendApprovedBy: approvedBy || '', extendApprovedDate: _nw(), bookingHistory: history });
   _stockSaveLots(sku, productName, lots);
-  toast('🔄 เลื่อนกำหนดจองแล้ว');
-  render();
+  if (!silent) { toast('🔄 เลื่อนกำหนดจองแล้ว'); render(); }
 }
 
 function showStockExtendBookingM(sku, lotId) {
