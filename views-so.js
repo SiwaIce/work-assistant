@@ -247,6 +247,86 @@ function showSOEditShipmentRoundModal(soId, roundId) {
   openM('✏️ แก้ไขข้อมูลรอบส่งมอบ', html);
 }
 
+// เปิดดูรายละเอียด Invoice ของรอบส่งมอบหนึ่งจากหน้า SO Detail โดยตรง (เดิมดูได้แค่เลข/copy)
+// รวมรายการสินค้า+ราคา+Serial ของรอบนั้น พร้อมปุ่มแก้ไขรอบนี้/แก้ไข Serial เหมือนในหน้า Track Invoice
+function showInvoiceDetailModal(soId, roundId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s);
+  var sh = shipments.filter(function(x) { return x.id === roundId; })[0];
+  if (!sh) { toast('⚠️ ไม่พบรอบส่งมอบนี้แล้ว'); return; }
+  var items = (typeof _soShipRoundItemsWithPrice === 'function') ? _soShipRoundItemsWithPrice({ items: sh.items || [], soItems: s.items || [] }) : [];
+  var grandTotal = items.reduce(function(sum, it) { return sum + (it.total || 0); }, 0);
+
+  var html = '<div style="margin-bottom:10px"><b>' + sanitize(s.soNumber || '') + '</b> — ' + sanitize(s.dealerName || '') +
+    (sh.date ? '<div style="font-size:12px;color:var(--text2)">ส่งวันที่ ' + fD(sh.date) + '</div>' : '') + '</div>';
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;padding:10px;background:var(--bg2);border-radius:8px;margin-bottom:10px">';
+  html += '<div><div style="font-size:11px;color:var(--text2)">Invoice</div><div>' + (sh.invoiceNumber ? qcopyHtml(sh.invoiceNumber) : '-') + '</div></div>';
+  html += '<div><div style="font-size:11px;color:var(--text2)">วันที่ Invoice</div><div>' + (sh.invoiceDate ? fD(sh.invoiceDate) : '-') + '</div></div>';
+  html += '<div><div style="font-size:11px;color:var(--text2)">DO</div><div>' + (sh.doNumber ? qcopyHtml(sh.doNumber) : '-') + '</div></div>';
+  html += '</div>';
+  if (sh.note) html += '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">📝 ' + sanitize(sh.note) + '</div>';
+
+  if (items.length) {
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html += '<thead><tr style="background:var(--bg2);text-align:left">' +
+      '<th style="padding:6px 8px;color:var(--text2)">สินค้า</th>' +
+      '<th style="padding:6px 8px;color:var(--text2)">SKU</th>' +
+      '<th style="padding:6px 8px;color:var(--text2);text-align:center">จำนวน</th>' +
+      '<th style="padding:6px 8px;color:var(--text2);text-align:right">ราคา/หน่วย</th>' +
+      '<th style="padding:6px 8px;color:var(--text2);text-align:right">รวม</th>' +
+      '<th style="padding:6px 8px;color:var(--text2)">Serial</th></tr></thead><tbody>';
+    items.forEach(function(it) {
+      var soItem = (s.items || []).filter(function(x) { return x.sku === it.sku; })[0];
+      var sns = soItem ? ((typeof _soItemSerials === 'function') ? _soItemSerials(soItem) : (soItem.serials || [])) : [];
+      html += '<tr style="border-top:1px solid var(--border)">';
+      html += '<td style="padding:6px 8px">' + sanitize(it.model || '-') + (it.estimated ? ' <span style="font-size:10px;color:var(--text2)" title="รอบนี้ไม่มีรายละเอียดจริง แสดงประมาณจากรายการ SO">~ประมาณ</span>' : '') + '</td>';
+      html += '<td style="padding:6px 8px;font-family:monospace;font-size:11px">' + sanitize(it.sku || '-') + '</td>';
+      html += '<td style="padding:6px 8px;text-align:center">' + (it.qty || 0) + '</td>';
+      html += '<td style="padding:6px 8px;text-align:right">' + fmtMoney(it.unitPrice) + '</td>';
+      html += '<td style="padding:6px 8px;text-align:right">' + fmtMoney(it.total) + '</td>';
+      html += '<td style="padding:6px 8px;font-size:10px">' + (sns.length ? sanitize(sns.join(', ')) : '<span style="color:var(--text2)">-</span>') + '</td>';
+      html += '</tr>';
+    });
+    html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:6px 8px;text-align:right">รวม</td><td style="padding:6px 8px;text-align:right">' + fmtMoney(grandTotal) + '</td><td></td></tr>';
+    html += '</tbody></table></div>';
+  } else {
+    html += '<div class="hint">ไม่มีรายละเอียดรายการสินค้าของรอบนี้</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;margin-top:12px">';
+  html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditShipmentRoundModal(\'' + soId + '\',\'' + roundId + '\')">✏️ แก้ไขข้อมูลรอบนี้</button>';
+  html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditSerialsModal(\'' + soId + '\')">🔢 แก้ไข Serial</button>';
+  html += '</div>';
+  if (sh.invoiceNumber) {
+    html += '<button class="btn bo btn-full bsm" style="margin-top:6px" onclick="_soGoToTrackInvoice(\'' + _jsEsc(sh.invoiceNumber) + '\')">🧾 ดูรวมทุก SO ที่ใช้ Invoice นี้</button>';
+  }
+
+  openM('🧾 รายละเอียด Invoice — ' + sanitize(s.soNumber || ''), html);
+}
+
+// หารอบส่งมอบที่ field ระดับ SO (s.doNumber/invoiceNumber) กำลัง mirror อยู่ — ใช้ให้ช่อง Invoice/DO บนหัว SO detail กดดูรายละเอียดรอบนั้นได้ (ไม่ใช่แค่ copy เลขเหมือนเดิม)
+function _soHeaderShipmentRound(s) {
+  var shipments = _soMigrateLegacyShipment(s);
+  var matches = shipments.filter(function(sh) {
+    return (s.invoiceNumber && sh.invoiceNumber === s.invoiceNumber) || (s.doNumber && sh.doNumber === s.doNumber);
+  });
+  return matches.length ? matches[matches.length - 1] : null;
+}
+
+// escape ค่าที่จะฝังใน onclick='...' โดยตรง (กันเลข Invoice ที่อาจมีเครื่องหมาย ' ปนมาทำ syntax พัง)
+function _jsEsc(str) {
+  return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+// ไปหน้า PO Tracker แท็บ Track Invoice พร้อมค้นหาด้วยเลข Invoice นี้ทันที — ใช้จากปุ่ม "ดูรวมทุก SO" ใน modal รายละเอียด Invoice
+function _soGoToTrackInvoice(invNum) {
+  closeMForce();
+  if (typeof poTrackerSearch !== 'undefined') poTrackerSearch = invNum;
+  if (typeof poTrackerMainTab !== 'undefined') poTrackerMainTab = 'invoice';
+  if (typeof go === 'function') go('poTracker');
+}
+
 function _saveSOEditShipmentRound(soId, roundId) {
   var fields = {
     doNumber: (document.getElementById('soEr_do').value || '').trim(),
@@ -1166,8 +1246,10 @@ function rSODetail(el) {
     infoCells.push({ label:'Quotation', val: '<a href="#" onclick="editQuotation(\'' + s.quotationId + '\');return false" style="color:var(--accent)">' + sanitize(_soQuote ? _soQuote.quoteNo : s.quotationId) + '</a>' });
   }
   if (s.deliveryAddress)  infoCells.push({ label:'📍 ที่อยู่จัดส่ง', val: '<span style="white-space:pre-wrap">' + sanitize(s.deliveryAddress) + '</span>' });
-  if (s.doNumber)         infoCells.push({ label:'DO',            val: qcopyHtml(s.doNumber) });
-  if (s.invoiceNumber)    infoCells.push({ label:'Invoice',       val: qcopyHtml(s.invoiceNumber) + (s.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(s.invoiceDate) + ')</span>' : '') });
+  var _soHdrRound = (s.doNumber || s.invoiceNumber) ? _soHeaderShipmentRound(s) : null;
+  var _soHdrViewLink = _soHdrRound ? ' <a href="#" onclick="showInvoiceDetailModal(\'' + s.id + '\',\'' + _soHdrRound.id + '\');return false" title="ดูรายละเอียด Invoice/DO รอบนี้ (รายการ+ราคา+Serial)" style="margin-left:2px">🔎</a>' : '';
+  if (s.doNumber)         infoCells.push({ label:'DO',            val: qcopyHtml(s.doNumber) + _soHdrViewLink });
+  if (s.invoiceNumber)    infoCells.push({ label:'Invoice',       val: qcopyHtml(s.invoiceNumber) + (s.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(s.invoiceDate) + ')</span>' : '') + _soHdrViewLink });
   if (s.expectedDelivery) infoCells.push({ label:'ETA Vendor',    val: fD(s.expectedDelivery) });
   if (!_soIsDone(s.status) && _soDays != null) infoCells.push({ label:'อยู่ในขั้นนี้',   val: _soDays + ' วัน' });
   if (s.dueDate)          infoCells.push({ label:'ต้องติดตามภายใน', val: '<b>' + fD(s.dueDate) + '</b>' });
@@ -1291,6 +1373,7 @@ function rSODetail(el) {
         html += '<b>รอบที่ ' + roundNo + '</b> — ' + (sh.date ? fD(sh.date) : '-');
         if (sh.doNumber) html += ' · DO ' + qcopyHtml(sh.doNumber);
         if (sh.invoiceNumber) html += ' · INV ' + qcopyHtml(sh.invoiceNumber);
+        if (sh.doNumber || sh.invoiceNumber) html += ' <a href="#" onclick="showInvoiceDetailModal(\'' + s.id + '\',\'' + sh.id + '\');return false" title="ดูรายละเอียดรอบนี้">🔎</a>';
         if (itemsTxt) html += '<div style="color:var(--text2)">' + itemsTxt + '</div>';
         if (sh.note) html += '<div style="color:var(--text2)">📝 ' + sanitize(sh.note) + '</div>';
         html += '</div>';
