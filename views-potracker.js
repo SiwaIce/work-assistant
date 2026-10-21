@@ -11,8 +11,9 @@ var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
 var poTrackerReadyFlt = '';  // '' | ready | notready
 var poTrackerCreditFlt = ''; // '' | yes | no
-var poTrackerPrpoFlt = '';   // '' | pending
-var poTrackerRestockFlt = ''; // '' | pending
+var poTrackerPrpoFlt = '';   // '' | pending | overdue
+var poTrackerRestockFlt = ''; // '' | pending | overdue
+var poTrackerBackdatedFlt = ''; // '' | pending — SO ที่มีรายการบันทึก "ส่งมอบย้อนหลัง" ค้างรอสต็อกจริง
 var poTrackerReserve1021Flt = 'pending'; // pending (ยังไม่ส่ง, default) | delivered (ส่งครบแล้ว) | partial (ส่งบางส่วน — เหลือจองต้องพิจารณาดีดออก) | all
 var poTrackerDateFrom = '';  // createdAt >= (YYYY-MM-DD)
 var poTrackerDateTo = '';    // createdAt <= (YYYY-MM-DD)
@@ -148,6 +149,15 @@ function _poTrackerBuildRow(s) {
     var days = _poTrackerReserve1021Days(info.bookingExpiryDate);
     return days !== null && days <= 2;
   }).length;
+  // ชิ้นที่บันทึก "ส่งมอบย้อนหลัง" ไว้ (stockDeliverSOItemBackdated) — ของยังไม่เข้าสต็อกจริง รอกระทบยอดจริงเมื่อ PR/PO เข้า
+  // เดิมไม่มีที่ไหนในแอปโชว์รายการนี้เลยหลังบันทึกแล้ว ทำให้ตามคืนทีหลังว่า SO ไหนยังค้างของจริงอยู่ยาก
+  var backdatedQty = 0;
+  (s.items || []).forEach(function(it) {
+    if (!it.sku || typeof stockGetLots !== 'function') return;
+    stockGetLots(it.sku).forEach(function(lot) {
+      if (lot.backdated && lot.soId === s.id) backdatedQty += Number(lot.qty) || 0;
+    });
+  });
   return {
     so: s,
     total: total,
@@ -158,6 +168,7 @@ function _poTrackerBuildRow(s) {
     prpoOverdue: prpoOverdue,
     restockOverdue: restockOverdue,
     reserveUrgent: reserveUrgent,
+    backdatedQty: backdatedQty,
     done: _soIsDone(s.status)
   };
 }
@@ -564,7 +575,7 @@ function poTrackerToggleSummaryBucketAndScroll(key) {
 }
 
 function poTrackerResetFilters() {
-  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = '';
+  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = ''; poTrackerBackdatedFlt = '';
   poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = ''; poTrackerTypeFlt = '';
   poTrackerSummarySelectedBuckets = []; poTrackerSummaryMinWaitDays = '';
   render();
@@ -649,6 +660,10 @@ function rPOTracker(el) {
     html += '<option value="pending"' + (poTrackerRestockFlt === 'pending' ? ' selected' : '') + '>⏳ รอของเข้า</option>';
     html += '<option value="overdue"' + (poTrackerRestockFlt === 'overdue' ? ' selected' : '') + '>🔴 ของเข้าเลยกำหนด</option>';
     html += '</select>';
+    html += '<select class="inp" style="max-width:200px" onchange="poTrackerBackdatedFlt=this.value;render()">';
+    html += '<option value="">-- บันทึกย้อนหลัง: ทั้งหมด --</option>';
+    html += '<option value="pending"' + (poTrackerBackdatedFlt === 'pending' ? ' selected' : '') + '>⚠️ รอสต็อกจริง (ส่งย้อนหลังไว้)</option>';
+    html += '</select>';
     html += '<div style="display:flex;gap:4px;align-items:center">';
     html += '<label class="lbl" style="margin:0;font-size:11px;color:var(--text2)">สร้างเมื่อ</label>';
     html += '<input type="date" class="inp" style="width:140px" value="' + sanitize(poTrackerDateFrom) + '" onchange="poTrackerDateFrom=this.value;render()">';
@@ -709,6 +724,7 @@ function rPOTracker(el) {
     if (poTrackerPrpoFlt === 'overdue' && !r.prpoOverdue) return false;
     if (poTrackerRestockFlt === 'pending' && !r.pendingRestock) return false;
     if (poTrackerRestockFlt === 'overdue' && !r.restockOverdue) return false;
+    if (poTrackerBackdatedFlt === 'pending' && !r.backdatedQty) return false;
     if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
     if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
     if (q) {
@@ -761,6 +777,7 @@ function rPOTracker(el) {
     if (r.pendingPRPO) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444">🛒 รอ PR/PO ' + r.pendingPRPO + ' รายการ' + (r.prpoOverdue ? ' (เลยกำหนด ' + r.prpoOverdue + ')' : '') + '</span>';
     if (r.pendingRestock) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(217,119,6,.12);color:#d97706">⏳ รอของเข้า ' + r.pendingRestock + ' รายการ' + (r.restockOverdue ? ' (เลยกำหนด ' + r.restockOverdue + ')' : '') + '</span>';
     if (r.reserveUrgent) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444" title="ใกล้/เลยกำหนดจองคลัง ดูในแท็บจองคลัง 1021">🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent + ' รายการ</span>';
+    if (r.backdatedQty) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(234,88,12,.12);color:#ea580c" title="บันทึกว่าส่งมอบแล้วตอนของยังไม่เข้าสต็อกจริง — รอ PR/PO เข้ามาสะท้อนยอดจริง">⚠️ บันทึกย้อนหลังรอสต็อกจริง ' + r.backdatedQty + ' ชิ้น</span>';
     html += '<span style="padding:2px 8px;border-radius:8px;background:' + (r.credit ? 'rgba(37,99,235,.12);color:#2563eb' : 'var(--bg2);color:var(--text2)') + '">💳 ' + (r.credit ? sanitize(r.credit.status) : 'ไม่ได้ขอเครดิต') + '</span>';
     if (s.doNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(139,92,246,.12);color:#8b5cf6">🚚 DO ' + sanitize(s.doNumber) + '</span>';
     if (s.pendingSoNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(245,158,11,.12);color:#f59e0b">🕗 รอเลข SO</span>';
