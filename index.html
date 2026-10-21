@@ -295,9 +295,9 @@
 
 <!-- BACKUP REMINDER -->
 <div class="backup-bar" id="backupBar" style="display:none">
-<span>⚠️ ยังไม่ได้ Backup <span id="backupDays"></span> วัน</span>
+<span id="backupMsg">⚠️ ยังไม่ได้ Backup <span id="backupDays"></span> วัน</span>
 <button class="btn bsm bp" onclick="goExport()">📤 Backup เลย</button>
-<button class="btn bsm bo" onclick="dismissBackup()">ไว้ทีหลัง</button>
+<button class="btn bsm bo" id="backupDismissBtn" onclick="dismissBackup()">ไว้ทีหลัง</button>
 </div>
 
 <!-- EMAIL DRAFT OVERLAY -->

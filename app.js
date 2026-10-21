@@ -1418,20 +1418,47 @@ function updBdg() {
 // กด "ไว้ทีหลัง" แล้วเงียบไป 1 วัน กันไม่ให้เด้งซ้ำทุกครั้งที่มีการ sync/export (ก่อนหน้านี้ dismissBackup()
 // แค่ซ่อนแถบของ render รอบนั้น พอฟังก์ชันนี้ถูกเรียกใหม่ (เช่นหลัง sync ขึ้น cloud) วันยังไม่ครบ 7 ก็เลยเด้งกลับ
 // มาทันทีอีกรอบ — ตอนนี้เก็บเวลาที่กด "ไว้ทีหลัง" ไว้ ถ้ายังไม่ครบ 1 วันนับจากนั้นจะไม่โชว์ซ้ำ
+//
+// ปรับ 2026-10-21 (รีวิว PO Tracker/SO): เดิมกด "ไว้ทีหลัง" เลื่อนได้ไปเรื่อยๆ ไม่มีจุดจบ ซึ่งเป็นสาเหตุเดียวกับที่
+// เคยเจอ "ยังไม่ได้ Backup 166 วัน" ถ้าเปลี่ยน/ล้างเครื่องโดยไม่ได้ login Google (sync cloud) ข้อมูลหายหมดไม่มีใครรู้
+// ตอนนี้แบ่งเป็น 2 ระดับ: 7-20 วัน ยังเลื่อนได้ (เหมือนเดิม), >=21 วัน ซ่อนปุ่ม "ไว้ทีหลัง" (บังคับเห็นทุกครั้งที่เปิดแอป)
+// และ auto-export ไฟล์ JSON ลงเครื่องให้เองวันละ 1 ครั้ง (ไม่ต้องกด ไม่ต้อง login) กันไว้อีกชั้นเผื่อไม่มีใครกดเลย
+var BACKUP_SNOOZE_DAYS = 7;
+var BACKUP_FORCE_DAYS = 21; // เลยจุดนี้ไม่ให้เลื่อนอีก + auto-export ให้เองวันละครั้ง
 function checkBackupReminder() {
   var days = ST.getDaysSinceBackup();
   var bar = document.getElementById('backupBar');
   if (!bar) return;
   var snoozeUntil = localStorage.getItem('v7_backupSnoozeUntil');
-  if (days >= 7 && (!snoozeUntil || new Date() >= new Date(snoozeUntil))) {
+  var forced = days >= BACKUP_FORCE_DAYS;
+  if (forced && typeof doExportJSON === 'function') {
+    var today = _td();
+    if (localStorage.getItem('v7_backupAutoExportDate') !== today) {
+      localStorage.setItem('v7_backupAutoExportDate', today);
+      doExportJSON();
+      toast('📤 Export ไฟล์สำรองอัตโนมัติ (ไม่ได้ Backup มา ' + days + ' วัน)');
+      return; // doExportJSON() เรียก checkBackupReminder() ต่อให้เองหลังอัปเดต setLastBackup แล้ว
+    }
+  }
+  if (days >= BACKUP_SNOOZE_DAYS && (forced || !snoozeUntil || new Date() >= new Date(snoozeUntil))) {
     bar.style.display = 'flex';
     var el = document.getElementById('backupDays');
     if (el) el.textContent = days;
+    var msg = document.getElementById('backupMsg');
+    var dismissBtn = document.getElementById('backupDismissBtn');
+    if (forced) {
+      if (msg) msg.innerHTML = '🔴 ไม่ได้ Backup มา ' + days + ' วันแล้ว! เสี่ยงข้อมูลหายถ้าเครื่องมีปัญหา กด Backup เลย';
+      if (dismissBtn) dismissBtn.style.display = 'none';
+    } else {
+      if (msg) msg.innerHTML = '⚠️ ยังไม่ได้ Backup <span id="backupDays">' + days + '</span> วัน';
+      if (dismissBtn) dismissBtn.style.display = '';
+    }
   } else { bar.style.display = 'none'; }
 }
 
 function goExport() { document.getElementById('backupBar').style.display = 'none'; go('exports'); }
 function dismissBackup() {
+  if (ST.getDaysSinceBackup() >= BACKUP_FORCE_DAYS) { checkBackupReminder(); return; } // บังคับเห็น เลื่อนไม่ได้แล้ว
   document.getElementById('backupBar').style.display = 'none';
   var snoozeUntil = new Date(Date.now() + 86400000); // เงียบไป 1 วัน
   localStorage.setItem('v7_backupSnoozeUntil', snoozeUntil.toISOString());

@@ -11,8 +11,9 @@ var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
 var poTrackerReadyFlt = '';  // '' | ready | notready
 var poTrackerCreditFlt = ''; // '' | yes | no
-var poTrackerPrpoFlt = '';   // '' | pending
-var poTrackerRestockFlt = ''; // '' | pending
+var poTrackerPrpoFlt = '';   // '' | pending | overdue
+var poTrackerRestockFlt = ''; // '' | pending | overdue
+var poTrackerBackdatedFlt = ''; // '' | pending — SO ที่มีรายการบันทึก "ส่งมอบย้อนหลัง" ค้างรอสต็อกจริง
 var poTrackerReserve1021Flt = 'pending'; // pending (ยังไม่ส่ง, default) | delivered (ส่งครบแล้ว) | partial (ส่งบางส่วน — เหลือจองต้องพิจารณาดีดออก) | all
 var poTrackerDateFrom = '';  // createdAt >= (YYYY-MM-DD)
 var poTrackerDateTo = '';    // createdAt <= (YYYY-MM-DD)
@@ -128,8 +129,35 @@ function _poTrackerBuildRow(s) {
   var readiness = soComputeReadiness(s);
   var credit = creditRequestOpenForSO(s.id);
   var total = _poTrackerSOTotal(s);
-  var pendingPRPO = (s.items || []).filter(function(it) { return it.sourceType === 'pr_po'; }).length;
-  var pendingRestock = (s.items || []).filter(function(it) { return it.sourceType === 'restock'; }).length;
+  // ใช้ _poTrackerItemBucket เดียวกับที่แผงสรุปรายการสินค้าใช้ (ไม่ใช่แค่ sourceType ดิบ) กันป้าย/ตัวกรอง "รอ PR/PO"
+  // บนการ์ดหลักโชว์ไม่ตรงกับรายละเอียดตอนกางออกดู เช่น ของที่ถูก PR/PO มาแล้วและจองคลังครบแล้วไม่ควรนับว่า "รอ" อีก
+  var pendingPRPO = (s.items || []).filter(function(it) { return _poTrackerItemBucket(it, s) === 'pending_prpo'; }).length;
+  var pendingRestock = (s.items || []).filter(function(it) { return _poTrackerItemBucket(it, s) === 'pending_restock'; }).length;
+  // เลยกำหนดที่คาดว่าจะได้ของ (PR/PO) หรือของเข้า (restock) — ไม่มีการแจ้งเตือนแบบนี้มาก่อน ต่างจากแท็บจองคลัง 1021 ที่มีตัวนับวันหมดเขตอยู่แล้ว
+  var prpoOverdue = (s.items || []).filter(function(it) {
+    return _poTrackerItemBucket(it, s) === 'pending_prpo' && it.prpoExpectedDate && it.prpoExpectedDate < _td();
+  }).length;
+  var restockOverdue = (s.items || []).filter(function(it) {
+    return _poTrackerItemBucket(it, s) === 'pending_restock' && it.restockExpectedDate && it.restockExpectedDate < _td();
+  }).length;
+  // รายการที่จองคลัง (1021/8D01) ใกล้หมดเขต (<=2 วัน) หรือเลยกำหนดแล้ว — เดิมเห็นได้แค่ตอนสลับไปแท็บ "จองคลัง 1021" เท่านั้น
+  var reserveUrgent = (s.items || []).filter(function(it) {
+    if (it.sourceType !== 'reserve_1021' && it.sourceType !== 'reserve_8d01') return false;
+    if (!it.sku || typeof stockSOItemReadyInfo !== 'function') return false;
+    var info = stockSOItemReadyInfo(it.sku, Number(it.qty) || 0, s);
+    if (!info || !info.bookingExpiryDate) return false;
+    var days = _poTrackerReserve1021Days(info.bookingExpiryDate);
+    return days !== null && days <= 2;
+  }).length;
+  // ชิ้นที่บันทึก "ส่งมอบย้อนหลัง" ไว้ (stockDeliverSOItemBackdated) — ของยังไม่เข้าสต็อกจริง รอกระทบยอดจริงเมื่อ PR/PO เข้า
+  // เดิมไม่มีที่ไหนในแอปโชว์รายการนี้เลยหลังบันทึกแล้ว ทำให้ตามคืนทีหลังว่า SO ไหนยังค้างของจริงอยู่ยาก
+  var backdatedQty = 0;
+  (s.items || []).forEach(function(it) {
+    if (!it.sku || typeof stockGetLots !== 'function') return;
+    stockGetLots(it.sku).forEach(function(lot) {
+      if (lot.backdated && lot.soId === s.id) backdatedQty += Number(lot.qty) || 0;
+    });
+  });
   return {
     so: s,
     total: total,
@@ -137,6 +165,10 @@ function _poTrackerBuildRow(s) {
     credit: credit,
     pendingPRPO: pendingPRPO,
     pendingRestock: pendingRestock,
+    prpoOverdue: prpoOverdue,
+    restockOverdue: restockOverdue,
+    reserveUrgent: reserveUrgent,
+    backdatedQty: backdatedQty,
     done: _soIsDone(s.status)
   };
 }
@@ -543,7 +575,7 @@ function poTrackerToggleSummaryBucketAndScroll(key) {
 }
 
 function poTrackerResetFilters() {
-  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = '';
+  poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = ''; poTrackerBackdatedFlt = '';
   poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = ''; poTrackerTypeFlt = '';
   poTrackerSummarySelectedBuckets = []; poTrackerSummaryMinWaitDays = '';
   render();
@@ -594,6 +626,11 @@ function rPOTracker(el) {
   });
   html += '</select>';
   html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
+  html += '</div>';
+
+  // แยกปุ่ม "มุมมอง/Export/Import" ออกจากแถวตัวกรองค้นหา — เดิมอยู่แถวเดียวกับ search/dealer/type/sort
+  // ยาวจนล้นเป็น 4-5 แถวบนจอเล็ก ทำให้หาปุ่มที่ต้องใช้บ่อย (Export/Import) ยากกว่าที่ควร
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
   html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
   html += '<button class="btn bo" onclick="poTrackerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขที่เอากลับมา Import ได้ (ต่างจาก Export Excel ปกติที่เป็นรายงานอ่านอย่างเดียว)">📝 Export แบบฟอร์มแก้ไข</button>';
@@ -621,10 +658,16 @@ function rPOTracker(el) {
     html += '<select class="inp" style="max-width:170px" onchange="poTrackerPrpoFlt=this.value;render()">';
     html += '<option value="">-- PR/PO: ทั้งหมด --</option>';
     html += '<option value="pending"' + (poTrackerPrpoFlt === 'pending' ? ' selected' : '') + '>🛒 รอ PR/PO</option>';
+    html += '<option value="overdue"' + (poTrackerPrpoFlt === 'overdue' ? ' selected' : '') + '>🔴 PR/PO เลยกำหนด</option>';
     html += '</select>';
     html += '<select class="inp" style="max-width:170px" onchange="poTrackerRestockFlt=this.value;render()">';
     html += '<option value="">-- รอของเข้า: ทั้งหมด --</option>';
     html += '<option value="pending"' + (poTrackerRestockFlt === 'pending' ? ' selected' : '') + '>⏳ รอของเข้า</option>';
+    html += '<option value="overdue"' + (poTrackerRestockFlt === 'overdue' ? ' selected' : '') + '>🔴 ของเข้าเลยกำหนด</option>';
+    html += '</select>';
+    html += '<select class="inp" style="max-width:200px" onchange="poTrackerBackdatedFlt=this.value;render()">';
+    html += '<option value="">-- บันทึกย้อนหลัง: ทั้งหมด --</option>';
+    html += '<option value="pending"' + (poTrackerBackdatedFlt === 'pending' ? ' selected' : '') + '>⚠️ รอสต็อกจริง (ส่งย้อนหลังไว้)</option>';
     html += '</select>';
     html += '<div style="display:flex;gap:4px;align-items:center">';
     html += '<label class="lbl" style="margin:0;font-size:11px;color:var(--text2)">สร้างเมื่อ</label>';
@@ -683,7 +726,10 @@ function rPOTracker(el) {
     if (poTrackerCreditFlt === 'yes' && !r.credit) return false;
     if (poTrackerCreditFlt === 'no' && r.credit) return false;
     if (poTrackerPrpoFlt === 'pending' && !r.pendingPRPO) return false;
+    if (poTrackerPrpoFlt === 'overdue' && !r.prpoOverdue) return false;
     if (poTrackerRestockFlt === 'pending' && !r.pendingRestock) return false;
+    if (poTrackerRestockFlt === 'overdue' && !r.restockOverdue) return false;
+    if (poTrackerBackdatedFlt === 'pending' && !r.backdatedQty) return false;
     if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
     if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
     if (q) {
@@ -733,7 +779,10 @@ function rPOTracker(el) {
     if (r.readiness.total) {
       html += '<span style="padding:2px 8px;border-radius:8px;background:' + (r.readiness.allReady ? 'rgba(34,197,94,.12)' : 'rgba(245,158,11,.12)') + ';color:' + (r.readiness.allReady ? '#22c55e' : '#f59e0b') + '">📦 ' + r.readiness.readyCount + '/' + r.readiness.total + ' พร้อมส่ง</span>';
     }
-    if (r.pendingPRPO) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444">🛒 รอ PR/PO ' + r.pendingPRPO + ' รายการ</span>';
+    if (r.pendingPRPO) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444">🛒 รอ PR/PO ' + r.pendingPRPO + ' รายการ' + (r.prpoOverdue ? ' (เลยกำหนด ' + r.prpoOverdue + ')' : '') + '</span>';
+    if (r.pendingRestock) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(217,119,6,.12);color:#d97706">⏳ รอของเข้า ' + r.pendingRestock + ' รายการ' + (r.restockOverdue ? ' (เลยกำหนด ' + r.restockOverdue + ')' : '') + '</span>';
+    if (r.reserveUrgent) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444" title="ใกล้/เลยกำหนดจองคลัง ดูในแท็บจองคลัง 1021">🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent + ' รายการ</span>';
+    if (r.backdatedQty) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(234,88,12,.12);color:#ea580c" title="บันทึกว่าส่งมอบแล้วตอนของยังไม่เข้าสต็อกจริง — รอ PR/PO เข้ามาสะท้อนยอดจริง">⚠️ บันทึกย้อนหลังรอสต็อกจริง ' + r.backdatedQty + ' ชิ้น</span>';
     html += '<span style="padding:2px 8px;border-radius:8px;background:' + (r.credit ? 'rgba(37,99,235,.12);color:#2563eb' : 'var(--bg2);color:var(--text2)') + '">💳 ' + (r.credit ? sanitize(r.credit.status) : 'ไม่ได้ขอเครดิต') + '</span>';
     if (s.doNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(139,92,246,.12);color:#8b5cf6">🚚 DO ' + sanitize(s.doNumber) + '</span>';
     if (s.pendingSoNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(245,158,11,.12);color:#f59e0b">🕗 รอเลข SO</span>';
@@ -1167,7 +1216,10 @@ var POTRACKER_IMPORT_HEADERS = {
   readyStatus: '🔒 สถานะความพร้อม (อ้างอิงอย่างเดียว)', readyDate: '🔒 วันที่พร้อม/จองถึง (อ้างอิงอย่างเดียว)',
   status: 'สถานะ SO', sourceType: 'ประเภทแหล่งที่มา', qty: 'จำนวน', unitPrice: 'ราคาต่อหน่วย',
   comment: 'คอมเมนต์', link: 'Link', prNumber: 'เลขที่ PR ภายใน', prpoStatus: 'สถานะ PR/PO',
-  reserveDate: 'วันที่จอง', reserveExpiryDate: 'วันที่หมดจอง/ครบกำหนด'
+  reserveDate: 'วันที่จอง', reserveExpiryDate: 'วันที่หมดจอง/ครบกำหนด',
+  // 🔒 ใช้เช็คว่า SO ถูกแก้ไขในหน้าเว็บไปแล้วหลัง export ไฟล์นี้หรือยัง (กันไฟล์เก่าที่กรอกทิ้งไว้นานมาทับข้อมูลใหม่กว่าโดยไม่รู้ตัว)
+  // ไฟล์ export เก่าก่อนมีคอลัมน์นี้จะไม่มีค่า — ถือว่าไม่รู้ ไม่เตือน (backward compatible)
+  exportedAt: '🔒 แก้ไขล่าสุดตอน Export (ระบบ)'
 };
 
 function poTrackerExportEditTemplateXlsx(soList, filenameSuffix) {
@@ -1205,6 +1257,7 @@ function _poTrackerExportEditTemplateXlsxImpl(soList, filenameSuffix) {
       row[H.prpoStatus] = (cfg.prpoStatuses || []).filter(function(p) { return p.id === it.prpoStatus; }).map(function(p) { return p.name; })[0] || '';
       row[H.reserveDate] = it.reserveDate || '';
       row[H.reserveExpiryDate] = it.reserveExpiryDate || '';
+      row[H.exportedAt] = s.updatedAt || s.createdAt || '';
       rows.push(row);
     });
   });
@@ -1239,7 +1292,7 @@ function _poTrackerExportEditTemplateXlsxImpl(soList, filenameSuffix) {
 
   var ws = XLSX.utils.json_to_sheet(rows, { header: Object.keys(H).map(function(k) { return H[k]; }) });
   ws['!cols'] = [{ wch: 24 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 26 },
-    { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 28 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+    { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 20 }, { wch: 8 }, { wch: 12 }, { wch: 28 }, { wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, ws, 'แก้ไขรายการ');
 
   XLSX.writeFile(wb, 'po-tracker-edit-template' + (filenameSuffix || '') + '-' + _td() + '.xlsx');
@@ -1351,6 +1404,7 @@ function _previewPoTrackerImport_impl(input) {
     var changedBySO = {}; // soId -> { so, changes: [{idx, fields:[{key,label,old,new,big}]}] }
     var rejects = []; // { rowNum, reason }
     var soStatusCandidates = {}; // soId -> { value: count }
+    var staleSO = {}; // soId -> so — ไฟล์ export ไว้ก่อนที่ SO นี้จะถูกแก้ไขในหน้าเว็บอีกรอบ (updatedAt ไม่ตรง) เสี่ยงทับข้อมูลใหม่กว่า
 
     rows.forEach(function(r, i) {
       var rowNum = i + 2; // +1 header, +1 1-indexed
@@ -1363,6 +1417,10 @@ function _previewPoTrackerImport_impl(input) {
       var it = (so.items || [])[itemIdx];
       if (!it) { rejects.push({ rowNum: rowNum, reason: 'ไม่พบรายการสินค้าลำดับนี้ใน SO ' + (so.soNumber || soId) + ' (แถว/ลำดับอาจถูกลบหรือสลับไปแล้ว)' }); return; }
       if ((it.sku || '') !== sku) { rejects.push({ rowNum: rowNum, reason: 'SKU ไม่ตรงกับแถวเดิมใน SO ' + (so.soNumber || soId) + ' (ไฟล์มี "' + sku + '" ของจริงคือ "' + (it.sku || '') + '") — ข้ามทั้งแถวเพื่อความปลอดภัย' }); return; }
+
+      var exportedAt = String(r[H.exportedAt] || '').trim();
+      var currentUpdatedAt = so.updatedAt || so.createdAt || '';
+      if (exportedAt && currentUpdatedAt && exportedAt !== currentUpdatedAt) staleSO[soId] = so;
 
       var fields = [];
       var rowRejects = [];
@@ -1448,7 +1506,7 @@ function _previewPoTrackerImport_impl(input) {
       }
     });
 
-    window._poTrkImportPending = { changedBySO: changedBySO, statusBySO: statusBySO, rejects: rejects };
+    window._poTrkImportPending = { changedBySO: changedBySO, statusBySO: statusBySO, rejects: rejects, staleSO: staleSO };
 
     // reset ตัวเลือก — ค่าเริ่มต้นติ๊ก "เลือก import" ไว้ให้ทุกแถวที่ไม่ถูก reject (ผู้ใช้ค่อยไปติ๊กออกเองทีละแถว)
     _poTrkImportSel = { items: {}, status: {} };
@@ -1491,8 +1549,15 @@ function _poTrackerRenderImportPreview() {
   });
 
   var view = _poTrackerImportFilteredView();
+  var staleIds = Object.keys(pending.staleSO || {});
 
   var h = '';
+  if (staleIds.length) {
+    h += '<div style="font-size:12px;color:#ea580c;background:rgba(234,88,12,.12);border-radius:6px;padding:8px;margin-bottom:8px">' +
+      '⚠️ ' + staleIds.length + ' SO ถูกแก้ไขในหน้าเว็บไปแล้วหลังจาก export ไฟล์นี้ (' +
+      staleIds.map(function(id) { return sanitize(pending.staleSO[id].soNumber || id); }).join(', ') +
+      ') — ตรวจให้ดีก่อน import ว่าไม่ได้ทับข้อมูลใหม่กว่าที่กรอกไว้ในหน้าเว็บ ไม่ใช่จากไฟล์นี้ ถ้าไม่แน่ใจ ลอง export ไฟล์ใหม่แล้วแก้ซ้ำ</div>';
+  }
   if (allStatusIds.length || allItemKeys.length) {
     h += '<div style="display:flex;gap:6px;align-items:center;margin:8px 0;flex-wrap:wrap">';
     h += '<input type="text" id="poTrkImpSearch" class="inp" style="flex:1;min-width:140px" placeholder="🔍 ค้นหา SO/Dealer/SKU/สินค้า" value="' + sanitize(_poTrkImportSearchTerm) + '" oninput="_poTrackerImportSearchChanged(this.value)">';
