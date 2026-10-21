@@ -216,12 +216,14 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
   roundItems.forEach(function(ri) {
     var qty1021 = Math.max(0, Math.round(Number(ri.qty1021) || 0));
     var qty0001 = Math.max(0, Math.round(Number(ri.qty0001) || 0));
-    if ((qty1021 <= 0 && qty0001 <= 0) || !ri.sku) return;
+    var qtyShortage = Math.max(0, Math.round(Number(ri.qtyShortage) || 0));
+    if ((qty1021 <= 0 && qty0001 <= 0 && qtyShortage <= 0) || !ri.sku) return;
     var it = (s.items || []).filter(function(x) { return x.sku === ri.sku; })[0];
     var productName = it ? it.model : ri.sku;
     var delivered = 0;
     if (qty1021 > 0 && typeof stockDeliverSOItemQty === 'function') delivered += stockDeliverSOItemQty(ri.sku, productName, soId, qty1021);
     if (qty0001 > 0 && typeof stockDeliverSOItemFrom0001 === 'function') delivered += stockDeliverSOItemFrom0001(ri.sku, productName, s, qty0001);
+    if (qtyShortage > 0 && typeof stockDeliverSOItemBackdated === 'function') delivered += stockDeliverSOItemBackdated(ri.sku, productName, s, qtyShortage);
     if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered });
   });
   if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
@@ -264,31 +266,44 @@ function showSORecordShipmentModal(soId) {
   // เลือกได้ว่าจะส่งรอบนี้จากคลังไหนเท่าไหร่ — จากของที่จองใน 1021 ไว้แล้ว และ/หรือ ตรงจากคลัง 1001 ที่ยังไม่เคยจอง (ย้าย+ส่งมอบให้ในขั้นตอนเดียว ไม่ต้องไปกดจองเข้า 1021 แยกก่อน)
   var anyReady = false;
   var body = '<div class="hint" style="margin-bottom:8px">เลือกจำนวนและคลังที่จะส่งรอบนี้ต่อรายการ — ส่งจากของที่จองใน 1021 ไว้แล้ว และ/หรือตรงจากคลัง 1001 ก็ได้ในรอบเดียวกัน</div>';
+  body += '<div style="display:flex;gap:6px;margin-bottom:8px">';
+  body += '<button type="button" class="btn bsm" style="flex:1" onclick="_soShipFillAll(\'' + soId + '\')">✅ ส่งทั้งหมดทุกรายการ</button>';
+  body += '<button type="button" class="btn bsm" style="flex:1" onclick="_soShipClearAll(\'' + soId + '\')">🧹 ล้างทั้งหมด</button>';
+  body += '</div>';
   trackedItems.forEach(function(it, idx) {
     var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : { deliveredForThisSO: 0, bookedForThisSO: 0, from0001: 0, shortfall: 0 };
     var qty1021 = info.bookedForThisSO || 0;
     var qty0001 = info.from0001 || 0;
+    var shortfall = info.shortfall || 0;
     body += '<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">';
     body += '<div style="margin-bottom:4px"><b>' + sanitize(it.model || it.sku) + '</b> <span style="color:var(--text2);font-size:11px">(สั่ง ' + (it.qty || 0) + ')</span></div>';
     if (qty1021 > 0 || qty0001 > 0) {
-      body += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">';
+      body += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;align-items:flex-end">';
       if (qty1021 > 0) {
-        body += '<div><label class="lbl" style="font-size:10px;color:#16a34a">✓ จาก 1021 (จองแล้ว) สูงสุด ' + qty1021 + '</label>';
-        body += '<input type="number" class="inp" style="width:80px" id="soShip_q1021_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="' + qty1021 + '" min="0" max="' + qty1021 + '"></div>';
+        body += '<div><label class="lbl" style="font-size:10px;color:#16a34a">✓ จาก 1021 (จองไว้แล้ว — พร้อมส่งทันที) สูงสุด ' + qty1021 + '</label>';
+        body += '<input type="number" class="inp" style="width:80px" id="soShip_q1021_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="' + qty1021 + '" min="0" max="' + qty1021 + '" oninput="_soShipUpdateTotals(\'' + soId + '\')"></div>';
       }
       if (qty0001 > 0) {
-        body += '<div><label class="lbl" style="font-size:10px;color:#2563eb">📦 จาก 1001 (ยังไม่จอง) สูงสุด ' + qty0001 + '</label>';
-        body += '<input type="number" class="inp" style="width:80px" id="soShip_q0001_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="0" min="0" max="' + qty0001 + '"></div>';
+        body += '<div><label class="lbl" style="font-size:10px;color:#2563eb">📦 จาก 1001 (มีของแล้วแต่ยังไม่จอง) สูงสุด ' + qty0001 + '</label>';
+        body += '<div style="display:flex;gap:4px"><input type="number" class="inp" style="width:80px" id="soShip_q0001_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="0" min="0" max="' + qty0001 + '" oninput="_soShipUpdateTotals(\'' + soId + '\')">';
+        body += '<button type="button" class="btn bsm" style="padding:0 8px" onclick="_soShipFillItem(\'' + soId + '\',' + idx + ')">ส่งทั้งหมด</button></div></div>';
       }
       body += '</div>';
     }
-    body += '<div style="display:flex;gap:4px;flex-wrap:wrap;font-size:10px">';
+    body += '<div style="display:flex;gap:4px;flex-wrap:wrap;font-size:10px;margin-bottom:4px">';
     if (info.deliveredForThisSO > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280">✔ ส่งมอบแล้ว ' + info.deliveredForThisSO + '</span>';
-    if (info.shortfall > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + info.shortfall + ' ต้อง PR/PO</span>';
-    body += '</div></div>';
+    if (shortfall > 0) body += '<span style="padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444">✕ ขาดอีก ' + shortfall + ' ต้อง PR/PO</span>';
+    body += '</div>';
+    if (shortfall > 0) {
+      body += '<div><label class="lbl" style="font-size:10px;color:#ea580c">⚠️ บันทึกย้อนหลัง (ของยังไม่มีในคลังจริง) สูงสุด ' + shortfall + '</label>';
+      body += '<input type="number" class="inp" style="width:80px" id="soShip_qShort_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="0" min="0" max="' + shortfall + '" oninput="_soShipUpdateTotals(\'' + soId + '\')"></div>';
+      body += '<div class="hint" style="font-size:10px;margin-top:2px">ใช้เมื่อส่งของให้ลูกค้าไปแล้วจริงแต่ยังไม่ได้เพิ่มสต็อกในระบบ — บันทึกจำนวนนี้แล้วยอด "ขาดอีก" ที่ต้องสั่ง PR/PO จะลดลงตามจำนวนที่กรอก</div>';
+    }
+    body += '</div>';
     if (qty1021 > 0 || qty0001 > 0) anyReady = true;
   });
   if (!anyReady) body += '<div class="warn-box" style="font-size:11px;margin-top:8px">⚠️ ยังไม่มีของพร้อมส่งเลย ทั้งที่จองใน 1021 และในคลัง 1001</div>';
+  body += '<div id="soShip_totals" class="hint" style="margin-top:8px;font-weight:600"></div>';
   body += '<div style="display:flex;gap:8px;margin-top:10px">';
   body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-20261021-XXX" value="' + sanitize(_soNextDONum()) + '"></div>';
   body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label>';
@@ -308,8 +323,43 @@ function showSORecordShipmentModal(soId) {
   body += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soShip_invDate" class="inp" type="date" value="' + _td() + '"></div>';
   body += '<div style="flex:1"><label class="lbl">หมายเหตุ</label><input id="soShip_note" class="inp" placeholder="ไม่บังคับ"></div>';
   body += '</div>';
-  body += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSORecordShipment(\'' + soId + '\')">💾 บันทึกการส่งมอบรอบนี้</button>';
+  body += '<button class="btn bp btn-full" style="margin-top:12px" id="soShip_saveBtn" onclick="_saveSORecordShipment(\'' + soId + '\')">💾 บันทึกการส่งมอบรอบนี้</button>';
   openM('🚚 บันทึกการส่งมอบรอบนี้ — ' + sanitize(s.soNumber || ''), body);
+  _soShipUpdateTotals(soId);
+}
+
+// ปุ่ม "ส่งทั้งหมด" ต่อรายการ — กรอกจำนวนช่อง 1001 (ยังไม่จอง) ให้เต็มสูงสุดทันที (ช่อง 1021 เต็มอยู่แล้วโดยปริยาย)
+function _soShipFillItem(soId, idx) {
+  var inp = document.getElementById('soShip_q0001_' + idx);
+  if (inp) inp.value = inp.getAttribute('max') || 0;
+  _soShipUpdateTotals(soId);
+}
+// กรอกทุกรายการให้เต็มสูงสุดทั้งช่อง 1021 และ 1001 ในคลิกเดียว (ไม่รวมช่องบันทึกย้อนหลัง ต้องตัดสินใจเป็นรายรายการ)
+function _soShipFillAll(soId) {
+  document.querySelectorAll('[id^="soShip_q1021_"], [id^="soShip_q0001_"]').forEach(function(inp) {
+    inp.value = inp.getAttribute('max') || 0;
+  });
+  _soShipUpdateTotals(soId);
+}
+// ล้างทุกช่อง (1021/1001/บันทึกย้อนหลัง) เป็น 0
+function _soShipClearAll(soId) {
+  document.querySelectorAll('[id^="soShip_q1021_"], [id^="soShip_q0001_"], [id^="soShip_qShort_"]').forEach(function(inp) {
+    inp.value = 0;
+  });
+  _soShipUpdateTotals(soId);
+}
+// สรุปจำนวนรวมที่กำลังจะบันทึกรอบนี้ + ปิดปุ่มบันทึกถ้ายังไม่ได้กรอกอะไรเลย กันกดพลาด
+function _soShipUpdateTotals(soId) {
+  var bySku = {}, totalQty = 0;
+  document.querySelectorAll('[id^="soShip_q1021_"], [id^="soShip_q0001_"], [id^="soShip_qShort_"]').forEach(function(inp) {
+    var v = Math.max(0, Math.round(Number(inp.value) || 0));
+    if (v > 0) { bySku[inp.getAttribute('data-sku')] = true; totalQty += v; }
+  });
+  var itemCount = Object.keys(bySku).length;
+  var box = document.getElementById('soShip_totals');
+  if (box) box.textContent = totalQty > 0 ? ('รวมรอบนี้: ' + itemCount + ' รายการ, ' + totalQty + ' ชิ้น') : 'ยังไม่ได้เลือกจำนวนที่จะส่ง';
+  var btn = document.getElementById('soShip_saveBtn');
+  if (btn) btn.disabled = totalQty <= 0;
 }
 
 // รายการ SO/สินค้าที่อยู่ใน Invoice เลขนี้แล้ว (จากรอบของ SO อื่น) — โชว์เตือนก่อนบันทึก กันพิมพ์เลขผิด/เผลอรวมผิดใบ
@@ -340,13 +390,18 @@ function _saveSORecordShipment(soId) {
   var bySku = {};
   document.querySelectorAll('[id^="soShip_q1021_"]').forEach(function(input) {
     var sku = input.getAttribute('data-sku');
-    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0 };
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0, qtyShortage: 0 };
     bySku[sku].qty1021 = input.value;
   });
   document.querySelectorAll('[id^="soShip_q0001_"]').forEach(function(input) {
     var sku = input.getAttribute('data-sku');
-    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0 };
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0, qtyShortage: 0 };
     bySku[sku].qty0001 = input.value;
+  });
+  document.querySelectorAll('[id^="soShip_qShort_"]').forEach(function(input) {
+    var sku = input.getAttribute('data-sku');
+    bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0, qtyShortage: 0 };
+    bySku[sku].qtyShortage = input.value;
   });
   var roundItems = Object.keys(bySku).map(function(sku) { return bySku[sku]; });
   var doNumber = (document.getElementById('soShip_do') || {}).value || '';
