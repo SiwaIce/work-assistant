@@ -930,6 +930,26 @@ function stockDeliverSOItemFrom0001(sku, productName, so, qty) {
   return delivered;
 }
 
+// บันทึกส่งมอบย้อนหลังสำหรับส่วนที่ "ขาดอีก...ต้อง PR/PO" — ยังไม่มีสต็อกจริงให้หัก จึงไม่ย้าย/ไม่ตัด lot ใดๆ
+// สร้าง lot ผูก SO นี้ตรงสถานะ "ส่งมอบแล้ว" ไว้เฉยๆ เพื่อให้ deliveredForThisSO ใน stockSOItemReadyInfo นับรวมด้วย
+// (ยอด "ขาดอีก" รอบถัดไปจะลดลงตามจำนวนนี้ — กันไม่ให้ขอ PR/PO ซ้ำของที่ส่งไปแล้วจริง) ไม่กระทบยอดคลัง 1001/1021 จริงที่ไหนเลย
+function stockDeliverSOItemBackdated(sku, productName, so, qty) {
+  qty = Math.max(0, Math.round(Number(qty) || 0));
+  if (!sku || !so || !so.id || qty <= 0) return 0;
+  var lots = stockGetLots(sku).slice();
+  lots.push({
+    id: _stockLotId(), location: '1021', ref: so.soNumber, qty: qty, dateIn: _nw(),
+    note: 'บันทึกส่งมอบย้อนหลัง — ยังไม่มีสต็อกจริงรองรับตอนบันทึก', backdated: true,
+    soNumber: so.soNumber, soId: so.id, bookedDate: _nw(), status: 'ส่งมอบแล้ว', deliveredDate: _nw()
+  });
+  _stockSaveLots(sku, productName, lots);
+  ST.add('stockLog', {
+    sku: sku, productName: productName, locationCode: '1021', locationName: stockLocationName('1021'),
+    qty: qty, note: 'บันทึกส่งมอบย้อนหลัง (ของยังไม่เข้าสต็อก) — SO ' + (so.soNumber || ''), date: _nw(), type: 'adjust'
+  });
+  return qty;
+}
+
 // ลบ lot ที่เผลอกรอกผิดทิ้งทั้งรายการ
 function stockDeleteLot(sku, lotId) {
   if (!confirm('ลบรายการนี้ทิ้ง?\nใช้ตอนกรอกผิดเท่านั้น ไม่สามารถกู้คืนได้')) return;
