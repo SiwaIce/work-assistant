@@ -278,7 +278,8 @@ function showInvoiceDetailModal(soId, roundId) {
       '<th style="padding:6px 8px;color:var(--text2)">Serial</th></tr></thead><tbody>';
     items.forEach(function(it) {
       var soItem = (s.items || []).filter(function(x) { return x.sku === it.sku; })[0];
-      var sns = soItem ? ((typeof _soItemSerials === 'function') ? _soItemSerials(soItem) : (soItem.serials || [])) : [];
+      var allSns = soItem ? ((typeof _soItemSerials === 'function') ? _soItemSerials(soItem) : (soItem.serials || [])) : [];
+      var sns = it.estimated ? allSns : _soRoundItemSerials(soId, roundId, it.sku, allSns);
       html += '<tr style="border-top:1px solid var(--border)">';
       html += '<td style="padding:6px 8px">' + sanitize(it.model || '-') + (it.estimated ? ' <span style="font-size:10px;color:var(--text2)" title="รอบนี้ไม่มีรายละเอียดจริง แสดงประมาณจากรายการ SO">~ประมาณ</span>' : '') + '</td>';
       html += '<td style="padding:6px 8px;font-family:monospace;font-size:11px">' + sanitize(it.sku || '-') + '</td>';
@@ -290,6 +291,9 @@ function showInvoiceDetailModal(soId, roundId) {
     });
     html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="4" style="padding:6px 8px;text-align:right">รวม</td><td style="padding:6px 8px;text-align:right">' + fmtMoney(grandTotal) + '</td><td></td></tr>';
     html += '</tbody></table></div>';
+    if (items.some(function(it) { return it.estimated; })) {
+      html += '<div class="hint" style="font-size:10px;margin-top:4px">~ประมาณ = รอบนี้ไม่มีรายละเอียดจริง (ข้อมูลเก่าก่อนรองรับแบ่งส่ง) จึงโชว์ Serial ทั้งหมดของ SKU นี้ใน SO — ตรวจซ้ำก่อนใช้ ถ้า SKU นี้เคยส่งมากกว่า 1 รอบ</div>';
+    }
   } else {
     html += '<div class="hint">ไม่มีรายละเอียดรายการสินค้าของรอบนี้</div>';
   }
@@ -848,6 +852,19 @@ function _soItemSerials(it) {
   if (it.serials) return it.serials;
   var merged = (it.serialsReceived || []).concat(it.serialsShipped || []);
   return merged.filter(function(sn, i) { return merged.indexOf(sn) === i; });
+}
+
+// Serial เฉพาะของรอบส่งมอบหนึ่ง (ไม่ใช่ทั้งหมดของ SO+SKU) — it.serials เป็น flat list ไม่แยกรอบ จึงอิงตำแหน่งสะสม
+// เรียงตามลำดับรอบจริงจาก soSkuShipmentTimeline เหมือนที่ poTrackerExportInvoiceSNXlsx ใช้ (views-potracker.js) กันโชว์ serial ปนรอบกันเมื่อ SKU เดียวกันส่งมากกว่า 1 รอบ
+function _soRoundItemSerials(soId, roundId, sku, allSerials) {
+  var timeline = (typeof soSkuShipmentTimeline === 'function') ? soSkuShipmentTimeline(soId, sku) : [];
+  var start = 0, qty = 0, found = false;
+  timeline.forEach(function(round) {
+    if (round.roundId === roundId) { qty = round.qty; found = true; }
+    else if (!found) { start += round.qty; }
+  });
+  if (!found) return allSerials || [];
+  return (allSerials || []).slice(start, start + qty);
 }
 
 function _soSerialSpan(sn) {
