@@ -371,9 +371,11 @@ function stockSOItemReadyInfo(sku, qty, so) {
     return { ready: true, tracked: true, deliveredForThisSO: qty, bookedForThisSO: 0, from0001: 0, fromQI: 0, shortfall: 0, reservation: null, bookingExpiryDate: '', bookingHistory: [] };
   }
 
-  // ส่วนที่ถูกจองเข้า 1021 ผูกกับ SO นี้โดยตรงแล้ว (ไม่ว่าจะมาจาก reservation หรือกดจอง/ลากเข้า 1021 เองแล้วเลือก SO นี้)
+  // ส่วนที่ถูกจองเข้าคลังจอง (1021 หรือ 8D01 ฯลฯ — ดู _stockIsBookLoc) ผูกกับ SO นี้โดยตรงแล้ว (ไม่ว่าจะมาจาก
+  // reservation หรือกดจอง/ลากเข้าคลังจองเองแล้วเลือก SO นี้) — เดิมเช็คแค่ '1021' เลยนับของที่ย้ายไป 8D01 ไม่ได้
+  // ทำให้ขึ้น "ขาด...ต้อง PR/PO" ทั้งที่จองคลังจริงไว้แล้ว
   var lots = stockGetLots(sku);
-  var soLots = lots.filter(function(l) { return l.location === '1021' && l.soId === so.id; });
+  var soLots = lots.filter(function(l) { return _stockIsBookLoc(l.location) && l.soId === so.id; });
   var deliveredForThisSO = soLots.filter(function(l) { return l.status === 'ส่งมอบแล้ว'; })
     .reduce(function(s, l) { return s + (Number(l.qty) || 0); }, 0);
   var bookedForThisSO = soLots.filter(_stockIsActiveLot)
@@ -409,6 +411,8 @@ function stockSOItemReadyInfo(sku, qty, so) {
     from0001: from0001, fromQI: fromQI, shortfall: shortfall, reservation: reservation,
     bookingExpiryDate: nearestLot ? (nearestLot.bookingExpiryDate || '') : '', bookingHistory: nearestLot ? (nearestLot.bookingHistory || []) : [],
     reserveDate: nearestLot ? (nearestLot.dateIn || '').slice(0, 10) : '',
+    // คลังจองจริงที่ lot นี้อยู่ (เช่น '1021' หรือ '8D01') — ใช้โชว์ชื่อคลังที่ถูกต้องใน UI แทนการ hardcode เป็น "1021" เสมอ
+    bookedLocation: nearestLot ? nearestLot.location : '',
     // id ของ lot จริงที่ใช้คำนวณข้างบน — ให้ UI ฝั่งอื่น (เช่นกล่องจองจริงในฟอร์มแก้ไขรายการสินค้าของ SO) เปิดปุ่ม
     // "🔄 เลื่อนกำหนดจอง" (showStockExtendBookingM) ตรงไปที่ lot นี้ได้เลย โดยไม่ต้องไปหน้าจัดการคลังแยก
     lotId: nearestLot ? nearestLot.id : ''
@@ -431,7 +435,8 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
     h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280;display:inline-block;margin-bottom:3px">✔ ส่งมอบแล้ว ' + deliveredForThisSO + '</div><br>';
   }
   if (bookedForThisSO > 0) {
-    h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a;display:inline-block;margin-bottom:3px">✓ พร้อมส่ง ' + bookedForThisSO + ' (จองใน 1021 แล้ว)</div><br>';
+    var bookedLocLabel = info.bookedLocation ? (info.bookedLocation + ' ' + stockLocationName(info.bookedLocation)) : '1021';
+    h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(34,197,94,.15);color:#16a34a;display:inline-block;margin-bottom:3px">✓ พร้อมส่ง ' + bookedForThisSO + ' (จองในคลัง ' + bookedLocLabel + ' แล้ว)</div><br>';
     // ชิปเสริม: วันหมดจอง + นับวันเหลือ + ประวัติการเลื่อนจอง (ถ้ามี) — ข้อมูลมีอยู่แล้วในล็อต แค่ดึงมาโชว์
     if (info.bookingExpiryDate) {
       var daysLeft = Math.ceil((new Date(info.bookingExpiryDate) - new Date(_nw().substring(0, 10))) / 86400000);
