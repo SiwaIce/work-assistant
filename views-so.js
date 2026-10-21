@@ -184,6 +184,22 @@ function _soShipRoundItemsWithPrice(round) {
   });
 }
 
+// ลำดับรอบส่งมอบของ SKU หนึ่งใน SO เดียว เรียงตามลำดับที่บันทึกจริงใน shipments[] — ใช้จับคู่ "หน่วยที่เท่าไหร่" ของ it.serials (flat list ไม่แยกรอบ) ว่าอยู่ในรอบ/Invoice ไหน ตอน export/import SN จากหน้า Track Invoice
+function soSkuShipmentTimeline(soId, sku) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return [];
+  var shipments = _soMigrateLegacyShipment(s);
+  var out = [];
+  shipments.forEach(function(sh) {
+    (sh.items || []).forEach(function(it) {
+      if (it.sku === sku && (it.qty || 0) > 0) {
+        out.push({ roundId: sh.id, qty: it.qty, invoiceNumber: sh.invoiceNumber || '', doNumber: sh.doNumber || '', invoiceDate: sh.invoiceDate || '', date: sh.date || '' });
+      }
+    });
+  });
+  return out;
+}
+
 // แก้ไขข้อมูลรอบส่งมอบที่บันทึกไว้แล้ว (DO/Invoice/วันที่/หมายเหตุ) — ใช้จากหน้า Track Invoice
 // ตั้งเลข Invoice ให้ตรงกับรอบอื่นได้เพื่อรวมเข้า invoice เดียวกัน (soGroupShipmentsByInvoice group ตามเลขอัตโนมัติ)
 // field เดิมระดับ SO (s.doNumber/invoiceNumber/invoiceDate) มีไว้ mirror รอบล่าสุดเสมอ (ตามที่ soRecordShipmentRound ทำ) — คำนวณใหม่จากรอบสุดท้ายทุกครั้งที่แก้ กันข้อมูลสองที่ไม่ตรงกัน
