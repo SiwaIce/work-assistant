@@ -1224,17 +1224,29 @@ function _poTrackerInvoiceTrackHtml() {
       '<th style="padding:6px 10px;font-weight:600;color:var(--text2)">DO</th></tr></thead><tbody>';
     g.rounds.forEach(function(r) {
       var items = (typeof _soShipRoundItemsWithPrice === 'function') ? _soShipRoundItemsWithPrice(r) : [];
-      items.forEach(function(it) {
+      var roundActions = ' <a href="#" onclick="showSOEditShipmentRoundModal(\'' + r.soId + '\',\'' + r.id + '\');return false" title="แก้ไขเลข Invoice/DO/วันที่/หมายเหตุของรอบนี้" style="margin-left:4px;text-decoration:none">✏️</a>' +
+        ' <a href="#" onclick="showSOEditSerialsModal(\'' + r.soId + '\');return false" title="บันทึก/แก้ไข Serial ของ SO นี้" style="margin-left:2px;text-decoration:none">🔢</a>';
+      if (!items.length) {
+        html += '<tr style="border-top:1px solid var(--border)">';
+        html += '<td style="padding:6px 10px">' + sanitize(r.soNumber || '-') + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(r.dealerName || '-') + '</td>';
+        html += '<td colspan="4" style="padding:6px 10px;color:var(--text2)">ไม่มีรายการสินค้า</td>';
+        html += '<td style="padding:6px 10px;text-align:right">' + fmtMoney(0) + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(r.doNumber || '-') + roundActions + '</td>';
+        html += '</tr>';
+        return;
+      }
+      items.forEach(function(it, ii) {
         grandTotal += it.total;
         html += '<tr style="border-top:1px solid var(--border)">';
         html += '<td style="padding:6px 10px">' + sanitize(r.soNumber || '-') + '</td>';
         html += '<td style="padding:6px 10px">' + sanitize(r.dealerName || '-') + '</td>';
         html += '<td style="padding:6px 10px">' + sanitize(it.sku || '-') + '</td>';
-        html += '<td style="padding:6px 10px">' + sanitize(it.model || '-') + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(it.model || '-') + (it.estimated ? ' <span style="color:var(--text2);font-size:10px" title="รอบนี้ไม่มีรายละเอียดรายการที่ส่งจริง (ย้ายจากข้อมูลเดิมก่อนรองรับแบ่งส่ง) — แสดงประมาณจากรายการทั้งหมดของ SO">~ประมาณ</span>' : '') + '</td>';
         html += '<td style="padding:6px 10px;text-align:center">' + (it.qty || 0) + '</td>';
         html += '<td style="padding:6px 10px;text-align:right">' + fmtMoney(it.unitPrice) + '</td>';
         html += '<td style="padding:6px 10px;text-align:right">' + fmtMoney(it.total) + '</td>';
-        html += '<td style="padding:6px 10px">' + sanitize(r.doNumber || '-') + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(r.doNumber || '-') + (ii === 0 ? roundActions : '') + '</td>';
         html += '</tr>';
       });
     });
