@@ -5,6 +5,7 @@
 
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
+var poTrackerTypeFlt = ''; // '' | project | runrate — แยก SO โครงการ กับ Run rate
 var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว) | reserve1021 — แท็บติดตามการจองคลัง 1021 (แสดงได้ทุกเมื่อ ไม่ต้องเลือก Dealer)
 var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
@@ -175,6 +176,16 @@ function _poTrackerSoLinksHtml(so) {
   if (so.quotationId) html += ' <a href="#" onclick="editQuotation(\'' + so.quotationId + '\');return false" style="font-size:11px;color:var(--accent)">💰 Quotation</a>';
   return html;
 }
+// ป้าย Project/Run rate บนการ์ด PO/SO — ดูง่ายว่า SO ใบนี้เป็นโครงการหรือถัง Run rate พร้อมเลข Project ID (ถ้ามี)
+function _poTrackerTypeBadgeHtml(s) {
+  var type = s.type || (s.runrateId ? 'runrate' : 'project');
+  var pid = (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || ''));
+  var isProject = type === 'project';
+  var label = (isProject ? '📋 Project' : '🏪 Run rate') + (pid ? ' · ' + sanitize(pid) : '');
+  var color = isProject ? '#2563eb' : '#f59e0b';
+  return '<span style="display:inline-block;margin-top:3px;font-size:10px;font-weight:700;color:' + color + ';background:' + color + '1f;border-radius:6px;padding:2px 7px;white-space:nowrap">' + label + '</span>';
+}
+
 function _poTrackerBucketInfo(key) {
   for (var i = 0; i < POTRACKER_ITEM_BUCKETS.length; i++) if (POTRACKER_ITEM_BUCKETS[i].key === key) return POTRACKER_ITEM_BUCKETS[i];
   return POTRACKER_ITEM_BUCKETS[0];
@@ -524,7 +535,7 @@ function poTrackerToggleSummaryBucketAndScroll(key) {
 
 function poTrackerResetFilters() {
   poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = '';
-  poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = '';
+  poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = ''; poTrackerTypeFlt = '';
   poTrackerSummarySelectedBuckets = []; poTrackerSummaryMinWaitDays = '';
   render();
 }
@@ -562,6 +573,11 @@ function rPOTracker(el) {
   html += '<select class="inp" style="max-width:200px" onchange="poTrackerDealerFlt=this.value;render()">';
   html += '<option value="">-- ทุก Dealer --</option>';
   dealers.forEach(function(d) { html += '<option value="' + sanitize(d) + '"' + (poTrackerDealerFlt === d ? ' selected' : '') + '>' + sanitize(d) + '</option>'; });
+  html += '</select>';
+  html += '<select class="inp" style="max-width:150px" onchange="poTrackerTypeFlt=this.value;render()">';
+  html += '<option value="">-- ทุกประเภท --</option>';
+  html += '<option value="project"' + (poTrackerTypeFlt === 'project' ? ' selected' : '') + '>📋 Project</option>';
+  html += '<option value="runrate"' + (poTrackerTypeFlt === 'runrate' ? ' selected' : '') + '>🏪 Run rate</option>';
   html += '</select>';
   html += '<select class="inp" style="max-width:190px" onchange="poTrackerSort=this.value;render()">';
   [['newest','🕒 ใหม่ล่าสุด'],['oldest','🕒 เก่าสุด'],['urgent','🔥 รอนานสุดก่อน (PO ลูกค้า)'],['amount_desc','💰 ยอดมาก → น้อย'],['amount_asc','💰 ยอดน้อย → มาก'],['dealer','🏪 Dealer A-Z']].forEach(function(o) {
@@ -649,6 +665,7 @@ function rPOTracker(el) {
     if (poTrackerFlt === 'done' && !r.done) return false;
     if (poTrackerFlt === 'notdone' && r.done) return false;
     if (poTrackerDealerFlt && r.so.dealerName !== poTrackerDealerFlt) return false;
+    if (poTrackerTypeFlt && (r.so.type || (r.so.runrateId ? 'runrate' : 'project')) !== poTrackerTypeFlt) return false;
     if (poTrackerStatusFlt && r.so.status !== poTrackerStatusFlt) return false;
     if (poTrackerReadyFlt === 'ready' && !(r.readiness.total && r.readiness.allReady)) return false;
     if (poTrackerReadyFlt === 'notready' && !(r.readiness.total && !r.readiness.allReady)) return false;
@@ -691,6 +708,7 @@ function rPOTracker(el) {
     html += '<div>';
     html += '<div style="font-weight:600;font-size:14px">' + sanitize(s.soNumber || '-') + (s.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:12px">· PO ' + sanitize(s.customerPO) + '</span>' : '') + '</div>';
     html += '<div style="font-size:12px;color:var(--text2)">🏪 ' + sanitize(s.dealerName || '-') + '</div>';
+    html += _poTrackerTypeBadgeHtml(s);
     html += '<div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
     if (s.dealerId) html += '<a href="#" onclick="go(\'dealerDetail\',{dealerId:\'' + s.dealerId + '\'});return false" style="font-size:11px;color:var(--accent)">🏪 Dealer</a>';
     if (s.pipelineId) html += '<a href="#" onclick="go(\'pipeDetail\',{pipeId:\'' + s.pipelineId + '\'});return false" style="font-size:11px;color:var(--accent)">📋 Pipeline</a>';
