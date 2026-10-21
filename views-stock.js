@@ -58,6 +58,17 @@ function getStockLocations() {
   STOCK_DEFAULT_LOCATIONS.forEach(function(def) {
     if (codes.indexOf(def.code) === -1) { ST.add('stockLocations', def); saved.push(def); }
   });
+  // บันทึกคลัง 1021/8D01 ที่สร้างไว้ตั้งแต่ก่อนมีฟิลด์ bookingExpiry (เพิ่มเข้ามาทีหลัง) จะไม่มีคีย์นี้เลย ทำให้
+  // ฟอร์มแก้ไข lot (showStockEditLotM) และปุ่ม "🔄 เลื่อน" ใน _stockLotRowHtml มองว่าคลังนี้ "ไม่มีกำหนดจอง" แล้วซ่อน
+  // ช่องจองถึงวันที่/ปุ่มเลื่อนไปเลย ทั้งที่จริงมีการจองจริงเกิดขึ้นแล้ว (เห็น bookingExpiryDate ของ lot เอง) —
+  // เติมค่า default กลับให้เฉพาะของที่ยังไม่เคยตั้งไว้ (ไม่ทับค่าที่ผู้ใช้ตั้งเองในหน้า Admin)
+  saved.forEach(function(l) {
+    var def = STOCK_DEFAULT_LOCATIONS.filter(function(d) { return d.code === l.code; })[0];
+    if (def && def.bookingExpiry && !l.bookingExpiry) {
+      l.bookingExpiry = def.bookingExpiry;
+      ST.update('stockLocations', l.id, { bookingExpiry: def.bookingExpiry });
+    }
+  });
   return saved;
 }
 
@@ -397,7 +408,10 @@ function stockSOItemReadyInfo(sku, qty, so) {
     deliveredForThisSO: deliveredForThisSO, bookedForThisSO: bookedForThisSO,
     from0001: from0001, fromQI: fromQI, shortfall: shortfall, reservation: reservation,
     bookingExpiryDate: nearestLot ? (nearestLot.bookingExpiryDate || '') : '', bookingHistory: nearestLot ? (nearestLot.bookingHistory || []) : [],
-    reserveDate: nearestLot ? (nearestLot.dateIn || '').slice(0, 10) : ''
+    reserveDate: nearestLot ? (nearestLot.dateIn || '').slice(0, 10) : '',
+    // id ของ lot จริงที่ใช้คำนวณข้างบน — ให้ UI ฝั่งอื่น (เช่นกล่องจองจริงในฟอร์มแก้ไขรายการสินค้าของ SO) เปิดปุ่ม
+    // "🔄 เลื่อนกำหนดจอง" (showStockExtendBookingM) ตรงไปที่ lot นี้ได้เลย โดยไม่ต้องไปหน้าจัดการคลังแยก
+    lotId: nearestLot ? nearestLot.id : ''
   };
 }
 
@@ -1131,7 +1145,15 @@ function showStockEditLotM(sku, lotId) {
   }
   var elLoc = getStockLocations().filter(function(l) { return l.code === lot.location; })[0];
   if (elLoc && elLoc.bookingExpiry && elLoc.bookingExpiry !== 'none') {
-    body += '<div class="fg"><label>จองถึงวันที่ <small style="color:var(--text2)">(' + (elLoc.bookingExpiry === 'penalty' ? 'เลื่อนได้ ไม่งั้นโดนหักค่าธรรมเนียม' : 'เลื่อนไม่ได้') + ')</small></label><input type="date" id="elot_bexp" value="' + sanitize(lot.bookingExpiryDate || '') + '"></div>';
+    body += '<div class="fg"><label>จองถึงวันที่ <small style="color:var(--text2)">(' + (elLoc.bookingExpiry === 'penalty' ? 'เลื่อนได้ ไม่งั้นโดนหักค่าธรรมเนียม' : 'เลื่อนไม่ได้') + ')</small></label>' +
+      '<div style="display:flex;gap:6px;align-items:center">' +
+      '<input type="date" id="elot_bexp" style="flex:1" value="' + sanitize(lot.bookingExpiryDate || '') + '">';
+    if (elLoc.bookingExpiry === 'penalty') {
+      // ปุ่ม "🔄 เลื่อน" แบบเดียวกับหน้ารายการ lot (_stockLotRowHtml) — เปิด showStockExtendBookingM ตรงๆ เพื่อบันทึก
+      // ผู้อนุมัติ+ประวัติการเลื่อนไปด้วย ไม่ใช่แค่แก้วันที่เฉยๆเหมือนช่องด้านซ้าย (ซึ่งก็ยังใช้ได้ ไม่ได้ตัดทิ้ง)
+      body += '<button class="btn bsm bo" onclick="closeMForce();showStockExtendBookingM(\'' + sku + '\',\'' + lotId + '\')" title="เลื่อนกำหนดจอง (บันทึกผู้อนุมัติ+ประวัติ)">🔄 เลื่อน</button>';
+    }
+    body += '</div></div>';
   }
   body += '<div style="display:flex;gap:8px;margin-top:8px">';
   body += '<button class="btn bp" style="flex:1" onclick="saveStockEditLot(\'' + sku + '\',\'' + lotId + '\')">💾 บันทึก</button>';
