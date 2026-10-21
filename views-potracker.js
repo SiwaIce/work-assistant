@@ -626,6 +626,11 @@ function rPOTracker(el) {
   });
   html += '</select>';
   html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
+  html += '</div>';
+
+  // แยกปุ่ม "มุมมอง/Export/Import" ออกจากแถวตัวกรองค้นหา — เดิมอยู่แถวเดียวกับ search/dealer/type/sort
+  // ยาวจนล้นเป็น 4-5 แถวบนจอเล็ก ทำให้หาปุ่มที่ต้องใช้บ่อย (Export/Import) ยากกว่าที่ควร
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
   html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
   html += '<button class="btn bo" onclick="poTrackerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขที่เอากลับมา Import ได้ (ต่างจาก Export Excel ปกติที่เป็นรายงานอ่านอย่างเดียว)">📝 Export แบบฟอร์มแก้ไข</button>';
