@@ -572,6 +572,7 @@ function rPOTracker(el) {
   html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
   html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
   html += '<button class="btn ' + (poTrackerMainTab === 'reserve1021' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'reserve1021\'?\'summary\':\'reserve1021\');render()">🔖 จองคลัง 1021</button>';
+  html += '<button class="btn ' + (poTrackerMainTab === 'invoice' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'invoice\'?\'summary\':\'invoice\');render()">🧾 Track Invoice</button>';
   html += '</div>';
 
   if (poTrackerMoreFlt) {
@@ -620,6 +621,12 @@ function rPOTracker(el) {
       return true;
     });
     html += _poTrackerReserve1021Html(rsvBaseRows);
+    el.innerHTML = html;
+    return;
+  }
+
+  if (poTrackerMainTab === 'invoice') {
+    html += _poTrackerInvoiceTrackHtml();
     el.innerHTML = html;
     return;
   }
@@ -1154,6 +1161,66 @@ function _poTrackerReserve1021Flatten(baseRows) {
   });
   return list;
 }
+// หน้า Track ตาม Invoice — group ทุกรอบส่งมอบ (shipments[]) ข้ามทุก SO ตามเลข Invoice เดียวกัน พร้อม SKU/ราคา/รวม ต่อรายการ
+function _poTrackerInvoiceTrackHtml() {
+  var groups = (typeof soGroupShipmentsByInvoice === 'function') ? soGroupShipmentsByInvoice() : [];
+  var q = poTrackerSearch.trim().toLowerCase();
+  if (q) {
+    groups = groups.filter(function(g) {
+      var hay = (g.invoiceNumber + ' ' + g.rounds.map(function(r) { return (r.soNumber || '') + ' ' + (r.dealerName || ''); }).join(' ')).toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+  var html = '<div class="card" style="padding:16px">';
+  html += '<div style="font-weight:600;margin-bottom:10px">🧾 Track ตาม Invoice (รวมข้ามหลาย SO ที่ใช้เลขเดียวกัน)</div>';
+  if (!groups.length) {
+    html += '<div class="hint">ยังไม่มี Invoice ที่บันทึกไว้' + (q ? ' ตรงกับคำค้นหา' : '') + '</div></div>';
+    return html;
+  }
+  groups.forEach(function(g) {
+    var soSet = {};
+    var grandTotal = 0;
+    g.rounds.forEach(function(r) { soSet[r.soNumber] = true; });
+    html += '<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:12px">';
+    html += '<div style="padding:10px 14px;background:var(--bg2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">';
+    html += '<div style="font-weight:700">' + qcopyHtml(g.invoiceNumber) + (g.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(g.invoiceDate) + ')</span>' : '') + '</div>';
+    html += '<div style="font-size:11px;color:var(--text2)">' + Object.keys(soSet).length + ' SO</div>';
+    html += '</div>';
+    html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">';
+    html += '<thead><tr style="text-align:left;background:var(--bg2)">' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2)">SO</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2)">Dealer</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2)">SKU</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2)">สินค้า</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2);text-align:center">จำนวน</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2);text-align:right">ราคา/หน่วย</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2);text-align:right">ราคารวม</th>' +
+      '<th style="padding:6px 10px;font-weight:600;color:var(--text2)">DO</th></tr></thead><tbody>';
+    g.rounds.forEach(function(r) {
+      var items = (typeof _soShipRoundItemsWithPrice === 'function') ? _soShipRoundItemsWithPrice(r) : [];
+      items.forEach(function(it) {
+        grandTotal += it.total;
+        html += '<tr style="border-top:1px solid var(--border)">';
+        html += '<td style="padding:6px 10px">' + sanitize(r.soNumber || '-') + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(r.dealerName || '-') + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(it.sku || '-') + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(it.model || '-') + '</td>';
+        html += '<td style="padding:6px 10px;text-align:center">' + (it.qty || 0) + '</td>';
+        html += '<td style="padding:6px 10px;text-align:right">' + fmtMoney(it.unitPrice) + '</td>';
+        html += '<td style="padding:6px 10px;text-align:right">' + fmtMoney(it.total) + '</td>';
+        html += '<td style="padding:6px 10px">' + sanitize(r.doNumber || '-') + '</td>';
+        html += '</tr>';
+      });
+    });
+    html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)">' +
+      '<td colspan="6" style="padding:6px 10px;text-align:right">รวม</td>' +
+      '<td style="padding:6px 10px;text-align:right">' + fmtMoney(grandTotal) + '</td><td></td></tr>';
+    html += '</tbody></table></div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function _poTrackerReserve1021Html(baseRows) {
   var list = _poTrackerReserve1021Flatten(baseRows);
   var cDanger = 0, cWarn = 0, cOk = 0, cNoLink = 0;

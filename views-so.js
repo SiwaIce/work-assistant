@@ -133,6 +133,78 @@ function _soMigrateLegacyShipment(s) {
   return legacy;
 }
 
+// เลข DO รัน format DO-YYYYMMDD-NNN (รันใหม่ทุกวัน) อ่านง่ายกว่า DO-ปี-เลขรันยาวทั้งปี — สแกนทั้ง shipments[] ทุก SO และ field เดิม
+function _soNextDONum() {
+  var today = _td().replace(/-/g, '');
+  var re = new RegExp('^DO-' + today + '-(\\d+)$');
+  var max = 0;
+  soAllShipmentRounds().forEach(function(r) {
+    var m = (r.doNumber || '').match(re);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  ST.getAll('salesOrders').forEach(function(s) {
+    var m = (s.doNumber || '').match(re);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return 'DO-' + today + '-' + String(max + 1).padStart(3, '0');
+}
+
+// รวบรวมทุกรอบส่งมอบของทุก SO เป็น flat list พร้อมข้อมูล SO ที่ผูกด้วย (soNumber/dealerName/รายการราคาต้นฉบับ)
+// ใช้ทั้ง autocomplete เลข Invoice เดิมตอนบันทึกส่งมอบ และหน้า Track ตาม Invoice ใน PO Tracker
+function soAllShipmentRounds() {
+  var out = [];
+  ST.getAll('salesOrders').forEach(function(s) {
+    var shipments = _soMigrateLegacyShipment(s);
+    shipments.forEach(function(sh) {
+      out.push({
+        soId: s.id, soNumber: s.soNumber, dealerName: s.dealerName,
+        date: sh.date, doNumber: sh.doNumber || '', invoiceNumber: sh.invoiceNumber || '', invoiceDate: sh.invoiceDate || '',
+        note: sh.note || '', items: sh.items || [], soItems: s.items || []
+      });
+    });
+  });
+  return out;
+}
+
+// sh.items เก็บแค่ sku/model/qty ที่ส่งจริง (ไม่มีราคา) — จับคู่ราคาต่อหน่วยจาก s.items ปัจจุบันของ SO นั้น
+function _soShipRoundItemsWithPrice(round) {
+  return (round.items || []).map(function(it) {
+    var src = (round.soItems || []).filter(function(x) { return x.sku === it.sku; })[0];
+    var price = src ? (Number(src.unitPrice) || 0) : 0;
+    return { sku: it.sku, model: it.model, qty: it.qty || 0, unitPrice: price, total: price * (it.qty || 0) };
+  });
+}
+
+// group ทุกรอบส่งมอบ (ที่มีเลข Invoice) ข้ามทุก SO ตามเลข Invoice เดียวกัน — ใหม่สุดก่อน — ใช้โดยหน้า Track ตาม Invoice
+function soGroupShipmentsByInvoice() {
+  var rounds = soAllShipmentRounds().filter(function(r) { return r.invoiceNumber; });
+  var byInv = {};
+  rounds.forEach(function(r) {
+    var g = byInv[r.invoiceNumber] = byInv[r.invoiceNumber] || { invoiceNumber: r.invoiceNumber, invoiceDate: '', rounds: [] };
+    if (!g.invoiceDate) g.invoiceDate = r.invoiceDate;
+    g.rounds.push(r);
+  });
+  return Object.keys(byInv).map(function(k) { return byInv[k]; })
+    .sort(function(a, b) { return (b.invoiceDate || '').localeCompare(a.invoiceDate || ''); });
+}
+
+// เลข Invoice ที่ถูกใช้ "วันนี้" ในรอบของ SO ใดก็ได้ พร้อมสรุปสั้นๆ (กี่ SO/รายการ/dealer ไหน) — ให้เลือกใช้ซ้ำ กันพิมพ์เลขผิด/สร้างซ้ำตอนรวมหลาย SO เข้า invoice เดียวกัน
+function soTodayInvoiceOptions() {
+  var today = _td();
+  var rounds = soAllShipmentRounds().filter(function(r) { return r.invoiceNumber && r.date === today; });
+  var byInv = {};
+  rounds.forEach(function(r) {
+    var g = byInv[r.invoiceNumber] = byInv[r.invoiceNumber] || { invoiceNumber: r.invoiceNumber, soSet: {}, dealerSet: {}, itemCount: 0 };
+    g.soSet[r.soNumber] = true;
+    g.dealerSet[r.dealerName] = true;
+    g.itemCount += (r.items || []).length;
+  });
+  return Object.keys(byInv).map(function(k) {
+    var g = byInv[k];
+    return { invoiceNumber: k, soCount: Object.keys(g.soSet).length, itemCount: g.itemCount, dealerNames: Object.keys(g.dealerSet).filter(Boolean).join(', ') };
+  });
+}
+
 // บันทึกการส่งมอบ 1 รอบ — roundItems: [{sku, qty1021, qty0001}] เฉพาะที่ผู้ใช้กรอก qty > 0
 // qty1021 = ส่งจากของที่จองใน 1021 ไว้แล้ว, qty0001 = ส่งตรงจากคลัง 1001 (ยังไม่เคยจอง) ในรอบเดียวกัน
 // มาร์ค lot เป็นส่งมอบแล้วตามจำนวนจริง แล้วเลื่อนสถานะ SO อัตโนมัติ (ไม่ถอยสถานะที่ไปไกลกว่าแล้ว)
@@ -218,15 +290,50 @@ function showSORecordShipmentModal(soId) {
   });
   if (!anyReady) body += '<div class="warn-box" style="font-size:11px;margin-top:8px">⚠️ ยังไม่มีของพร้อมส่งเลย ทั้งที่จองใน 1021 และในคลัง 1001</div>';
   body += '<div style="display:flex;gap:8px;margin-top:10px">';
-  body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(_soNextNum('DO')) + '"></div>';
-  body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label><input id="soShip_inv" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(_soNextNum('INV')) + '"></div>';
+  body += '<div style="flex:1"><label class="lbl">DO Number รอบนี้</label><input id="soShip_do" class="inp" placeholder="DO-20261021-XXX" value="' + sanitize(_soNextDONum()) + '"></div>';
+  body += '<div style="flex:1"><label class="lbl">Invoice Number รอบนี้</label>';
+  var todayInvOpts = (typeof soTodayInvoiceOptions === 'function') ? soTodayInvoiceOptions() : [];
+  if (todayInvOpts.length) {
+    body += '<select id="soShip_invPick" class="inp" style="margin-bottom:4px" onchange="_soPickTodayInvoice(this.value,\'' + soId + '\')">';
+    body += '<option value="">➕ สร้างเลขใหม่ (' + sanitize(_soNextNum('INV')) + ')</option>';
+    todayInvOpts.forEach(function(o) {
+      body += '<option value="' + sanitize(o.invoiceNumber) + '">🔁 ' + sanitize(o.invoiceNumber) + ' — ' + sanitize(o.dealerNames || '-') + ' · ' + o.soCount + ' SO, ' + o.itemCount + ' รายการ</option>';
+    });
+    body += '</select>';
+  }
+  body += '<input id="soShip_inv" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(_soNextNum('INV')) + '" oninput="_soUpdateInvoicePreview(\'' + soId + '\')"></div>';
   body += '</div>';
+  body += '<div id="soShip_invPreview"></div>';
   body += '<div style="display:flex;gap:8px;margin-top:8px">';
   body += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soShip_invDate" class="inp" type="date" value="' + _td() + '"></div>';
   body += '<div style="flex:1"><label class="lbl">หมายเหตุ</label><input id="soShip_note" class="inp" placeholder="ไม่บังคับ"></div>';
   body += '</div>';
   body += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSORecordShipment(\'' + soId + '\')">💾 บันทึกการส่งมอบรอบนี้</button>';
   openM('🚚 บันทึกการส่งมอบรอบนี้ — ' + sanitize(s.soNumber || ''), body);
+}
+
+// รายการ SO/สินค้าที่อยู่ใน Invoice เลขนี้แล้ว (จากรอบของ SO อื่น) — โชว์เตือนก่อนบันทึก กันพิมพ์เลขผิด/เผลอรวมผิดใบ
+function _soInvoicePreviewHtml(invNum, excludeSoId) {
+  if (!invNum) return '';
+  var rounds = soAllShipmentRounds().filter(function(r) { return r.invoiceNumber === invNum && r.soId !== excludeSoId; });
+  if (!rounds.length) return '';
+  var lines = rounds.map(function(r) {
+    var itemsTxt = (r.items || []).map(function(it) { return sanitize(it.model || it.sku) + ' × ' + it.qty; }).join(', ');
+    return '• ' + sanitize(r.soNumber || '-') + ' (' + sanitize(r.dealerName || '-') + ') — ' + itemsTxt;
+  }).join('<br>');
+  return '<div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:8px;padding:10px 12px;margin-top:6px;font-size:11px">' +
+    '<div style="font-weight:700;color:#5b21b6;margin-bottom:4px">🔎 กำลังจะรวมเข้า Invoice ' + sanitize(invNum) + ' ซึ่งมีอยู่แล้ว:</div>' +
+    '<div style="color:#4c1d95;line-height:1.6">' + lines + '</div></div>';
+}
+function _soUpdateInvoicePreview(soId) {
+  var inv = (document.getElementById('soShip_inv') || {}).value || '';
+  var box = document.getElementById('soShip_invPreview');
+  if (box) box.innerHTML = _soInvoicePreviewHtml(inv, soId);
+}
+function _soPickTodayInvoice(v, soId) {
+  var input = document.getElementById('soShip_inv');
+  if (input) input.value = v || _soNextNum('INV');
+  _soUpdateInvoicePreview(soId);
 }
 
 function _saveSORecordShipment(soId) {
@@ -2411,7 +2518,7 @@ function showSOStatusModal(soId) {
 
   // Invoice + DO section — DO:Invoice ผูก 1:1 กับ SO นี้เสมอ (ไม่รองรับส่งบางส่วนหลายรอบ)
   html += '<div id="soSt_invSec" style="display:none"><div style="display:flex;gap:8px">';
-  html += '<div style="flex:1"><label class="lbl">DO Number</label><input id="soSt_doNum" class="inp" placeholder="DO-2026-XXX" value="' + sanitize(s.doNumber||_soNextNum('DO')) + '"></div>';
+  html += '<div style="flex:1"><label class="lbl">DO Number</label><input id="soSt_doNum" class="inp" placeholder="DO-20261021-XXX" value="' + sanitize(s.doNumber||_soNextDONum()) + '"></div>';
   html += '<div style="flex:1"><label class="lbl">Invoice Number</label><input id="soSt_invNum" class="inp" placeholder="INV-2026-XXX" value="' + sanitize(s.invoiceNumber||_soNextNum('INV')) + '"></div>';
   html += '<div style="flex:1"><label class="lbl">Invoice Date</label><input id="soSt_invDate" class="inp" type="date" value="' + (s.invoiceDate||_td()) + '"></div>';
   html += '</div></div>';
