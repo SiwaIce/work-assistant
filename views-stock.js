@@ -439,14 +439,19 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
     }
   }
   h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
+  // จำนวนที่ยังไม่มีการจองจริงใน 1021 ผูกไว้ (ทั้งหมด ถ้าไม่มี lot จริงเลย หรือส่วนที่เหลือ ถ้าจองจริงมาแล้วบางส่วน —
+  // partial lock ดู _soItemRowHtml) ใช้บอกจำนวนในชิปสถานะที่ระบุเอง (จองคลัง/รอของเข้า/PR-PO) ด้านล่างแทนจำนวนเต็มรายการ
+  var unbookedQty = Math.max(0, qty - bookedForThisSO - deliveredForThisSO);
   // ชิปเสริม: ระบุไว้เองว่าจองจากคลัง 1021/8D01 (item.sourceType จากฟอร์มแก้ไขรายการ) — เป็นการประกาศแผนเอง ไม่ได้ผูกกับ lot จริงเหมือนปุ่ม "ยืนยัน & ย้ายเข้า 1021" ด้านบน
-  // ถ้ามี lot จริงผูกกับ SO นี้ใน 1021 แล้ว (badge "✓ พร้อมส่ง...จองใน 1021 แล้ว" ด้านบนโชว์ไปแล้ว) ไม่ต้องซ้ำชิปนี้อีก เพราะ _soItemRowHtml
-  // จะ sync sourceType ให้ตรงกับคลังจริงอัตโนมัติอยู่แล้ว โชว์ซ้ำจะดูเหมือนมี 2 การจองคนละที่
-  if ((item.sourceType === 'reserve_1021' && bookedForThisSO <= 0) || item.sourceType === 'reserve_8d01') {
+  // ถ้ามี lot จริงผูกกับ SO นี้ใน 1021 ครบจำนวนแล้ว (badge "✓ พร้อมส่ง...จองใน 1021 แล้ว" ด้านบนโชว์ไปแล้ว) ไม่ต้องซ้ำชิปนี้อีก เพราะ _soItemRowHtml
+  // จะ sync sourceType ให้ตรงกับคลังจริงอัตโนมัติอยู่แล้ว โชว์ซ้ำจะดูเหมือนมี 2 การจองคนละที่ — แต่ถ้าจองจริงมาแค่บางส่วน
+  // (unbookedQty > 0) ยังต้องโชว์ชิปนี้สำหรับส่วนที่เหลือที่ยังไม่ได้จองจริง
+  if ((item.sourceType === 'reserve_1021' && unbookedQty > 0) || item.sourceType === 'reserve_8d01') {
     var resLoc = item.sourceType === 'reserve_1021' ? '1021' : '8D01';
     var resIcon = item.sourceType === 'reserve_1021' ? '📌' : '🧳';
+    var resQtyLabel = (bookedForThisSO > 0 ? 'อีก ' : '') + unbookedQty + ' ชิ้น';
     h += '<div style="font-size:10px;margin-top:2px;margin-bottom:3px">';
-    h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:#166534;display:inline-block;margin-right:4px">' + resIcon + ' จองคลัง ' + resLoc + ' ' + qty + ' ชิ้น</span>';
+    h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:#166534;display:inline-block;margin-right:4px">' + resIcon + ' จองคลัง ' + resLoc + ' ' + resQtyLabel + '</span>';
     if (item.reserveDate) {
       h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #86efac55;background:#86efac22;color:#166534;display:inline-block;margin-right:4px">🗓️ จองเมื่อ ' + fD(item.reserveDate) + '</span>';
     }
@@ -464,8 +469,9 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
   // ชิปเสริม: สินค้า Run rate รอรอบสั่งเข้า stock (ไม่ได้เปิด PR/PO ต่อใบ) — ดึงจาก item.restockExpectedDate ที่กรอกไว้ในฟอร์มแก้ไขรายการ
   // สีอำพันแยกจากชิป "รอ PR/PO" สีส้มแดงด้านล่าง เพราะเป็นคนละสถานะกัน (ดูสถานะจริงจากคลังเสมอ ชิปนี้แค่โชว์แผนที่พิมพ์ไว้)
   if (item.sourceType === 'restock') {
+    var restockQtyLabel = (bookedForThisSO > 0 ? ' (อีก ' + unbookedQty + ' ชิ้น)' : '');
     h += '<div style="font-size:10px;margin-top:2px;margin-bottom:3px">';
-    h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fcd34d55;background:#fcd34d22;color:#92400e;display:inline-block;margin-right:4px">⏳ รอของเข้า (Run rate)</span>';
+    h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fcd34d55;background:#fcd34d22;color:#92400e;display:inline-block;margin-right:4px">⏳ รอของเข้า (Run rate)' + restockQtyLabel + '</span>';
     if (item.restockExpectedDate) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fcd34d55;background:#fcd34d22;color:#92400e;display:inline-block">คาดว่าเข้า stock ' + fD(item.restockExpectedDate) + '</span>';
     h += '</div>';
   }
@@ -473,6 +479,7 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
   if (item.sourceType === 'pr_po' && (item.prpoStatusId || item.prpoStatus || item.prpoSubmittedDate || item.prpoExpectedDate)) {
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(item) : (item.prpoStatus || '');
     h += '<div style="font-size:10px;margin-top:2px;margin-bottom:3px">';
+    if (bookedForThisSO > 0) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block;margin-right:4px">🛒 PR/PO อีก ' + unbookedQty + ' ชิ้น</span>';
     if (item.prpoSubmittedDate) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block;margin-right:4px">🛒 ยื่น PR ' + fD(item.prpoSubmittedDate) + '</span>';
     if (stLabel) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block;margin-right:4px">' + sanitize(stLabel) + '</span>';
     if (item.prpoExpectedDate) h += '<span style="padding:2px 7px;border-radius:6px;border:1px solid #fdba7455;background:#fdba7422;color:#9a3412;display:inline-block">คาดว่าจะถึง ' + fD(item.prpoExpectedDate) + '</span>';

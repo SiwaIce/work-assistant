@@ -48,7 +48,10 @@ function _poTrackerItemBucket(it, so) {
   var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, so) : null;
   if (info) {
     if (qty > 0 && info.deliveredForThisSO >= qty) return 'shipped';
-    if (info.bookedForThisSO > 0) return 'reserved';
+    // จองคลังจริงครบจำนวนแล้ว (หรือรวมกับส่งไปแล้วครบ) ถือว่า "จอง" เต็มรายการ — แต่ถ้าจองจริงมาแค่บางส่วน
+    // (partial lock) ส่วนที่เหลือยังต้องไปต่อตาม sourceType ที่ประกาศไว้ (เช่น pr_po) ไม่งั้น PO Tracker จะไม่เห็นว่า
+    // ยังต้องเปิด PR/PO เพิ่มสำหรับส่วนที่เหลือ เพราะถูกจัดเป็น "จอง" เต็มๆไปแล้วทั้งที่จองจริงแค่บางส่วน
+    if (info.bookedForThisSO > 0 && (info.bookedForThisSO + info.deliveredForThisSO) >= qty) return 'reserved';
   }
   if (it.sourceType === 'pr_po') return 'pending_prpo';
   if (it.sourceType === 'restock') return 'pending_restock';
@@ -61,24 +64,29 @@ function _poTrackerItemBucket(it, so) {
 // รายการสินค้าที่ต้อง PR/PO เพิ่ม หรือจองจากคลังยังไม่ครบ ใช้สรุป remark ต่อรายการ (คล้าย mockup เดิม)
 function _poTrackerItemRemark(it, so) {
   var qty = Number(it.qty) || 0;
+  // จองคลังจริงมาแล้วบางส่วน (partial lock, ดู _soItemRowHtml) — ฟิลด์ sourceType/prpo/restock ด้านล่างอธิบาย
+  // แค่ "ส่วนที่เหลือ" ไม่ใช่ทั้งรายการ ต้องโชว์จำนวนที่เหลือจริง + บอกไว้ว่าจองคลังแล้วกี่ชิ้น ไม่งั้นจะดูเหมือน
+  // ต้อง PR/PO ทั้ง qty ทั้งที่จริงจองคลังไปแล้วส่วนหนึ่ง
+  var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, so) : null;
+  var bookedNote = (info && info.bookedForThisSO > 0 && info.bookedForThisSO < qty) ? ' (จองคลังแล้ว ' + info.bookedForThisSO + '/' + qty + ' ชิ้น)' : '';
+  var remQty = (info && info.bookedForThisSO > 0) ? Math.max(0, qty - info.bookedForThisSO - info.deliveredForThisSO) : qty;
   if (it.sourceType === 'pr_po') {
-    var bits = ['🛒 PR/PO ' + qty + ' ชิ้น'];
+    var bits = ['🛒 PR/PO ' + remQty + ' ชิ้น' + bookedNote];
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
     if (stLabel) bits.push(stLabel);
     if (it.prpoExpectedDate) bits.push('คาดว่าได้ ' + fD(it.prpoExpectedDate));
     return bits.join(' — ');
   }
   if (it.sourceType === 'restock') {
-    var rbits = ['⏳ รอของเข้า (Run rate) ' + qty + ' ชิ้น'];
+    var rbits = ['⏳ รอของเข้า (Run rate) ' + remQty + ' ชิ้น' + bookedNote];
     if (it.restockExpectedDate) rbits.push('คาดว่าเข้า stock ' + fD(it.restockExpectedDate));
     return rbits.join(' — ');
   }
-  if (it.sourceType === 'reserve_1021') return '📌 จองคลัง 1021 ' + qty + ' ชิ้น';
-  if (it.sourceType === 'reserve_8d01') return '🧳 จองคลัง 8D01 ' + qty + ' ชิ้น';
+  if (it.sourceType === 'reserve_1021') return '📌 จองคลัง 1021 ' + remQty + ' ชิ้น' + bookedNote;
+  if (it.sourceType === 'reserve_8d01') return '🧳 จองคลัง 8D01 ' + remQty + ' ชิ้น' + bookedNote;
   if (it.sourceType === 'central_wh') return '🏢 ส่งจากคลังกลาง';
   // ยังไม่ระบุ sourceType — fallback ไปดูความพร้อมส่งจริงจากสต็อก
-  if (it.sku && typeof stockSOItemReadyInfo === 'function') {
-    var info = stockSOItemReadyInfo(it.sku, qty, so);
+  if (info) {
     if (qty > 0 && info.deliveredForThisSO >= qty) return '✅ ส่งแล้ว';
     if (info.ready) return '✅ พร้อมส่ง';
     if (info.shortfall > 0) return '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';

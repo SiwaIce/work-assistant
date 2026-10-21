@@ -463,21 +463,24 @@ function _soSummaryItemStatusInfo(it, s) {
   var status = '—', note = '';
   // เช็คว่าส่งมอบจริงครบแล้วหรือยังก่อนเสมอ (เหมือน _poTrackerItemBucket) — ไม่งั้นรายการที่ส่งแล้วจะโผล่เป็น "พร้อมส่ง" ตาม sourceType เดิมที่ยังไม่ได้ลบ
   var readyInfo = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, s) : null;
+  // จองคลังจริงมาแล้วบางส่วน (partial lock) — สถานะ/qty ด้านล่างอธิบายแค่ "ส่วนที่เหลือ" ไม่ใช่ทั้งรายการ (ดูเหตุผลเดียวกับ _poTrackerItemRemark)
+  var bookedNote = (readyInfo && readyInfo.bookedForThisSO > 0 && readyInfo.bookedForThisSO < qty) ? ' (จองคลังแล้ว ' + readyInfo.bookedForThisSO + '/' + qty + ' ชิ้น)' : '';
+  var remQty = (readyInfo && readyInfo.bookedForThisSO > 0) ? Math.max(0, qty - readyInfo.bookedForThisSO - readyInfo.deliveredForThisSO) : qty;
   if (readyInfo && qty > 0 && readyInfo.deliveredForThisSO >= qty) {
     status = '✅ ส่งแล้ว';
   } else if (it.sourceType === 'pr_po') {
-    status = '🛒 รอ PR/PO';
+    status = '🛒 รอ PR/PO ' + remQty + ' ชิ้น' + bookedNote;
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
     if (stLabel) note = stLabel;
     if (it.prpoExpectedDate) note = (note ? note + ' — ' : '') + 'คาดว่าได้ ' + fD(it.prpoExpectedDate);
   } else if (it.sourceType === 'restock') {
-    status = '⏳ รอของเข้า (Run rate)';
+    status = '⏳ รอของเข้า (Run rate) ' + remQty + ' ชิ้น' + bookedNote;
     if (it.restockExpectedDate) note = 'คาดว่าเข้า stock ' + fD(it.restockExpectedDate);
   } else if (it.sourceType === 'reserve_1021') {
-    status = '📌 จองคลัง 1021 (' + qty + ' ชิ้น)';
+    status = '📌 จองคลัง 1021 (' + remQty + ' ชิ้น)' + bookedNote;
     if (it.reserveExpiryDate) note = 'จองถึง ' + fD(it.reserveExpiryDate);
   } else if (it.sourceType === 'reserve_8d01') {
-    status = '🧳 จองคลัง 8D01 (' + qty + ' ชิ้น)';
+    status = '🧳 จองคลัง 8D01 (' + remQty + ' ชิ้น)' + bookedNote;
     if (it.reserveExpiryDate) note = 'จองถึง ' + fD(it.reserveExpiryDate);
   } else if (it.sourceType === 'central_wh') {
     status = '🏢 ส่งจากคลังกลาง';
@@ -2002,21 +2005,30 @@ function _soPrpoStatusChanged(idx) {
 // so (ไม่บังคับ): ส่งมาเมื่อแก้ไขรายการของ SO ที่มีอยู่แล้ว — ใช้เช็คว่ามี lot จองใน 1021 จริงผูกกับ SO
 // นี้อยู่หรือไม่ (จัดการคลัง) ถ้ามี ให้ sourceType/วันจองถึง "ตามคลังจริง" เป็นหลักเสมอ (ล็อกไว้ ไม่ให้พิมพ์ทับมือ)
 // เพื่อไม่ให้ฟอร์มนี้โชว์ "ยังไม่ระบุ" ทั้งที่จัดการคลังจองไปแล้วจริง (ดูที่มาปัญหานี้ในข้อความ user ที่ขอให้แก้)
+//
+// แบ่งจำนวนต่อแหล่ง (เช่น สั่ง 24 ชิ้น จองใน 1021 จริงแค่ 12 อีก 12 ต้อง PR/PO): ถ้าจองจริงไม่ครบจำนวน (partial lock)
+// ไม่ล็อก dropdown ทั้งแถวอีกต่อไป — ล็อกเฉพาะ "ส่วนที่จองจริงแล้ว" (กล่องแยกต่างหาก มีแค่วันจอง/วันจองถึงให้แก้ ซิงก์
+// กลับ lot จริงเหมือนเดิม) ส่วน dropdown + ฟิลด์ย่อยเดิม (soI_src_*) ใช้บอกสถานะของ "ส่วนที่เหลือ" แทน (เช่น pr_po/restock)
+// เพื่อให้มีที่กรอกว่าอีกกี่ชิ้นต้อง PR/PO — ถ้าจองจริงครบจำนวนพอดี (full lock) ยังล็อกทั้งแถวเหมือนเดิมทุกประการ
 function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
   item = item || {};
   var sourceType = item.sourceType || '';
   var reserveDate = item.reserveDate || '';
   var reserveExpiryDate = item.reserveExpiryDate || '';
-  var realLock = null;
+  var realLock = null, lockRemainingQty = 0;
   if (so && sku && typeof stockSOItemReadyInfo === 'function') {
     var stockInfo = stockSOItemReadyInfo(sku, qty, so);
     if (stockInfo && stockInfo.tracked && stockInfo.bookedForThisSO > 0) {
       realLock = stockInfo;
-      sourceType = 'reserve_1021';
-      reserveDate = stockInfo.reserveDate || reserveDate;
-      reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
+      lockRemainingQty = Math.max(0, (Number(qty) || 0) - stockInfo.bookedForThisSO);
+      if (lockRemainingQty <= 0) {
+        sourceType = 'reserve_1021';
+        reserveDate = stockInfo.reserveDate || reserveDate;
+        reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
+      }
     }
   }
+  var isPartialLock = realLock && lockRemainingQty > 0;
   var srcOptions = Object.keys(SO_ITEM_SOURCE_TYPES).map(function(k) {
     return '<option value="' + k + '"' + (k === sourceType ? ' selected' : '') + '>' + SO_ITEM_SOURCE_TYPES[k].label + '</option>';
   }).join('');
@@ -2032,10 +2044,19 @@ function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
   if (Number(item.cashDiscountPercent) > 0) {
     h += '<div class="hint" style="font-size:10px;color:#f59e0b;margin:2px 0 0 2px">💵 ราคานี้หักส่วนลดเงินสด ' + item.cashDiscountPercent + '% แล้ว (ราคาเดิม ฿' + fmtMoney(item._origUnitPrice || 0) + '/หน่วย)</div>';
   }
-  var srcDisabledAttr = realLock ? ' disabled title="ล็อกไว้ตามคลังจริง — แก้ได้ที่หน้า จัดการคลัง เท่านั้น"' : '';
+  if (isPartialLock) {
+    h += '<div style="border:1px solid #86efac55;background:#86efac11;border-radius:6px;padding:5px 7px;margin-top:4px">' +
+      '<div class="hint" style="font-size:10px;color:#16a34a">🔒 จองคลัง 1021 จริงแล้ว ' + realLock.bookedForThisSO + ' จาก ' + qty + ' ชิ้น (ส่วนนี้ล็อกไว้ — ยกเลิก/ย้ายที่หน้า "📦 จัดการคลัง" แทน) แก้วันจองของส่วนนี้ได้ตรงนี้เลย</div>' +
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+      '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่ (ส่วนที่จองคลังจริง)" value="' + sanitize(realLock.reserveDate || '') + '" id="soI_lockResDate_' + idx + '">' +
+      '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่ (ส่วนที่จองคลังจริง)" value="' + sanitize(realLock.bookingExpiryDate || '') + '" id="soI_lockResExp_' + idx + '">' +
+      '</div></div>';
+    h += '<div class="hint" style="font-size:10px;margin:5px 0 2px 2px">อีก ' + lockRemainingQty + ' ชิ้นที่เหลือ — ระบุสถานะ:</div>';
+  }
+  var srcDisabledAttr = (realLock && !isPartialLock) ? ' disabled title="ล็อกไว้ตามคลังจริง — แก้ได้ที่หน้า จัดการคลัง เท่านั้น"' : '';
   h += '<div style="display:flex;gap:6px;align-items:center;margin-top:4px">' +
     '<select class="inp" style="flex:1" id="soI_src_' + idx + '"' + srcDisabledAttr + ' onchange="_soItemSourceChanged(\'' + idx + '\')">' + srcOptions + '</select></div>';
-  if (realLock) {
+  if (realLock && !isPartialLock) {
     h += '<div class="hint" style="font-size:10px;color:#16a34a;margin:2px 0 0 2px">🔒 ซิงก์จากคลังจริงอัตโนมัติ (จองใน 1021 แล้ว ' + realLock.bookedForThisSO + ' ชิ้น) — แก้ไว้เป็นประเภทอื่นไม่ได้ (ต้องไปยกเลิก/ย้าย lot ที่หน้า "📦 จัดการคลัง") แต่แก้วันจองได้ตรงนี้เลย จะอัปเดตกลับเข้า lot ในคลังจริงให้ทันที</div>';
   }
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
@@ -2051,8 +2072,8 @@ function _soItemRowHtml(idx, model, qty, price, sku, item, so) {
     '</div>';
   var resDisplay = (sourceType === 'reserve_1021' || sourceType === 'reserve_8d01') ? 'flex' : 'none';
   h += '<div id="soI_res_' + idx + '" style="display:' + resDisplay + ';gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
-    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่ — แก้ตรงนี้ได้ ' + (realLock ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_' + idx + '">' +
-    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่ — แก้ตรงนี้ได้ ' + (realLock ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองวันที่" title="จองวันที่ — แก้ตรงนี้ได้ ' + ((realLock && !isPartialLock) ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveDate || '') + '" id="soI_resDate_' + idx + '">' +
+    '<input class="inp" type="date" style="flex:1;min-width:110px" placeholder="จองถึงวันที่" title="จองถึงวันที่ — แก้ตรงนี้ได้ ' + ((realLock && !isPartialLock) ? 'จะอัปเดต lot ในคลังจริงให้ด้วย' : '(ไม่บังคับ)') + '" value="' + sanitize(reserveExpiryDate || '') + '" id="soI_resExp_' + idx + '">' +
     '</div>';
   h += '</div>';
   return h;
@@ -2090,6 +2111,15 @@ function _soReadItemSourceFields(row) {
     out.reserveDate = (resDateEl && resDateEl.value) ? resDateEl.value : _td();
     out.reserveExpiryDate = resExpEl ? resExpEl.value : '';
   }
+  // ส่วนที่จองคลังจริงแล้วบางส่วน (partial lock, ดู _soItemRowHtml) มีกล่องวันจองแยกต่างหากเสมอไม่ว่า
+  // dropdown ด้านบนจะเลือกสถานะอะไรไว้สำหรับส่วนที่เหลือ (reserveDate/reserveExpiryDate ของรายการนี้ผูกกับ
+  // lot จริงใน 1021 เสมอ ต้องอ่านแยกไม่งั้นค่าจะหายไปทับด้วยค่าจากสาขา sourceType ด้านบน)
+  var lockDateEl = row.querySelector('[id^="soI_lockResDate_"]');
+  if (lockDateEl) {
+    var lockExpEl = row.querySelector('[id^="soI_lockResExp_"]');
+    out.reserveDate = lockDateEl.value || out.reserveDate || _td();
+    out.reserveExpiryDate = (lockExpEl ? lockExpEl.value : '') || out.reserveExpiryDate || '';
+  }
   return out;
 }
 
@@ -2104,23 +2134,36 @@ function showSOItemStatusM(soId, idx) {
   var sourceType = it.sourceType || '';
   var reserveDate = it.reserveDate || '';
   var reserveExpiryDate = it.reserveExpiryDate || '';
-  var realLock = null;
+  var realLock = null, lockRemainingQty = 0;
   if (it.sku && typeof stockSOItemReadyInfo === 'function') {
     var stockInfo = stockSOItemReadyInfo(it.sku, it.qty, s);
     if (stockInfo && stockInfo.tracked && stockInfo.bookedForThisSO > 0) {
       realLock = stockInfo;
-      sourceType = 'reserve_1021';
-      reserveDate = stockInfo.reserveDate || reserveDate;
-      reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
+      lockRemainingQty = Math.max(0, (Number(it.qty) || 0) - stockInfo.bookedForThisSO);
+      if (lockRemainingQty <= 0) {
+        sourceType = 'reserve_1021';
+        reserveDate = stockInfo.reserveDate || reserveDate;
+        reserveExpiryDate = stockInfo.bookingExpiryDate || reserveExpiryDate;
+      }
     }
   }
+  var isPartialLock = realLock && lockRemainingQty > 0;
   var srcOptions = Object.keys(SO_ITEM_SOURCE_TYPES).map(function(k) {
     return '<option value="' + k + '"' + (k === sourceType ? ' selected' : '') + '>' + SO_ITEM_SOURCE_TYPES[k].label + '</option>';
   }).join('');
   var body = '<div style="font-size:12px;margin-bottom:8px"><b>' + sanitize(it.model || '') + '</b> × ' + (it.qty||0) + '</div>';
-  var srcDisabledAttr = realLock ? ' disabled title="ล็อกไว้ตามคลังจริง — แก้ได้ที่หน้า จัดการคลัง เท่านั้น"' : '';
+  if (isPartialLock) {
+    body += '<div style="border:1px solid #86efac55;background:#86efac11;border-radius:6px;padding:5px 7px;margin-bottom:8px">' +
+      '<div class="hint" style="font-size:10px;color:#16a34a">🔒 จองคลัง 1021 จริงแล้ว ' + realLock.bookedForThisSO + ' จาก ' + (it.qty||0) + ' ชิ้น (ส่วนนี้ล็อกไว้ — ยกเลิก/ย้ายที่หน้า "📦 จัดการคลัง" แทน) แก้วันจองของส่วนนี้ได้ตรงนี้เลย</div>' +
+      '<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
+      '<input class="inp" type="date" style="flex:1;min-width:110px" title="จองวันที่ (ส่วนที่จองคลังจริง)" value="' + sanitize(realLock.reserveDate || '') + '" id="soI_lockResDate_qs">' +
+      '<input class="inp" type="date" style="flex:1;min-width:110px" title="จองถึงวันที่ (ส่วนที่จองคลังจริง)" value="' + sanitize(realLock.bookingExpiryDate || '') + '" id="soI_lockResExp_qs">' +
+      '</div></div>';
+    body += '<div class="hint" style="font-size:10px;margin:0 0 4px 2px">อีก ' + lockRemainingQty + ' ชิ้นที่เหลือ — ระบุสถานะ:</div>';
+  }
+  var srcDisabledAttr = (realLock && !isPartialLock) ? ' disabled title="ล็อกไว้ตามคลังจริง — แก้ได้ที่หน้า จัดการคลัง เท่านั้น"' : '';
   body += '<div class="fg"><label>สถานะ</label><select class="inp" id="soI_src_qs"' + srcDisabledAttr + ' onchange="_soItemSourceChanged(\'qs\')">' + srcOptions + '</select></div>';
-  if (realLock) {
+  if (realLock && !isPartialLock) {
     body += '<div class="hint" style="font-size:10px;color:#16a34a;margin:2px 0 8px 2px">🔒 ซิงก์จากคลังจริงอัตโนมัติ (จองใน 1021 แล้ว ' + realLock.bookedForThisSO + ' ชิ้น) — แก้ไว้เป็นประเภทอื่นไม่ได้ที่นี่ ไปที่ "📦 จัดการคลัง" แทน แต่แก้วันจองได้ตรงนี้เลย จะอัปเดตกลับเข้า lot ในคลังจริงให้ทันที</div>';
   }
   var prpoDisplay = sourceType === 'pr_po' ? 'flex' : 'none';
@@ -2159,7 +2202,9 @@ function saveSOItemStatus(soId, idx) {
   var items = s.items.slice();
   items[idx] = Object.assign({}, it, fields);
 
-  if (fields.sourceType === 'reserve_1021' && it.sku && typeof stockSyncSOItemReservation === 'function') {
+  // ไม่เช็คแค่ sourceType==='reserve_1021' อีกต่อไป — ถ้าจองคลังจริงบางส่วน (partial lock) ฟิลด์
+  // reserveDate มาจากกล่องล็อกเสมอแม้ dropdown จะเลือกสถานะอื่นไว้สำหรับส่วนที่เหลือ (ดู _soReadItemSourceFields)
+  if (it.sku && fields.reserveDate && typeof stockSyncSOItemReservation === 'function') {
     stockSyncSOItemReservation(it.sku, soId, fields.reserveDate, fields.reserveExpiryDate);
   }
 
@@ -2440,10 +2485,13 @@ function saveSOItemsEdit(soId) {
   if (!items.length) { alert('กรุณาใส่รายการสินค้าอย่างน้อย 1 รายการ'); return; }
 
   // แก้วันจอง/วันจองถึงของรายการที่จองจาก 1021 ตรงนี้ได้เลย — sync กลับเข้า lot จริงในคลังให้ด้วย (ซิงก์ 2 ทาง
-  // กับหน้าจัดการคลัง ไม่ต้องไปเปิดอีกหน้าแยกแค่เพื่อแก้วันที่)
+  // กับหน้าจัดการคลัง ไม่ต้องไปเปิดอีกหน้าแยกแค่เพื่อแก้วันที่) ไม่เช็คแค่ sourceType==='reserve_1021' อีกต่อไป
+  // เพราะตอนจองคลังจริงบางส่วน (partial lock) dropdown ด้านบนอาจเลือกสถานะอื่นไว้สำหรับส่วนที่เหลือ (เช่น pr_po)
+  // แต่ reserveDate/reserveExpiryDate ที่อ่านมาจากกล่องล็อกยังต้อง sync กลับ lot จริงเสมอ — ฟังก์ชันนี้แตะเฉพาะ
+  // lot ที่ผูกกับ SO นี้จริงใน 1021 อยู่แล้ว ไม่มีผลถ้าไม่มี lot จริง จึงเรียกแบบไม่มีเงื่อนไขได้อย่างปลอดภัย
   if (typeof stockSyncSOItemReservation === 'function') {
     items.forEach(function(it) {
-      if (it.sourceType === 'reserve_1021' && it.sku) stockSyncSOItemReservation(it.sku, soId, it.reserveDate, it.reserveExpiryDate);
+      if (it.sku && it.reserveDate) stockSyncSOItemReservation(it.sku, soId, it.reserveDate, it.reserveExpiryDate);
     });
   }
 
