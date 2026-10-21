@@ -1247,14 +1247,59 @@ function _poTrackerExportEditTemplateXlsxImpl(soList, filenameSuffix) {
 }
 
 function showPoTrackerImportModal() {
-  var html = '<div class="hint" style="margin-bottom:8px">ใช้ไฟล์ที่ได้จากปุ่ม "📝 Export แบบฟอร์มแก้ไข" เท่านั้น (ต้องมีชีต "แก้ไขรายการ" พร้อมคอลัมน์ SO_ID/ITEM_IDX/SKU) — ห้ามแก้ 3 คอลัมน์นั้น แก้ได้แค่คอลัมน์อื่น แล้วอัปโหลดไฟล์กลับมาที่นี่</div>';
+  _poTrkImportSearchTerm = '';
+  var html = '<div class="hint" style="margin-bottom:8px">ใช้ไฟล์ที่ได้จากปุ่ม "📝 Export แบบฟอร์มแก้ไข" เท่านั้น (ต้องมีชีต "แก้ไขรายการ" พร้อมคอลัมน์ SO_ID/ITEM_IDX/SKU) — ห้ามแก้ 3 คอลัมน์นั้น แก้ได้แค่คอลัมน์อื่น แล้วอัปโหลดไฟล์กลับมาที่นี่ หลัง preview ขึ้นแล้ว ค้นหา/ติ๊กเลือกเฉพาะแถวที่ต้องการ import ได้ก่อนกดบันทึกจริง</div>';
   html += '<input type="file" id="poTrkImpFile" accept=".xlsx,.xls" class="fi" onchange="previewPoTrackerImport(this)">';
   html += '<div id="poTrkImpPreview"></div>';
   html += '<label class="hint" id="poTrkImpConfirmWrap" style="display:none;margin-top:10px;display:flex;gap:6px;align-items:flex-start">' +
-    '<input type="checkbox" id="poTrkImpConfirm" style="margin-top:3px"> <span>ฉันตรวจสอบรายการเปลี่ยนแปลงด้านบนแล้ว และต้องการบันทึกทับข้อมูลเดิม</span></label>';
-  html += '<button class="btn bp btn-full" id="poTrkImpBtn" style="margin-top:8px;display:none" onclick="applyPoTrackerImport()">💾 บันทึกการแก้ไขทั้งหมด</button>';
+    '<input type="checkbox" id="poTrkImpConfirm" style="margin-top:3px"> <span>ฉันตรวจสอบรายการเปลี่ยนแปลงที่ "✅ เลือกไว้" ด้านบนแล้ว และต้องการบันทึกทับข้อมูลเดิม</span></label>';
+  html += '<button class="btn bp btn-full" id="poTrkImpBtn" style="margin-top:8px;display:none" onclick="applyPoTrackerImport()">💾 บันทึกเฉพาะรายการที่เลือกไว้</button>';
   html += '<div id="poTrkImpUndoWrap"></div>';
   openM('📥 Import แบบฟอร์มแก้ไข PO Tracker', html);
+}
+
+// state ของหน้า preview import — ไม่เก็บใน window._poTrkImportPending เพราะอันนั้นคือผลจากการ parse ไฟล์
+// (parse ใหม่ทุกครั้งที่เลือกไฟล์) ส่วนพวกนี้คือ UI state ของหน้า preview เอง อยู่ได้ข้ามการ re-render
+var _poTrkImportSearchTerm = '';
+var _poTrkImportSel = { items: {}, status: {} }; // key: soId+'|'+idx หรือ soId → true/false (เลือก/ไม่เลือกจะ import)
+
+function _poTrackerImportSearchChanged(v) {
+  _poTrkImportSearchTerm = (v || '').trim().toLowerCase();
+  _poTrackerRenderImportPreview();
+}
+function _poTrackerImportToggleItem(key, checked) { _poTrkImportSel.items[key] = checked; _poTrackerRenderImportPreview(); }
+function _poTrackerImportToggleStatus(soId, checked) { _poTrkImportSel.status[soId] = checked; _poTrackerRenderImportPreview(); }
+function _poTrackerImportBulkSelectFiltered(val) {
+  var pending = window._poTrkImportPending;
+  if (!pending) return;
+  var view = _poTrackerImportFilteredView();
+  view.statusRows.forEach(function(r) { _poTrkImportSel.status[r.soId] = val; });
+  view.itemRows.forEach(function(r) { _poTrkImportSel.items[r.key] = val; });
+  _poTrackerRenderImportPreview();
+}
+
+function _poTrackerImportMatches(hay) { return !_poTrkImportSearchTerm || hay.toLowerCase().indexOf(_poTrkImportSearchTerm) !== -1; }
+
+// รวมข้อมูลที่ parse ไว้ (pending) เข้ากับคำค้นหาปัจจุบัน — คืนรายการที่ "ตรงกับคำค้นหา" (ใช้ทั้งแสดงผลและ bulk select)
+function _poTrackerImportFilteredView() {
+  var pending = window._poTrkImportPending;
+  var statusRows = [], itemRows = [];
+  if (!pending) return { statusRows: statusRows, itemRows: itemRows };
+  Object.keys(pending.statusBySO).forEach(function(soId) {
+    var c = pending.statusBySO[soId], so = ST.getOne('salesOrders', soId);
+    if (!so) return;
+    if (_poTrackerImportMatches(so.soNumber + ' ' + so.dealerName)) statusRows.push({ soId: soId, so: so, change: c });
+  });
+  Object.keys(pending.changedBySO).forEach(function(soId) {
+    var g = pending.changedBySO[soId];
+    g.items.forEach(function(x) {
+      var key = soId + '|' + x.idx;
+      if (_poTrackerImportMatches(g.so.soNumber + ' ' + g.so.dealerName + ' ' + (x.it.sku || '') + ' ' + (x.it.model || ''))) {
+        itemRows.push({ key: key, soId: soId, so: g.so, x: x });
+      }
+    });
+  });
+  return { statusRows: statusRows, itemRows: itemRows };
 }
 
 function previewPoTrackerImport(input) {
@@ -1405,69 +1450,127 @@ function _previewPoTrackerImport_impl(input) {
 
     window._poTrkImportPending = { changedBySO: changedBySO, statusBySO: statusBySO, rejects: rejects };
 
-    var soIds = Object.keys(changedBySO);
-    var itemChangeCount = soIds.reduce(function(n, id) { return n + changedBySO[id].items.length; }, 0);
-    var statusChangeCount = Object.keys(statusBySO).length;
-    var bigChangeCount = soIds.reduce(function(n, id) { return n + changedBySO[id].items.reduce(function(m, x) { return m + x.fields.filter(function(f){return f.big;}).length; }, 0); }, 0);
+    // reset ตัวเลือก — ค่าเริ่มต้นติ๊ก "เลือก import" ไว้ให้ทุกแถวที่ไม่ถูก reject (ผู้ใช้ค่อยไปติ๊กออกเองทีละแถว)
+    _poTrkImportSel = { items: {}, status: {} };
+    Object.keys(statusBySO).forEach(function(soId) { _poTrkImportSel.status[soId] = true; });
+    Object.keys(changedBySO).forEach(function(soId) {
+      changedBySO[soId].items.forEach(function(x) { _poTrkImportSel.items[soId + '|' + x.idx] = true; });
+    });
+    _poTrkImportSearchTerm = '';
 
-    var h = '<div style="font-size:12px;color:var(--text2);background:#0f172a;border-radius:6px;padding:8px;margin:8px 0">' +
-      '✅ มีการเปลี่ยนแปลง <strong style="color:#f59e0b">' + itemChangeCount + ' รายการสินค้า</strong>' +
-      (statusChangeCount ? ' + สถานะ SO <strong style="color:#f59e0b">' + statusChangeCount + ' ใบ</strong>' : '') +
-      (bigChangeCount ? ' · <span style="color:#ef4444">⚠️ ' + bigChangeCount + ' ค่าที่เปลี่ยนมากกว่า 50% (จำนวน/ราคา) ตรวจสอบดีๆ</span>' : '') +
-      (rejects.length ? ' · <span style="color:#ef4444">⚠️ ' + rejects.length + ' แถว/ใบถูกข้าม (ดูเหตุผลด้านล่าง)</span>' : '') +
-      '</div>';
-
-    if (statusChangeCount) {
-      h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px">การเปลี่ยนสถานะ SO</div>';
-      h += '<div style="max-height:140px;overflow-y:auto;border:1px solid #334155;border-radius:8px;margin-bottom:10px">';
-      Object.keys(statusBySO).forEach(function(soId) {
-        var c = statusBySO[soId], so = ST.getOne('salesOrders', soId);
-        h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11.5px">' + sanitize(so.soNumber || soId) +
-          ': <span style="color:var(--text2)">' + sanitize(_poTrackerSoStatusLabel(c.from)) + '</span> → <span style="color:#22c55e">' + sanitize(_poTrackerSoStatusLabel(c.to)) + '</span></div>';
-      });
-      h += '</div>';
-    }
-
-    if (itemChangeCount) {
-      h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px">การเปลี่ยนแปลงรายการสินค้า</div>';
-      h += '<div style="max-height:320px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
-      soIds.forEach(function(soId) {
-        var g = changedBySO[soId];
-        g.items.forEach(function(x) {
-          h += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b;font-size:11.5px">';
-          h += '<div style="font-weight:600;margin-bottom:3px">' + sanitize(g.so.soNumber || soId) + ' — ' + sanitize(x.it.model || x.it.sku || '') + '</div>';
-          x.fields.forEach(function(f) {
-            h += '<div' + (f.big ? ' style="color:#ef4444"' : '') + '>' + (f.big ? '⚠️ ' : '') + sanitize(f.label) + ': ' +
-              '<span style="color:var(--text2)">' + sanitize(String(f.old)) + '</span> → <span style="color:#22c55e">' + sanitize(String(f.newLabel)) + '</span></div>';
-          });
-          h += '</div>';
-        });
-      });
-      h += '</div>';
-    }
-
-    if (rejects.length) {
-      h += '<div style="font-weight:600;font-size:12px;margin:10px 0 4px;color:#ef4444">แถว/รายการที่ถูกข้าม (ไม่ import)</div>';
-      h += '<div style="max-height:200px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
-      rejects.forEach(function(rj) {
-        h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11.5px;color:#ef4444">แถว ' + rj.rowNum + ': ' + sanitize(rj.reason) + '</div>';
-      });
-      h += '</div>';
-    }
-
-    if (!itemChangeCount && !statusChangeCount) h = '<div style="padding:10px;font-size:12px;color:var(--text2)">ไม่มีค่าที่เปลี่ยนจากเดิม</div>' + h;
-    prev.innerHTML = h;
-
-    var canApply = itemChangeCount > 0 || statusChangeCount > 0;
-    var wrap = document.getElementById('poTrkImpConfirmWrap');
-    var chk = document.getElementById('poTrkImpConfirm');
-    var btn = document.getElementById('poTrkImpBtn');
-    if (wrap) wrap.style.display = canApply ? 'flex' : 'none';
-    if (chk) chk.checked = false;
-    if (btn) { btn.style.display = 'none'; btn.disabled = true; }
-    if (chk && btn) chk.onchange = function() { btn.style.display = canApply ? 'block' : 'none'; btn.disabled = !chk.checked; };
+    _poTrackerRenderImportPreview();
   };
   reader.readAsArrayBuffer(file);
+}
+
+// วาดหน้า preview ใหม่ทุกครั้งที่ผู้ใช้พิมพ์ค้นหา หรือติ๊กเลือก/ไม่เลือกแถวไหน — ไม่ parse ไฟล์ใหม่ ใช้ pending ที่ parse ไว้แล้ว
+function _poTrackerRenderImportPreview() {
+  var prev = document.getElementById('poTrkImpPreview');
+  var pending = window._poTrkImportPending;
+  if (!prev || !pending) return;
+  var rejects = pending.rejects;
+
+  // เก็บ focus/cursor ของช่องค้นหาไว้ก่อน innerHTML โดนแทนที่ทั้งก้อน (เหมือน pattern ใน render() หลักของแอป)
+  // ไม่งั้นจะหลุด focus ทุกครั้งที่พิมพ์ค้นหาแม้แต่ตัวเดียว
+  var _active = document.activeElement;
+  var _focusSearch = !!(_active && prev.contains(_active) && _active.id === 'poTrkImpSearch');
+  var _selStart = _focusSearch ? _active.selectionStart : null, _selEnd = _focusSearch ? _active.selectionEnd : null;
+
+  var allStatusIds = Object.keys(pending.statusBySO);
+  var allItemKeys = [];
+  Object.keys(pending.changedBySO).forEach(function(soId) {
+    pending.changedBySO[soId].items.forEach(function(x) { allItemKeys.push(soId + '|' + x.idx); });
+  });
+  var selStatusCount = allStatusIds.filter(function(id) { return _poTrkImportSel.status[id]; }).length;
+  var selItemCount = allItemKeys.filter(function(k) { return _poTrkImportSel.items[k]; }).length;
+  var bigChangeCount = 0;
+  Object.keys(pending.changedBySO).forEach(function(soId) {
+    pending.changedBySO[soId].items.forEach(function(x) {
+      if (_poTrkImportSel.items[soId + '|' + x.idx]) bigChangeCount += x.fields.filter(function(f) { return f.big; }).length;
+    });
+  });
+
+  var view = _poTrackerImportFilteredView();
+
+  var h = '';
+  if (allStatusIds.length || allItemKeys.length) {
+    h += '<div style="display:flex;gap:6px;align-items:center;margin:8px 0;flex-wrap:wrap">';
+    h += '<input type="text" id="poTrkImpSearch" class="inp" style="flex:1;min-width:140px" placeholder="🔍 ค้นหา SO/Dealer/SKU/สินค้า" value="' + sanitize(_poTrkImportSearchTerm) + '" oninput="_poTrackerImportSearchChanged(this.value)">';
+    h += '<button class="btn bsm bo" onclick="_poTrackerImportBulkSelectFiltered(true)">✅ เลือกที่กรองอยู่ทั้งหมด</button>';
+    h += '<button class="btn bsm bo" onclick="_poTrackerImportBulkSelectFiltered(false)">❌ ไม่เลือกที่กรองอยู่เลย</button>';
+    h += '</div>';
+  }
+
+  h += '<div style="font-size:12px;color:var(--text2);background:#0f172a;border-radius:6px;padding:8px;margin:8px 0">' +
+    '✅ เลือกไว้ <strong style="color:#f59e0b">' + selItemCount + '/' + allItemKeys.length + ' รายการสินค้า</strong>' +
+    (allStatusIds.length ? ' + สถานะ SO <strong style="color:#f59e0b">' + selStatusCount + '/' + allStatusIds.length + ' ใบ</strong>' : '') +
+    (bigChangeCount ? ' · <span style="color:#ef4444">⚠️ ' + bigChangeCount + ' ค่าที่เลือกไว้เปลี่ยนมากกว่า 50% (จำนวน/ราคา) ตรวจสอบดีๆ</span>' : '') +
+    (rejects.length ? ' · <span style="color:#ef4444">⚠️ ' + rejects.length + ' แถว/ใบถูกข้าม (ดูเหตุผลด้านล่าง)</span>' : '') +
+    (_poTrkImportSearchTerm ? ' · <span style="color:var(--text2)">กำลังกรอง: "' + sanitize(_poTrkImportSearchTerm) + '" (' + view.statusRows.length + '+' + view.itemRows.length + ' แถวที่ตรง)</span>' : '') +
+    '</div>';
+
+  if (view.statusRows.length) {
+    h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px">การเปลี่ยนสถานะ SO</div>';
+    h += '<div style="max-height:160px;overflow-y:auto;border:1px solid #334155;border-radius:8px;margin-bottom:10px">';
+    view.statusRows.forEach(function(r) {
+      var checked = !!_poTrkImportSel.status[r.soId];
+      h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11.5px;display:flex;gap:8px;align-items:flex-start">';
+      h += '<input type="checkbox" style="margin-top:2px" ' + (checked ? 'checked' : '') + ' onchange="_poTrackerImportToggleStatus(\'' + r.soId + '\',this.checked)">';
+      h += '<div' + (checked ? '' : ' style="opacity:.5"') + '>' + sanitize(r.so.soNumber || r.soId) +
+        ': <span style="color:var(--text2)">' + sanitize(_poTrackerSoStatusLabel(r.change.from)) + '</span> → <span style="color:#22c55e">' + sanitize(_poTrackerSoStatusLabel(r.change.to)) + '</span></div>';
+      h += '</div>';
+    });
+    h += '</div>';
+  }
+
+  if (view.itemRows.length) {
+    h += '<div style="font-weight:600;font-size:12px;margin-bottom:4px">การเปลี่ยนแปลงรายการสินค้า</div>';
+    h += '<div style="max-height:320px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
+    view.itemRows.forEach(function(r) {
+      var checked = !!_poTrkImportSel.items[r.key];
+      h += '<div style="padding:8px 10px;border-bottom:1px solid #1e293b;font-size:11.5px;display:flex;gap:8px;align-items:flex-start">';
+      h += '<input type="checkbox" style="margin-top:2px" ' + (checked ? 'checked' : '') + ' onchange="_poTrackerImportToggleItem(\'' + r.key + '\',this.checked)">';
+      h += '<div' + (checked ? '' : ' style="opacity:.5"') + ' style="flex:1">';
+      h += '<div style="font-weight:600;margin-bottom:3px">' + sanitize(r.so.soNumber || r.soId) + ' — ' + sanitize(r.x.it.model || r.x.it.sku || '') + '</div>';
+      r.x.fields.forEach(function(f) {
+        h += '<div' + (f.big ? ' style="color:#ef4444"' : '') + '>' + (f.big ? '⚠️ ' : '') + sanitize(f.label) + ': ' +
+          '<span style="color:var(--text2)">' + sanitize(String(f.old)) + '</span> → <span style="color:#22c55e">' + sanitize(String(f.newLabel)) + '</span></div>';
+      });
+      h += '</div></div>';
+    });
+    h += '</div>';
+  }
+
+  if (_poTrkImportSearchTerm && !view.statusRows.length && !view.itemRows.length) {
+    h += '<div style="padding:10px;font-size:12px;color:var(--text2)">ไม่มีรายการที่ตรงกับคำค้นหา</div>';
+  }
+
+  if (rejects.length) {
+    h += '<div style="font-weight:600;font-size:12px;margin:10px 0 4px;color:#ef4444">แถว/รายการที่ถูกข้าม (ไม่ import)</div>';
+    h += '<div style="max-height:200px;overflow-y:auto;border:1px solid #334155;border-radius:8px">';
+    rejects.forEach(function(rj) {
+      h += '<div style="padding:6px 10px;border-bottom:1px solid #1e293b;font-size:11.5px;color:#ef4444">แถว ' + rj.rowNum + ': ' + sanitize(rj.reason) + '</div>';
+    });
+    h += '</div>';
+  }
+
+  if (!allItemKeys.length && !allStatusIds.length) h = '<div style="padding:10px;font-size:12px;color:var(--text2)">ไม่มีค่าที่เปลี่ยนจากเดิม</div>' + h;
+  prev.innerHTML = h;
+
+  if (_focusSearch) {
+    var newSearch = document.getElementById('poTrkImpSearch');
+    if (newSearch) { newSearch.focus(); try { newSearch.setSelectionRange(_selStart, _selEnd); } catch (e) {} }
+  }
+
+  var canApply = selItemCount > 0 || selStatusCount > 0;
+  var wrap = document.getElementById('poTrkImpConfirmWrap');
+  var chk = document.getElementById('poTrkImpConfirm');
+  var btn = document.getElementById('poTrkImpBtn');
+  if (wrap) wrap.style.display = canApply ? 'flex' : 'none';
+  if (btn) { btn.style.display = (canApply && chk && chk.checked) ? 'block' : 'none'; btn.disabled = !canApply || !chk || !chk.checked; }
+  if (chk) chk.onchange = function() {
+    if (btn) { btn.style.display = (canApply && chk.checked) ? 'block' : 'none'; btn.disabled = !canApply || !chk.checked; }
+  };
 }
 
 function applyPoTrackerImport() {
@@ -1478,10 +1581,14 @@ function applyPoTrackerImport() {
 
   var cfg = getConfig();
   var undoSnapshot = []; // [{soId, items, status}] ของ SO ที่จะถูกแก้ ก่อนแก้ — ใช้ย้อนกลับได้
+  // นับเฉพาะรายการ/SO ที่ยังติ๊ก "เลือก" ไว้ในหน้า preview (ผู้ใช้อาจติ๊กออกบางแถวก่อนกดบันทึก)
   var soIds = {};
-  Object.keys(pending.changedBySO).forEach(function(id) { soIds[id] = true; });
-  Object.keys(pending.statusBySO).forEach(function(id) { soIds[id] = true; });
-  if (!Object.keys(soIds).length) { toast('ไม่มีอะไรให้บันทึก'); return; }
+  Object.keys(pending.changedBySO).forEach(function(soId) {
+    var hasSelected = pending.changedBySO[soId].items.some(function(x) { return _poTrkImportSel.items[soId + '|' + x.idx]; });
+    if (hasSelected) soIds[soId] = true;
+  });
+  Object.keys(pending.statusBySO).forEach(function(id) { if (_poTrkImportSel.status[id]) soIds[id] = true; });
+  if (!Object.keys(soIds).length) { toast('ไม่มีรายการที่เลือกไว้ให้บันทึก'); return; }
 
   var itemChangeCount = 0, soTouchedCount = 0;
   Object.keys(soIds).forEach(function(soId) {
@@ -1494,6 +1601,7 @@ function applyPoTrackerImport() {
     var fieldSummary = [];
     if (g) {
       g.items.forEach(function(x) {
+        if (!_poTrkImportSel.items[soId + '|' + x.idx]) return; // ผู้ใช้ติ๊กออก — ข้ามรายการนี้
         var item = Object.assign({}, items[x.idx]);
         x.fields.forEach(function(f) { item[f.key] = f.newVal; fieldSummary.push(f.label); });
         items[x.idx] = item;
@@ -1502,7 +1610,9 @@ function applyPoTrackerImport() {
     }
     var update = { items: items, updatedAt: new Date().toISOString() };
     var statusChange = pending.statusBySO[soId];
-    if (statusChange) { update.status = statusChange.to; fieldSummary.push('สถานะ SO → ' + _poTrackerSoStatusLabel(statusChange.to)); }
+    if (statusChange && _poTrkImportSel.status[soId]) { update.status = statusChange.to; fieldSummary.push('สถานะ SO → ' + _poTrackerSoStatusLabel(statusChange.to)); }
+
+    if (!fieldSummary.length) return; // ติ๊กออกหมดทั้ง SO นี้ (เช่นเลือกแค่สถานะแต่ติ๊กสถานะออกทีหลัง) — ไม่ต้องบันทึก/ไม่ต้องนับ undo
 
     var logs = (so.logs || []).slice();
     logs.push({ date: _td(), action: '📥 Import Excel แก้ไขรายการ (PO Tracker)', note: fieldSummary.join(', '), by: cfg.saleName || '' });
