@@ -8591,7 +8591,8 @@ function rVisitCoverageCardHtml(vcCollapsed) {
   }
 
   var h = '<div class="card" id="visitCoverageCard"><h2>🏪 Offline Visit เดือนนี้ — SAB/Authorized Dealer' +
-    '<span class="ml"><small style="color:var(--text2);font-weight:400">' + monthLabel + '</small></span></h2>' +
+    '<span class="ml"><small style="color:var(--text2);font-weight:400">' + monthLabel + '</small></span>' +
+    '<button class="btn btn-xs bo" style="margin-left:8px" onclick="event.stopPropagation();copyVisitCoverage()">📋 Copy สรุป</button></h2>' +
     '<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">ทุก Dealer ระดับ S/A/B ต้องมี Offline Visit อย่างน้อย 1 ครั้ง/เดือน — ' + visited.length + '/' + cov.length + ' บริษัท (' + pct + '%) ทำแล้ว</div>' +
     '<div class="pb" style="margin-bottom:12px"><div class="pf ' + (pct >= 70 ? 'pf-green' : pct >= 40 ? 'pf-yellow' : 'pf-red') + '" style="width:' + pct + '%"></div></div>' +
     section('vcNoneList', 'ยังไม่ได้นัด', '🔴', none) +
@@ -8605,6 +8606,50 @@ function rVisitCoverageCardHtml(vcCollapsed) {
     if (visited.length > 10) mondayListSetup('vcVisitedList', 10);
   }, 0);
   return h;
+}
+
+// Copy สรุปการ์ด "Offline Visit เดือนนี้" เป็นข้อความธรรมดา ส่งให้หัวหน้า/ทีมดูนอกแอปได้ (เช่นส่งทาง LINE/แชท) —
+// ทำตามสไตล์เดียวกับ copyVisitPlan() เดิม (ปุ่ม Copy สรุปส่ง) ใช้ข้อมูลชุดเดียวกับการ์ด (visitCoverageForMonth)
+// ไม่คำนวณซ้ำเองแยกจากการ์ด กันตัวเลขไม่ตรงกัน (ผู้ใช้ขอ 2026-10-22)
+function copyVisitCoverage() {
+  var monthKey = _td().substr(0, 7);
+  var cov = (typeof visitCoverageForMonth === 'function') ? visitCoverageForMonth(monthKey) : [];
+  if (!cov.length) { toast('ไม่มีข้อมูล Dealer S/A/B ให้สรุป'); return; }
+  var none = cov.filter(function(c) { return c.state === 'none'; });
+  var planned = cov.filter(function(c) { return c.state === 'planned'; });
+  var visited = cov.filter(function(c) { return c.state === 'visited'; });
+  var pct = Math.round(visited.length / cov.length * 100);
+  var monthLabel = (typeof fcMonthLabel === 'function') ? fcMonthLabel(monthKey) : monthKey;
+
+  var t = '🏪 Offline Visit เดือนนี้ — SAB/Authorized Dealer (' + monthLabel + ')\n';
+  t += 'ความคืบหน้า: ' + visited.length + '/' + cov.length + ' บริษัท (' + pct + '%) ทำแล้ว\n';
+  t += '━━━━━━━━━━━━━━━━━━━━\n\n';
+
+  t += '🟡 นัดแล้ว รอไป (' + planned.length + ')\n';
+  if (planned.length) {
+    planned.forEach(function(c) {
+      var p = c.nextPlan;
+      t += '  • ' + c.dealer.name + ' — ' + fD(p.date) + (p.timeStart ? ' เวลา ' + p.timeStart + (p.timeEnd ? '-' + p.timeEnd : '') : '') + (p.title ? ' (' + p.title + ')' : '') + '\n';
+    });
+  } else t += '  —\n';
+  t += '\n';
+
+  t += '🔴 ยังไม่ได้นัด (' + none.length + ')\n';
+  if (none.length) {
+    none.forEach(function(c) {
+      t += '  • ' + c.dealer.name + (c.hasOnlineThisMonth ? ' (มี Online แล้ว แต่ยังไม่มีแผน Offline)' : '') + '\n';
+    });
+  } else t += '  —\n';
+  t += '\n';
+
+  t += '🟢 ไปแล้ว (' + visited.length + ')\n';
+  if (visited.length) {
+    visited.forEach(function(c) {
+      t += '  • ' + c.dealer.name + ' — ไปเมื่อ ' + fD(c.lastVisit.date) + ' (Online ' + c.onlineVisitCount + ' · Offline ' + c.visitCount + ')\n';
+    });
+  } else t += '  —\n';
+
+  copyText(t, '📋 Copy สรุป Offline Visit แล้ว!');
 }
 
 function rVisitPlan(el) {
