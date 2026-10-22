@@ -8567,12 +8567,16 @@ function rVisitCoverageCardHtml(vcCollapsed) {
   function rowHtml(c) {
     var d = c.dealer;
     var sub = c.state === 'visited' ? ('✅ ไปเมื่อ ' + fDShort(c.lastVisit.date) + (c.visitCount > 1 ? (' (' + c.visitCount + ' ครั้ง)') : '')) :
-      c.state === 'planned' ? ('📅 นัดไว้วันที่ ' + fDShort(c.nextPlan.date)) : '⚠️ ยังไม่มีแผนเลย';
+      c.state === 'planned' ? ('📅 นัดไว้วันที่ ' + fDShort(c.nextPlan.date)) :
+      c.hasOnlineThisMonth ? '📞 มี Online แล้ว แต่ยังไม่มีแผน Offline' : '⚠️ ยังไม่มีแผนเลย';
+    // บอกจำนวนครั้ง Online/Offline เดือนนี้ไว้ในการ์ดด้วย (ผู้ใช้ขอ 2026-10-22) กันสับสนว่าทำไมบริษัทที่คุยออนไลน์ไปแล้วยังขึ้น
+    // อยู่ในกลุ่ม "ยังไม่ได้นัด" — ของจริงคือ Online ไม่นับเข้าเป้า Offline แต่ต้องโชว์ให้เห็นว่ามีการติดต่อกันแล้ว
+    var countBadge = '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">📞 Online ' + c.onlineVisitCount + (c.onlinePlannedCount ? ('+' + c.onlinePlannedCount + ' นัด') : '') + ' · 🤝 Offline ' + c.visitCount + '</div>';
     var actionBtn = c.state === 'none' ? '<button class="btn bsm bp" onclick="event.stopPropagation();showAddVisitPlanM(_td(),\'' + d.id + '\')">📅 นัดเลย</button>' :
       c.state === 'planned' ? '<button class="btn bsm bo" onclick="event.stopPropagation();showVisitM(\'' + d.id + '\')">🤝 บันทึก Visit</button>' : '';
     return '<div class="li" data-name="' + sanitize(d.name).toLowerCase() + '" style="cursor:pointer;display:flex;align-items:center;gap:8px" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})">' +
       '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(d.name) + ' ' + levelTag(d.level) + '</div>' +
-      '<div style="font-size:11px;color:var(--text2)">' + sub + '</div></div>' + actionBtn + '</div>';
+      '<div style="font-size:11px;color:var(--text2)">' + sub + '</div>' + countBadge + '</div>' + actionBtn + '</div>';
   }
   function section(containerId, label, icon, list) {
     if (!list.length) return '';
