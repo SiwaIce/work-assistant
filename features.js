@@ -8572,8 +8572,11 @@ function rVisitCoverageCardHtml(vcCollapsed) {
     // บอกจำนวนครั้ง Online/Offline เดือนนี้ไว้ในการ์ดด้วย (ผู้ใช้ขอ 2026-10-22) กันสับสนว่าทำไมบริษัทที่คุยออนไลน์ไปแล้วยังขึ้น
     // อยู่ในกลุ่ม "ยังไม่ได้นัด" — ของจริงคือ Online ไม่นับเข้าเป้า Offline แต่ต้องโชว์ให้เห็นว่ามีการติดต่อกันแล้ว
     var countBadge = '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">📞 Online ' + c.onlineVisitCount + (c.onlinePlannedCount ? ('+' + c.onlinePlannedCount + ' นัด') : '') + ' · 🤝 Offline ' + c.visitCount + '</div>';
+    // ปุ่ม "บันทึก Visit" ต้องเปิดผ่าน vpGoVisitModal(planId) ไม่ใช่ showVisitM(dealerId) ตรงๆ — ให้ฟอร์ม Visit
+    // preset รูปแบบนัด (Online/Offline) ตามแผนนัดจริงที่ค้างอยู่ ไม่ใช่ default offline ของฟอร์มเปล่า (ผู้ใช้เจอ
+    // บั๊ก 2026-10-22: นัด Online แต่กด "บันทึก Visit" จากการ์ดนี้แล้วได้ Visit mode offline เงียบๆ)
     var actionBtn = c.state === 'none' ? '<button class="btn bsm bp" onclick="event.stopPropagation();showAddVisitPlanM(_td(),\'' + d.id + '\')">📅 นัดเลย</button>' :
-      c.state === 'planned' ? '<button class="btn bsm bo" onclick="event.stopPropagation();showVisitM(\'' + d.id + '\')">🤝 บันทึก Visit</button>' : '';
+      c.state === 'planned' ? (c.nextPlan ? '<button class="btn bsm bo" onclick="event.stopPropagation();vpGoVisitModal(\'' + c.nextPlan.id + '\')">🤝 บันทึก Visit</button>' : '<button class="btn bsm bo" onclick="event.stopPropagation();showVisitM(\'' + d.id + '\')">🤝 บันทึก Visit</button>') : '';
     return '<div class="li" data-name="' + sanitize(d.name).toLowerCase() + '" style="cursor:pointer;display:flex;align-items:center;gap:8px" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})">' +
       '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(d.name) + ' ' + levelTag(d.level) + '</div>' +
       '<div style="font-size:11px;color:var(--text2)">' + sub + '</div>' + countBadge + '</div>' + actionBtn + '</div>';
@@ -9715,14 +9718,15 @@ function vpGoVisitModal(planId) {
   if (!plan) return;
   if (!plan.dealerId) { toast('นัดนี้ไม่มี Dealer ผูกอยู่ — ใช้ปุ่ม "บันทึกผลการนัด" แทน'); return; }
   window._vpLinkPlanId = planId;
-  if (plan.date) window._visitDraftOverride = { date: plan.date };
+  // preset ทั้งวันที่และรูปแบบนัด (Online/Offline) จากแผนนัดจริง — เดิมตั้งแค่วันที่ผ่าน _visitDraftOverride
+  // แล้วใช้ setTimeout แก้ DOM เอาสำหรับ mode ซึ่งพลาดง่าย (ฟอร์มช้ากว่า 200ms, หรือ default ของฟอร์มชนะไปแล้ว
+  // ก่อน timeout ทำงาน) ทำให้ Visit ที่บันทึกจากนัด Online กลายเป็น Offline เงียบๆ (ผู้ใช้เจอ 2026-10-22) — ตั้ง
+  // mode ผ่าน _visitDraftOverride เหมือนวันที่ไปเลย ให้ buildVisitFormHtml (modals.js) อ่านตรงๆ ตอน render ครั้งแรก
+  window._visitDraftOverride = { mode: plan.mode || 'offline' };
+  if (plan.date) window._visitDraftOverride.date = plan.date;
   if (typeof showVisitM === 'function') {
     _visitLastOpenKey = plan.dealerId + '|';
     showVisitM(plan.dealerId);
-    setTimeout(function() {
-      var modeEl = document.querySelector('input[name="fv_mode"][value="' + (plan.mode || 'offline') + '"]');
-      if (modeEl) modeEl.checked = true;
-    }, 200);
   }
 }
 
