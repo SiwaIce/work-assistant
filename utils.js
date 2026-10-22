@@ -991,10 +991,18 @@ function visitCoverageForMonth(monthKey) {
   var rows = dealers.map(function(d) {
     var visited = visits.filter(function(v) { return v.dealerId === d.id && v.mode === 'offline' && (v.date || '').substr(0, 7) === monthKey; });
     var planned = plans.filter(function(p) { return p.dealerId === d.id && p.mode === 'offline' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
+    // Online ไม่นับเข้าเป้า Offline — แต่เก็บไว้แยกเพื่อโชว์เป็นรายละเอียดในการ์ด (ผู้ใช้ขอ 2026-10-22) ไม่มีผลต่อ state ด้านบน
+    var onlineVisited = visits.filter(function(v) { return v.dealerId === d.id && v.mode === 'online' && (v.date || '').substr(0, 7) === monthKey; });
+    var onlinePlanned = plans.filter(function(p) { return p.dealerId === d.id && p.mode === 'online' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
     visited.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
     planned.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
+    onlineVisited.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
     var state = visited.length ? 'visited' : (planned.length ? 'planned' : 'none');
-    return { dealer: d, state: state, visitCount: visited.length, lastVisit: visited[0] || null, nextPlan: planned[0] || null };
+    return {
+      dealer: d, state: state, visitCount: visited.length, lastVisit: visited[0] || null, nextPlan: planned[0] || null,
+      onlineVisitCount: onlineVisited.length, onlinePlannedCount: onlinePlanned.length,
+      hasOnlineThisMonth: (onlineVisited.length + onlinePlanned.length) > 0
+    };
   });
   return rows;
 }
