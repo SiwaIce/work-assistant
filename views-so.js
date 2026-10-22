@@ -2723,23 +2723,36 @@ function saveSOItemsEdit(soId) {
   go('soDetail', { soId: soId });
 }
 
-// เลื่อนกำหนดจองคลัง (1021/8D01) หลายรายการของ SO เดียวกันพร้อมกันในครั้งเดียว — ส่วนใหญ่ของ SO เดียวกันจองพร้อมกัน
+// เลื่อนกำหนดจองหลายรายการของ SO เดียวกันพร้อมกันในครั้งเดียว — ส่วนใหญ่ของ SO เดียวกันจองพร้อมกัน
 // วันเลื่อนเลยมักจะเหมือนกันทุกรายการ ไม่ต้องกด "🔄 เลื่อน" ทีละรายการแบบเดิม (showStockExtendBookingM)
 // เลือกได้ว่าจะตั้งวันเดียวกันทุกรายการที่เลือก (ปุ่ม "ใช้วันเดียวกันทุกรายการ" คัดลอกวันจากช่องบนลงทุกแถวที่ติ๊ก)
-// หรือจะกำหนดวันแยกเป็นรายการไปก็ได้ — บันทึกจริงยังเรียก stockExtendBooking ต่อ lot เหมือนเดิมทุกรายการ จึงได้
-// ประวัติเลื่อนจอง (bookingHistory) แยกต่อรายการครบเหมือนเดิม ไม่ได้เขียนทับเป็นก้อนเดียว
+// หรือจะกำหนดวันแยกเป็นรายการไปก็ได้
+//
+// รวม "รายการที่จองจริง" 2 แบบที่มีอยู่ในระบบ (เดิมเช็คแบบแรกอย่างเดียว ทำให้ SO ที่มีทั้ง 2 แบบปนกันเลื่อนได้
+// แค่บางรายการ ทั้งที่หน้า SO detail โชว์ชิปจองให้ดูเหมือนจองแล้วทุกรายการ — ดู [[so-bulk-extend-booking-2026-10-21]]):
+//  kind:'lot'  — มี lot จริงผูกคลัง (stockSOItemReadyInfo .lotId) → เลื่อนผ่าน stockExtendBooking ต่อ lot
+//               เหมือนเดิม จึงได้ประวัติเลื่อนจอง (bookingHistory) แยกต่อรายการครบเหมือนปุ่มเดี่ยว
+//  kind:'self' — แค่ประกาศแผนเอง (item.sourceType='reserve_1021'/'reserve_8d01' + reserveExpiryDate พิมพ์เอง
+//               ในฟอร์มแก้ไขรายการ) ไม่มี lot จริงผูกอยู่ (ปุ่ม "🔄 เลื่อน" เดี่ยวก็ไม่มีให้กดแบบนี้เหมือนกัน) →
+//               เลื่อนด้วยการเขียนทับ item.reserveExpiryDate ตรงๆ แล้วบันทึก SO ครั้งเดียว ไม่มี lot ให้ล็อก history ต่อ lot
 function showSOBulkExtendBookingM(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s || !s.items || !s.items.length) return;
   var rows = [];
-  (s.items || []).forEach(function(it) {
-    if (!it.sku || typeof stockSOItemReadyInfo !== 'function') return;
-    var info = stockSOItemReadyInfo(it.sku, it.qty, s);
-    if (info && info.tracked && info.bookedForThisSO > 0 && info.lotId) {
-      rows.push({ sku: it.sku, model: it.model || it.sku, qty: info.bookedForThisSO, lotId: info.lotId, expiry: info.bookingExpiryDate || '', location: info.bookedLocation || '1021' });
+  (s.items || []).forEach(function(it, idx) {
+    var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : null;
+    var bookedForThisSO = info ? info.bookedForThisSO : 0;
+    if (info && info.tracked && bookedForThisSO > 0 && info.lotId) {
+      rows.push({ kind: 'lot', sku: it.sku, model: it.model || it.sku, qty: bookedForThisSO, lotId: info.lotId, expiry: info.bookingExpiryDate || '', location: info.bookedLocation || '1021' });
+    }
+    var deliveredForThisSO = info ? info.deliveredForThisSO : 0;
+    var unbookedQty = Math.max(0, (Number(it.qty) || 0) - bookedForThisSO - deliveredForThisSO);
+    var selfDeclared = (it.sourceType === 'reserve_1021' && unbookedQty > 0) || it.sourceType === 'reserve_8d01';
+    if (selfDeclared) {
+      rows.push({ kind: 'self', idx: idx, model: it.model || it.sku, qty: unbookedQty, expiry: it.reserveExpiryDate || '', location: it.sourceType === 'reserve_1021' ? '1021' : '8D01' });
     }
   });
-  if (!rows.length) { alert('SO นี้ไม่มีรายการที่จองคลังจริง (1021/8D01) ให้เลื่อน'); return; }
+  if (!rows.length) { alert('SO นี้ไม่มีรายการที่จองคลังไว้ให้เลื่อน'); return; }
   var body = '<div class="hint" style="margin-bottom:8px">เลือกรายการที่ต้องการเลื่อนกำหนดจอง — ตั้งวันเดียวกันทุกรายการที่เลือก หรือกำหนดวันแยกเป็นรายการก็ได้</div>';
   body += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;padding:6px;border:1px solid var(--border);border-radius:6px;flex-wrap:wrap">' +
     '<input type="date" class="inp" id="soBulkExt_globalDate" style="flex:1;min-width:130px">' +
@@ -2747,11 +2760,14 @@ function showSOBulkExtendBookingM(soId) {
     '</div>';
   body += '<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:6px"><input type="checkbox" id="soBulkExt_all" checked onchange="_soBulkExtToggleAll(this.checked)"> เลือกทั้งหมด</label>';
   body += '<div id="soBulkExt_rows">';
-  rows.forEach(function(r, i) {
+  rows.forEach(function(r) {
+    var chkAttrs = r.kind === 'lot'
+      ? ' data-kind="lot" data-lotid="' + sanitize(r.lotId) + '" data-sku="' + sanitize(r.sku) + '"'
+      : ' data-kind="self" data-idx="' + r.idx + '"';
     body += '<div style="border:1px solid var(--border);border-radius:6px;padding:6px;margin-bottom:6px">' +
       '<label style="display:flex;gap:6px;align-items:center;font-size:12px">' +
-      '<input type="checkbox" class="soBulkExt_chk" checked data-lotid="' + sanitize(r.lotId) + '" data-sku="' + sanitize(r.sku) + '">' +
-      '<b>' + sanitize(r.model) + '</b> <span style="color:var(--text2)">(' + r.qty + ' ชิ้น — ' + sanitize(r.location) + ')</span>' +
+      '<input type="checkbox" class="soBulkExt_chk" checked' + chkAttrs + '>' +
+      '<b>' + sanitize(r.model) + '</b> <span style="color:var(--text2)">(' + r.qty + ' ชิ้น — ' + sanitize(r.location) + (r.kind === 'self' ? ' · แผนที่ประกาศไว้ ยังไม่มี lot จริง' : '') + ')</span>' +
       '</label>' +
       '<div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">' +
       '<span class="hint" style="font-size:10px;min-width:95px">เดิมถึง ' + (r.expiry ? fD(r.expiry) : '—') + '</span>' +
@@ -2759,7 +2775,7 @@ function showSOBulkExtendBookingM(soId) {
       '</div></div>';
   });
   body += '</div>';
-  body += '<div class="fg" style="margin-top:6px"><label>ผู้อนุมัติเลื่อนจอง <small style="color:var(--text2)">(ใช้ร่วมทุกรายการที่บันทึกครั้งนี้)</small></label><input class="inp" type="text" id="soBulkExt_approved"></div>';
+  body += '<div class="fg" style="margin-top:6px"><label>ผู้อนุมัติเลื่อนจอง <small style="color:var(--text2)">(ใช้ร่วมทุกรายการที่บันทึกครั้งนี้ — มีผลเฉพาะรายการที่มี lot จริง)</small></label><input class="inp" type="text" id="soBulkExt_approved"></div>';
   body += '<button class="btn bp btn-full" style="margin-top:10px" onclick="saveSOBulkExtendBooking(\'' + soId + '\')">💾 บันทึกเลื่อนจองที่เลือก</button>';
   openM('📅 เลื่อนวันจองหลายรายการ — ' + sanitize(s.soNumber || ''), body);
 }
@@ -2779,20 +2795,37 @@ function _soBulkExtApplySameDate() {
 }
 
 function saveSOBulkExtendBooking(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
   var approvedEl = document.getElementById('soBulkExt_approved');
   var approved = approvedEl ? approvedEl.value.trim() : '';
+  var items = (s.items || []).slice();
+  var selfChanged = false;
   var count = 0;
   document.querySelectorAll('#soBulkExt_rows > div').forEach(function(row) {
     var chk = row.querySelector('.soBulkExt_chk');
     var dateEl = row.querySelector('.soBulkExt_date');
     if (!chk || !chk.checked || !dateEl || !dateEl.value) return;
-    var sku = chk.getAttribute('data-sku');
-    var lotId = chk.getAttribute('data-lotid');
-    var productName = (typeof getProductBySku === 'function' && getProductBySku(sku) || {}).name || '';
-    stockExtendBooking(sku, productName, lotId, dateEl.value, approved, true);
+    if (chk.getAttribute('data-kind') === 'self') {
+      var idx = Number(chk.getAttribute('data-idx'));
+      if (items[idx]) { items[idx] = Object.assign({}, items[idx], { reserveExpiryDate: dateEl.value }); selfChanged = true; }
+    } else {
+      var sku = chk.getAttribute('data-sku');
+      var lotId = chk.getAttribute('data-lotid');
+      var productName = (typeof getProductBySku === 'function' && getProductBySku(sku) || {}).name || '';
+      stockExtendBooking(sku, productName, lotId, dateEl.value, approved, true);
+    }
     count++;
   });
   if (!count) { alert('กรุณาเลือกอย่างน้อย 1 รายการ และระบุวันที่ให้ครบ'); return; }
+  // รายการแผนที่ประกาศเอง (ไม่มี lot จริง) ไม่มี history ต่อ lot ให้ผูก — บันทึก log เดียวลง SO แทน เพื่อให้รู้ว่าเลื่อนไปวันไหนเมื่อไหร่
+  if (selfChanged) {
+    var cfg = typeof getConfig === 'function' ? getConfig() : {};
+    var logs = (s.logs || []).slice();
+    logs.push({ date: _td(), action: '📅 เลื่อนวันจองหลายรายการ (แผนที่ประกาศไว้)', note: approved ? 'ผู้อนุมัติ: ' + approved : '', by: (cfg && cfg.saleName) || '' });
+    var updated = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString(), logs: logs });
+    if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  }
   closeMForce();
   toast('🔄 เลื่อนกำหนดจอง ' + count + ' รายการแล้ว');
   go('soDetail', { soId: soId });
