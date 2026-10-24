@@ -988,12 +988,20 @@ function visitCoverageForMonth(monthKey) {
   var dealers = base.filter(function(d) { return ['S', 'A', 'B'].indexOf(d.level) !== -1; });
   var visits = ST.getAll('visits');
   var plans = (typeof getVisitPlans === 'function') ? getVisitPlans() : [];
+  var allDealers = ST.getAll('dealers');
   var rows = dealers.map(function(d) {
-    var visited = visits.filter(function(v) { return v.dealerId === d.id && v.mode === 'offline' && (v.date || '').substr(0, 7) === monthKey; });
-    var planned = plans.filter(function(p) { return p.dealerId === d.id && p.mode === 'offline' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
+    // Dealer ชื่อเดียวกันอาจมีมากกว่า 1 รายการซ้ำในระบบ (ผู้ใช้เจอ 2026-10-24: "Global Information" ไป Visit
+    // จริง 2 ครั้ง บันทึกผลแล้วด้วย แต่การ์ดนี้ยังขึ้น "ยังไม่ได้นัด" — Visit/แผนนัดผูกกับ Dealer record คนละ
+    // id กับตัวที่อยู่ในลิสต์ S/A/B ตรงนี้ ทั้งที่ชื่อเหมือนกันเป๊ะ สันนิษฐานว่ามี Dealer ซ้ำ 2 รายการในระบบ) —
+    // รวม id ของ Dealer อื่นที่ชื่อตรงกัน (ตัดช่องว่าง/ไม่สนตัวพิมพ์เล็กใหญ่) เข้ามานับ Visit/แผนนัดด้วย กันเคสนี้
+    // เกิดซ้ำ โดยไม่ต้องรอให้ผู้ใช้ไปรวม Dealer ที่ซ้ำกันเองก่อน
+    var dupIds = allDealers.filter(function(x) { return x.id !== d.id && (x.name || '').trim().toLowerCase() === (d.name || '').trim().toLowerCase(); }).map(function(x) { return x.id; });
+    var idMatches = function(id) { return id === d.id || dupIds.indexOf(id) !== -1; };
+    var visited = visits.filter(function(v) { return idMatches(v.dealerId) && v.mode === 'offline' && (v.date || '').substr(0, 7) === monthKey; });
+    var planned = plans.filter(function(p) { return idMatches(p.dealerId) && p.mode === 'offline' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
     // Online ไม่นับเข้าเป้า Offline — แต่เก็บไว้แยกเพื่อโชว์เป็นรายละเอียดในการ์ด (ผู้ใช้ขอ 2026-10-22) ไม่มีผลต่อ state ด้านบน
-    var onlineVisited = visits.filter(function(v) { return v.dealerId === d.id && v.mode === 'online' && (v.date || '').substr(0, 7) === monthKey; });
-    var onlinePlanned = plans.filter(function(p) { return p.dealerId === d.id && p.mode === 'online' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
+    var onlineVisited = visits.filter(function(v) { return idMatches(v.dealerId) && v.mode === 'online' && (v.date || '').substr(0, 7) === monthKey; });
+    var onlinePlanned = plans.filter(function(p) { return idMatches(p.dealerId) && p.mode === 'online' && (p.date || '').substr(0, 7) === monthKey && p.status !== 'done'; });
     visited.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
     planned.sort(function(a, b) { return (a.date || '').localeCompare(b.date || ''); });
     onlineVisited.sort(function(a, b) { return (b.date || '').localeCompare(a.date || ''); });
@@ -1001,7 +1009,8 @@ function visitCoverageForMonth(monthKey) {
     return {
       dealer: d, state: state, visitCount: visited.length, lastVisit: visited[0] || null, nextPlan: planned[0] || null,
       onlineVisitCount: onlineVisited.length, onlinePlannedCount: onlinePlanned.length,
-      hasOnlineThisMonth: (onlineVisited.length + onlinePlanned.length) > 0
+      hasOnlineThisMonth: (onlineVisited.length + onlinePlanned.length) > 0,
+      hasDuplicateDealer: dupIds.length > 0
     };
   });
   return rows;
