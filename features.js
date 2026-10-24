@@ -8572,6 +8572,9 @@ function rVisitCoverageCardHtml(vcCollapsed) {
     // บอกจำนวนครั้ง Online/Offline เดือนนี้ไว้ในการ์ดด้วย (ผู้ใช้ขอ 2026-10-22) กันสับสนว่าทำไมบริษัทที่คุยออนไลน์ไปแล้วยังขึ้น
     // อยู่ในกลุ่ม "ยังไม่ได้นัด" — ของจริงคือ Online ไม่นับเข้าเป้า Offline แต่ต้องโชว์ให้เห็นว่ามีการติดต่อกันแล้ว
     var countBadge = '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">📞 Online ' + c.onlineVisitCount + (c.onlinePlannedCount ? ('+' + c.onlinePlannedCount + ' นัด') : '') + ' · 🤝 Offline ' + c.visitCount + '</div>';
+    // เตือนถ้าพบ Dealer ชื่อเดียวกันซ้ำในระบบ (นับ Visit/แผนนัดของตัวซ้ำรวมให้แล้วด้านบน แต่ผู้ใช้ควรไปรวม/ลบ
+    // รายการซ้ำทิ้งเองเพื่อความสะอาดของข้อมูล — ดูคอมเมนต์ที่ visitCoverageForMonth ใน utils.js)
+    var dupWarning = c.hasDuplicateDealer ? '<div style="font-size:10.5px;color:#f59e0b;margin-top:2px">⚠️ มี Dealer ชื่อนี้ซ้ำกันในระบบ (รวมนับให้แล้ว แนะนำไปรวม/ลบรายการซ้ำ)</div>' : '';
     // ปุ่ม "บันทึก Visit" ต้องเปิดผ่าน vpGoVisitModal(planId) ไม่ใช่ showVisitM(dealerId) ตรงๆ — ให้ฟอร์ม Visit
     // preset รูปแบบนัด (Online/Offline) ตามแผนนัดจริงที่ค้างอยู่ ไม่ใช่ default offline ของฟอร์มเปล่า (ผู้ใช้เจอ
     // บั๊ก 2026-10-22: นัด Online แต่กด "บันทึก Visit" จากการ์ดนี้แล้วได้ Visit mode offline เงียบๆ)
@@ -8579,7 +8582,7 @@ function rVisitCoverageCardHtml(vcCollapsed) {
       c.state === 'planned' ? (c.nextPlan ? '<button class="btn bsm bo" onclick="event.stopPropagation();vpGoVisitModal(\'' + c.nextPlan.id + '\')">🤝 บันทึก Visit</button>' : '<button class="btn bsm bo" onclick="event.stopPropagation();showVisitM(\'' + d.id + '\')">🤝 บันทึก Visit</button>') : '';
     return '<div class="li" data-name="' + sanitize(d.name).toLowerCase() + '" style="cursor:pointer;display:flex;align-items:center;gap:8px" onclick="go(\'dealerDetail\',{dealerId:\'' + d.id + '\'})">' +
       '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + sanitize(d.name) + ' ' + levelTag(d.level) + '</div>' +
-      '<div style="font-size:11px;color:var(--text2)">' + sub + '</div>' + countBadge + '</div>' + actionBtn + '</div>';
+      '<div style="font-size:11px;color:var(--text2)">' + sub + '</div>' + countBadge + dupWarning + '</div>' + actionBtn + '</div>';
   }
   function section(containerId, label, icon, list) {
     if (!list.length) return '';
