@@ -457,10 +457,16 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
       h += '</div>';
     }
   }
-  h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: shortfall, qiLeftover: 0 });
   // จำนวนที่ยังไม่มีการจองจริงใน 1021 ผูกไว้ (ทั้งหมด ถ้าไม่มี lot จริงเลย หรือส่วนที่เหลือ ถ้าจองจริงมาแล้วบางส่วน —
   // partial lock ดู _soItemRowHtml) ใช้บอกจำนวนในชิปสถานะที่ระบุเอง (จองคลัง/รอของเข้า/PR-PO) ด้านล่างแทนจำนวนเต็มรายการ
   var unbookedQty = Math.max(0, qty - bookedForThisSO - deliveredForThisSO);
+  // ถ้ารายการนี้ถูกระบุแผนของส่วนที่ยังไม่จองจริงไว้แล้ว (reserve_1021/reserve_8d01/restock — มีชิปของตัวเองด้านล่าง
+  // อธิบายจำนวนเดียวกันนี้อยู่แล้ว) ไม่ต้องโชว์ชิปแดง "✕ ขาดอีก...ต้อง PR/PO" ซ้อนทับอีก เพราะ shortfall ที่เช็คจาก
+  // stockPreviewAllocation ไม่รู้จัก sourceType เลย เป็นแค่เช็คสต็อกจริงล้วนๆ — โชว์คู่กับชิป "จองคลัง 1021 แล้ว" จะดู
+  // ขัดแย้งกันเอง (ผู้ใช้เข้าใจผิดว่าจองไปแล้วแต่ระบบยังขึ้นขาดอยู่) ทั้งที่จริงคือแค่ยังไม่มี stock lot จริงรองรับแผนนั้น
+  var hasOwnRemainderPlan = unbookedQty > 0 &&
+    (item.sourceType === 'reserve_1021' || item.sourceType === 'reserve_8d01' || item.sourceType === 'restock');
+  h += _stockAllocBadgesHtml(sku, { from0001: from0001, fromQI: fromQI, shortfall: hasOwnRemainderPlan ? 0 : shortfall, qiLeftover: 0 });
   // ชิปเสริม: ระบุไว้เองว่าจองจากคลัง 1021/8D01 (item.sourceType จากฟอร์มแก้ไขรายการ) — เป็นการประกาศแผนเอง ไม่ได้ผูกกับ lot จริงเหมือนปุ่ม "ยืนยัน & ย้ายเข้า 1021" ด้านบน
   // ถ้ามี lot จริงผูกกับ SO นี้ใน 1021 ครบจำนวนแล้ว (badge "✓ พร้อมส่ง...จองใน 1021 แล้ว" ด้านบนโชว์ไปแล้ว) ไม่ต้องซ้ำชิปนี้อีก เพราะ _soItemRowHtml
   // จะ sync sourceType ให้ตรงกับคลังจริงอัตโนมัติอยู่แล้ว โชว์ซ้ำจะดูเหมือนมี 2 การจองคนละที่ — แต่ถ้าจองจริงมาแค่บางส่วน

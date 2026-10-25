@@ -2719,7 +2719,28 @@ function saveSOItemsEdit(soId) {
   var updatedSO = ST.update('salesOrders', soId, { items: items, quotationId: quotationId, updatedAt: new Date().toISOString(), logs: logs });
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
-  toast('💾 บันทึกรายการสินค้าแล้ว');
+
+  // เลือก sourceType เป็นจองคลัง 1021/8D01 ในฟอร์มนี้ แค่ "ประกาศแผน" ไว้ในรายการ (item.sourceType) เท่านั้น
+  // ไม่ได้สร้าง lot จริงในคลังให้อัตโนมัติเหมือน saveSOItemStatus (modal อัปเดตสถานะทีละรายการ) — ถ้าไม่เตือนตรงนี้
+  // ผู้ใช้จะเห็นชิป "จองคลัง 1021 แล้ว" ในหน้า SO ทั้งที่หน้าคลังสินค้าจริงไม่มี lot ผูกไว้เลย แล้วงงว่าทำไมยังขึ้น
+  // ขาด/ต้อง PR/PO อยู่ (ดู [[so-item-self-declared-vs-real-lot-2026-10-25]])
+  var needsRealStockItems = [];
+  items.forEach(function(it, i) {
+    if (!it.sku || (it.sourceType !== 'reserve_1021' && it.sourceType !== 'reserve_8d01')) return;
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, updatedSO) : null;
+    if (!info || info.bookedForThisSO <= 0) needsRealStockItems.push({ idx: i, it: it });
+  });
+  if (needsRealStockItems.length === 1 && typeof showStockAddLotM === 'function') {
+    toast('💾 บันทึกรายการสินค้าแล้ว — ไปจองคลังจริงให้ตรงกับที่ระบุไว้ต่อเลย');
+    var one = needsRealStockItems[0].it;
+    showStockAddLotM(one.sku, one.sourceType === 'reserve_1021' ? '1021' : '8D01', soId);
+    return;
+  }
+  if (needsRealStockItems.length > 1) {
+    toast('💾 บันทึกแล้ว — มี ' + needsRealStockItems.length + ' รายการที่ระบุว่าจองคลังไว้ แต่ยังไม่มี lot จริงผูกอยู่ กด "📦 จัดการคลัง" ต่อรายการเพื่อจองจริง');
+  } else {
+    toast('💾 บันทึกรายการสินค้าแล้ว');
+  }
   go('soDetail', { soId: soId });
 }
 
