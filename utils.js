@@ -2265,6 +2265,21 @@ function copyText(text, msg) {
   });
 }
 
+// Copy ทั้ง HTML (ตารางจริง ใช้วางลง Excel/Outlook ให้ขึ้นเป็นตารางเลย) และ plain text (tab-separated, ใช้เวลาวางในที่ที่ไม่รับ HTML เช่น แชท)
+function copyHtmlAndText(html, text, msg) {
+  if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+    const item = new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([text], { type: 'text/plain' })
+    });
+    navigator.clipboard.write([item]).then(() => {
+      toast(msg || '📋 Copy แล้ว!');
+    }).catch(() => copyText(text, msg));
+  } else {
+    copyText(text, msg);
+  }
+}
+
 // Copy table as TSV (Tab-separated for Google Sheets)
 function copyTable(tableId, msg) {
   const table = document.getElementById(tableId);
