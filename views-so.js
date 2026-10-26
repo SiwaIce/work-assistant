@@ -670,9 +670,8 @@ function _soDisplayProjectId(s) {
   return (s && (s.projectId || s.runrateProjectId)) || '';
 }
 
-// สรุปข้อมูล PO/SO ใบเดียว เป็นข้อความ copy วางส่งให้ Sales Support ได้เลย — ส่วนหัว/ยอดรวมเป็นข้อความตามเดิม
-// ส่วนรายการสินค้าเป็น TSV (tab-separated) เพื่อวางใน Excel แล้วแยกคอลัมน์ได้ทันที (ต่อยอดจากไอเดีย mockup เดิม — ก่อนหน้านี้มีแต่ export รวมทุก SO)
-function _soSummaryTextForSalesSupport(s) {
+// ส่วนหัว (SO/PO/Dealer/โครงการ/ที่อยู่/เครดิต) ของสรุป PO/SO — ใช้ร่วมกันทั้งแบบ plain text และ HTML
+function _soSummaryHeaderLines(s) {
   var lines = [];
   lines.push('📄 สรุป PO/SO สำหรับ Sales Support');
   lines.push('SO/ร่าง: ' + (s.soNumber || '-') + (s.pendingSoNumber ? ' (ยังไม่ได้เลข SO จริง)' : ''));
@@ -690,39 +689,91 @@ function _soSummaryTextForSalesSupport(s) {
       (creditReq.creditDaysRequested ? ' ' + creditReq.creditDaysRequested + ' วัน' : '') +
       (creditReq.approvedBy ? ' (' + creditReq.approvedBy + ')' : ''));
   }
-  lines.push('');
-  lines.push('รายการสินค้า:');
-  lines.push(['SKU', 'รายการสินค้า', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม', 'สถานะสินค้า', 'หมายเหตุ', 'คอมเมนต์', 'ลิงก์จอง/อ้างอิง'].join('\t'));
+  return lines;
+}
+
+// คอลัมน์หัวตารางสรุปรายการสินค้า — ใช้ร่วมกันทั้ง TSV และ HTML table
+var _SO_SUMMARY_TABLE_HEADERS = ['SKU', 'รายการสินค้า', 'จำนวน', 'ราคา/หน่วย', 'ราคารวม', 'สถานะสินค้า', 'หมายเหตุ', 'คอมเมนต์', 'ลิงก์จอง/อ้างอิง'];
+
+// แถวข้อมูลของตารางสรุป: รายการสินค้าแต่ละชิ้น ต่อด้วย 3 แถวยอดรวม (ยอดรวมไม่รวม VAT / VAT 7% / ยอดรวมรวม VAT)
+// ยอดรวม 3 แถวนี้ใส่ label ไว้ที่คอลัมน์ "ราคา/หน่วย" และยอดเงินไว้ที่คอลัมน์ "ราคารวม" ที่เหลือเว้นว่าง (ตามรูปแบบตารางที่ต้องการ)
+function _soSummaryTableRows(s) {
+  var rows = [];
   (s.items || []).forEach(function(it) {
     var qty = Number(it.qty) || 0;
     var price = Number(it.unitPrice) || 0;
     var info = _soSummaryItemStatusInfo(it, s);
-    lines.push([
+    rows.push([
       it.sku || '-',
       it.model || '-',
-      qty,
-      price.toFixed(2),
-      (qty * price).toFixed(2),
+      String(qty),
+      nmI(price),
+      nmI(qty * price),
       info.status,
       info.note,
       (it.comment || '-').replace(/[\t\n\r]+/g, ' '),
       info.ref
-    ].join('\t'));
+    ]);
   });
   var total = _poTrackerSOTotal(s);
   var vat = total * 7 / 100;
-  lines.push('');
-  lines.push('ยอดรวม (ไม่รวม VAT): ฿' + nmI(total));
-  lines.push('VAT 7%: ฿' + nmI(vat));
-  lines.push('ยอดรวม (รวม VAT): ฿' + nmI(total + vat));
-  if (s.note) lines.push('หมายเหตุ: ' + s.note);
+  rows.push(['', '', '', 'ยอดรวม (ไม่รวม VAT)', nmI(total), '', '', '', '']);
+  rows.push(['', '', '', 'VAT 7%', nmI(vat), '', '', '', '']);
+  rows.push(['', '', '', 'ยอดรวม (รวม VAT)', nmI(total + vat), '', '', '', '']);
+  return rows;
+}
+
+// ตารางสรุปรายการสินค้า เป็น TSV (tab-separated) — ใช้เป็น text/plain เวลาวางในที่ไม่รับ HTML (เช่น แชท)
+function _soSummaryTableTSV(s) {
+  var lines = [_SO_SUMMARY_TABLE_HEADERS.join('\t')];
+  _soSummaryTableRows(s).forEach(function(r) { lines.push(r.join('\t')); });
   return lines.join('\n');
+}
+
+// ตารางสรุปรายการสินค้า เป็น HTML <table> จริง — ใช้เป็น text/html เวลาวางลง Excel/Outlook แล้วขึ้นเป็นตารางเลย เหมือนตัวอย่างที่ขอ
+function _soSummaryTableHtml(s) {
+  var rows = _soSummaryTableRows(s);
+  var totalRowsCount = 3;
+  var html = '<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">';
+  html += '<tr>' + _SO_SUMMARY_TABLE_HEADERS.map(function(h) {
+    return '<th style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 8px;text-align:left;white-space:nowrap">' + sanitize(h) + '</th>';
+  }).join('') + '</tr>';
+  rows.forEach(function(r, idx) {
+    var isTotal = idx >= rows.length - totalRowsCount;
+    html += '<tr>' + r.map(function(c, ci) {
+      var align = (ci === 2 || ci === 3 || ci === 4) ? 'right' : 'left';
+      var style = 'border:1px solid #cbd5e1;padding:4px 8px;text-align:' + align + ';white-space:nowrap' + (isTotal ? ';font-weight:bold' : '');
+      return '<td style="' + style + '">' + sanitize(String(c)) + '</td>';
+    }).join('') + '</tr>';
+  });
+  html += '</table>';
+  return html;
+}
+
+// สรุปข้อมูล PO/SO ใบเดียว เป็นข้อความ (plain text, tab-separated table) — ใช้ copy วางส่งให้ Sales Support ได้เลย
+function _soSummaryTextForSalesSupport(s) {
+  var lines = _soSummaryHeaderLines(s);
+  lines.push('');
+  lines.push('รายการสินค้า:');
+  lines.push(_soSummaryTableTSV(s));
+  if (s.note) lines.push('', 'หมายเหตุ: ' + s.note);
+  return lines.join('\n');
+}
+
+// สรุปข้อมูล PO/SO ใบเดียว เป็น HTML (มีตารางจริง) — วางใน Excel/Outlook แล้วขึ้นเป็นตาราง มีเส้นขอบ/ตัวหนาแถวยอดรวม
+function _soSummaryHtmlForSalesSupport(s) {
+  var headerHtml = _soSummaryHeaderLines(s).map(function(l) { return sanitize(l); }).join('<br>');
+  var html = '<div style="font-family:Arial,sans-serif;font-size:13px">' + headerHtml +
+    '<br><br><b>รายการสินค้า:</b><br><br>' + _soSummaryTableHtml(s);
+  if (s.note) html += '<br><br>หมายเหตุ: ' + sanitize(s.note);
+  html += '</div>';
+  return html;
 }
 
 function copySOSummaryForSalesSupport(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
-  copyText(_soSummaryTextForSalesSupport(s), '📋 คัดลอกสรุป PO/SO แล้ว — วางส่งให้ Sales Support ได้เลย');
+  copyHtmlAndText(_soSummaryHtmlForSalesSupport(s), _soSummaryTextForSalesSupport(s), '📋 คัดลอกสรุป PO/SO แล้ว — วางส่งให้ Sales Support ได้เลย (วาง Excel/Outlook ขึ้นเป็นตาราง)');
 }
 
 // ยืนยันเลข SO จริงที่ได้กลับมาจาก Sales Support — ปิดสถานะร่าง pendingSoNumber
