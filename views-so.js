@@ -730,19 +730,31 @@ function _soSummaryTableTSV(s) {
   return lines.join('\n');
 }
 
+// ความกว้างคอลัมน์ (px) ของตารางสรุป — กันไม่ให้ Excel ตั้ง column width แคบจนตัวเลข/ข้อความขึ้น ####### ตอนวาง
+var _SO_SUMMARY_TABLE_COL_WIDTHS = [140, 220, 60, 110, 110, 170, 140, 140, 140];
+
+// คอลัมน์ที่เป็นตัวเลข/โค้ดล้วน ๆ (SKU, SO/เลขอ้างอิง) ต้อง "บังคับเป็นข้อความ" ตอนวางลง Excel ไม่งั้น Excel จะตีความเป็นตัวเลข
+// แล้วแสดงเป็น scientific notation (เช่น 1.2E+09) หรือ ####### ถ้าคอลัมน์แคบ — mso-number-format:'\@' คือ directive ของ Excel ที่สั่งให้ format cell เป็น Text ตอน paste จาก HTML
+var _SO_SUMMARY_TABLE_TEXT_COLS = [0, 8];
+
 // ตารางสรุปรายการสินค้า เป็น HTML <table> จริง — ใช้เป็น text/html เวลาวางลง Excel/Outlook แล้วขึ้นเป็นตารางเลย เหมือนตัวอย่างที่ขอ
 function _soSummaryTableHtml(s) {
   var rows = _soSummaryTableRows(s);
   var totalRowsCount = 3;
   var html = '<table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px">';
-  html += '<tr>' + _SO_SUMMARY_TABLE_HEADERS.map(function(h) {
-    return '<th style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 8px;text-align:left;white-space:nowrap">' + sanitize(h) + '</th>';
+  html += '<colgroup>' + _SO_SUMMARY_TABLE_COL_WIDTHS.map(function(w) {
+    return '<col style="width:' + w + 'px;mso-width-source:userset">';
+  }).join('') + '</colgroup>';
+  html += '<tr>' + _SO_SUMMARY_TABLE_HEADERS.map(function(h, ci) {
+    return '<th style="background:#f1f5f9;border:1px solid #cbd5e1;padding:4px 8px;text-align:left;white-space:nowrap;width:' + _SO_SUMMARY_TABLE_COL_WIDTHS[ci] + 'px">' + sanitize(h) + '</th>';
   }).join('') + '</tr>';
   rows.forEach(function(r, idx) {
     var isTotal = idx >= rows.length - totalRowsCount;
     html += '<tr>' + r.map(function(c, ci) {
       var align = (ci === 2 || ci === 3 || ci === 4) ? 'right' : 'left';
-      var style = 'border:1px solid #cbd5e1;padding:4px 8px;text-align:' + align + ';white-space:nowrap' + (isTotal ? ';font-weight:bold' : '');
+      var forceText = _SO_SUMMARY_TABLE_TEXT_COLS.indexOf(ci) !== -1;
+      var style = 'border:1px solid #cbd5e1;padding:4px 8px;text-align:' + align + ';white-space:nowrap;width:' + _SO_SUMMARY_TABLE_COL_WIDTHS[ci] + 'px' +
+        (isTotal ? ';font-weight:bold' : '') + (forceText ? ';mso-number-format:\'\\@\'' : '');
       return '<td style="' + style + '">' + sanitize(String(c)) + '</td>';
     }).join('') + '</tr>';
   });
@@ -761,13 +773,15 @@ function _soSummaryTextForSalesSupport(s) {
 }
 
 // สรุปข้อมูล PO/SO ใบเดียว เป็น HTML (มีตารางจริง) — วางใน Excel/Outlook แล้วขึ้นเป็นตาราง มีเส้นขอบ/ตัวหนาแถวยอดรวม
+// ห่อเป็น document เต็ม (<html><head><meta charset="utf-8">...) เพราะ Excel/Outlook อ่าน HTML ที่วางจาก clipboard
+// ด้วย encoding เดา — ถ้าไม่มี charset ประกาศไว้ใน <head> จะเดาเป็น Windows-1252 แล้วภาษาไทยเพี้ยนเป็นอักขระแปลก
 function _soSummaryHtmlForSalesSupport(s) {
   var headerHtml = _soSummaryHeaderLines(s).map(function(l) { return sanitize(l); }).join('<br>');
-  var html = '<div style="font-family:Arial,sans-serif;font-size:13px">' + headerHtml +
+  var body = '<div style="font-family:Arial,sans-serif;font-size:13px">' + headerHtml +
     '<br><br><b>รายการสินค้า:</b><br><br>' + _soSummaryTableHtml(s);
-  if (s.note) html += '<br><br>หมายเหตุ: ' + sanitize(s.note);
-  html += '</div>';
-  return html;
+  if (s.note) body += '<br><br>หมายเหตุ: ' + sanitize(s.note);
+  body += '</div>';
+  return '<!doctype html><html><head><meta charset="utf-8"></head><body>' + body + '</body></html>';
 }
 
 function copySOSummaryForSalesSupport(soId) {

@@ -2269,8 +2269,8 @@ function copyText(text, msg) {
 function copyHtmlAndText(html, text, msg) {
   if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
     const item = new ClipboardItem({
-      'text/html': new Blob([html], { type: 'text/html' }),
-      'text/plain': new Blob([text], { type: 'text/plain' })
+      'text/html': new Blob([html], { type: 'text/html;charset=utf-8' }),
+      'text/plain': new Blob([text], { type: 'text/plain;charset=utf-8' })
     });
     navigator.clipboard.write([item]).then(() => {
       toast(msg || '📋 Copy แล้ว!');
