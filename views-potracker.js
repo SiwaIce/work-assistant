@@ -2150,7 +2150,12 @@ var poTrackerDealerSearch = '';        // ค้นหาสินค้าต�
 var poTrackerDealerStatusFlt = '';     // '' | shipped | pending — กรองตามสถานะส่งของ ใช้ร่วมกันทั้งมุมมองการ์ด/ตาราง/สรุปต่อสินค้า/คัดลอกสรุป
 var poTrackerDealerPageMode = 'dealer'; // dealer | allProducts — ดูตาม Dealer เดียว หรือสรุปสินค้ารวมทุก Dealer
 var poTrackerDealerAllProductsExpanded = {}; // sku/model -> เปิด/ปิดรายละเอียดต่อ Dealer ในมุมมองสรุปรวมทุก Dealer
+var poTrackerDealerVatMode = 'ex';     // ex | in — การ์ดสรุปยอดเงินด้านบนโชว์ไม่รวม VAT (ตรงกับ unitPrice ในระบบ) หรือรวม VAT 7%
+var poTrackerDealerAllViewMode = 'byProduct'; // byProduct | byDealer — มุมมอง "สรุปสินค้ารวมทุก Dealer": จัดกลุ่มตามสินค้า (เดิม) หรือเทียบยอดต่อ Dealer
+var poTrackerDealerAllSortKey = 'totalVal'; // name | totalVal | doneVal | leftVal | openVal — คอลัมน์ที่เรียงอยู่ในตารางเทียบยอดต่อ Dealer
+var poTrackerDealerAllSortDir = -1; // 1 = น้อยไปมาก, -1 = มากไปน้อย (ชื่อ Dealer ใช้ -1 = Z→A)
 var POTRACKER_DEALER_LS_KEY = 'v7_poTrackerDealer_lastDealer'; // จำ Dealer ล่าสุดที่เปิดดู (ต่อเครื่อง)
+var POTRACKER_VAT_RATE = 0.07;
 
 function poTrackerDealerSelect(v) {
   poTrackerDealerPageFlt = v;
@@ -2198,6 +2203,173 @@ function _poTrackerDealerApplyStatusFilter(products, statusFlt) {
     out.push({ model: p.model, sku: p.sku, totalQty: totalQty, deliveredQty: deliveredQty, pos: pos, byBucket: byBucket });
   });
   return out;
+}
+
+// สรุปยอดเงินของ Dealer 1 ราย จาก SO ทั้งหมดของ Dealer นั้น (ไม่ขึ้นกับตัวกรองค้นหา/สถานะบนจอ — ไว้โชว์การ์ดสรุปรวม)
+// - totalVal/totalQty: ทุกรายการในทุก SO ไม่ว่าจะปิดหรือยังเปิด
+// - doneVal/doneQty: เฉพาะส่วนที่ bucket เป็น "ส่งแล้ว" จริง (เหมือน deliveredQty ใน _poTrackerDealerBuildProducts)
+// - openVal/openCount: ยอดรวมทั้งใบ (ไม่ใช่แค่ส่วนที่เหลือ) ของ SO ที่สถานะยังไม่ถึง "ปิด" — นับรวมใบที่ส่งไปแล้วบางส่วนด้วย
+//   เพราะยังไม่ออก Invoice/ปิดงาน ราคาต่อหน่วย (unitPrice) ในระบบเป็นราคาไม่รวม VAT เหมือนใบเสนอราคา/SO
+function _poTrackerDealerMoneyTotals(dealerSOs) {
+  var totalQty = 0, totalVal = 0, doneQty = 0, doneVal = 0, openVal = 0, openCount = 0;
+  dealerSOs.forEach(function(s) {
+    var soVal = 0;
+    (s.items || []).forEach(function(it) {
+      var qty = Number(it.qty) || 0;
+      var price = Number(it.unitPrice) || 0;
+      var lineVal = qty * price;
+      totalQty += qty; totalVal += lineVal; soVal += lineVal;
+      if (_poTrackerItemBucket(it, s) === 'shipped') { doneQty += qty; doneVal += lineVal; }
+    });
+    if (s.status !== 'closed') { openVal += soVal; openCount++; }
+  });
+  return {
+    soCount: dealerSOs.length, openCount: openCount,
+    totalQty: totalQty, totalVal: totalVal,
+    doneQty: doneQty, doneVal: doneVal,
+    leftQty: totalQty - doneQty, leftVal: totalVal - doneVal,
+    openVal: openVal
+  };
+}
+
+// แปลงยอด "ไม่รวม VAT" ตามโหมดที่เลือกไว้ (poTrackerDealerVatMode) — ไม่รวม VAT (ค่าเริ่มต้น ตรงกับ unitPrice จริง) หรือรวม VAT 7%
+function _poTrackerDealerMoney(exVatVal) {
+  var v = poTrackerDealerVatMode === 'in' ? exVatVal * (1 + POTRACKER_VAT_RATE) : exVatVal;
+  return '฿' + fmtMoney(Math.round(v));
+}
+
+function poTrackerDealerSetVatMode(mode) { poTrackerDealerVatMode = mode; render(); }
+
+// คัดลอกยอดเดียว (ตัวเลขดิบของ metric 1 การ์ด) — กดปุ่ม 📋 บนการ์ด
+function poTrackerDealerCopyMetric(label, text) {
+  if (typeof copyText === 'function') copyText(text, '📋 คัดลอก "' + label + '" แล้ว');
+}
+
+// คัดลอกตัวเลขสรุปทั้ง 4 การ์ดของ Dealer ที่เลือกอยู่ เป็นก้อนเดียว — สำหรับเอาไปกรอก forecast/วิเคราะห์ต่อ
+function poTrackerDealerCopyAllMetrics() {
+  if (!poTrackerDealerPageFlt) return;
+  var dealerSOs = ST.getAll('salesOrders').filter(function(s) { return s.dealerName === poTrackerDealerPageFlt; });
+  var t = _poTrackerDealerMoneyTotals(dealerSOs);
+  var tag = poTrackerDealerVatMode === 'in' ? '(รวม VAT 7%)' : '(ไม่รวม VAT)';
+  var lines = [
+    'สรุปยอด PO — ' + poTrackerDealerPageFlt + ' ' + tag,
+    'รวมทุก PO\t' + t.totalQty + ' ชิ้น\t' + _poTrackerDealerMoney(t.totalVal).replace('฿', '') + ' บาท',
+    'ส่งแล้ว\t' + t.doneQty + ' ชิ้น\t' + _poTrackerDealerMoney(t.doneVal).replace('฿', '') + ' บาท',
+    'คงเหลือค้างส่ง\t' + t.leftQty + ' ชิ้น\t' + _poTrackerDealerMoney(t.leftVal).replace('฿', '') + ' บาท',
+    'PO ที่ยังไม่ปิด (' + t.openCount + '/' + t.soCount + ' ใบ)\t-\t' + _poTrackerDealerMoney(t.openVal).replace('฿', '') + ' บาท'
+  ];
+  if (typeof copyText === 'function') copyText(lines.join('\n'), '📋 คัดลอกสรุปยอด ' + poTrackerDealerPageFlt + ' แล้ว');
+}
+
+// การ์ดสรุปยอด 1 ใบ (ไอคอน/label ซ้าย ปุ่มคัดลอกขวาบน ยอดเงินตัวใหญ่ + จำนวนชิ้นเล็กด้านล่าง)
+function _poTrackerDealerMetricCardHtml(icon, label, qtyLabel, color, exVatVal) {
+  var copyVal = fmtMoney(Math.round(poTrackerDealerVatMode === 'in' ? exVatVal * (1 + POTRACKER_VAT_RATE) : exVatVal));
+  return '<div style="flex:1;min-width:150px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;position:relative">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">' +
+    '<div style="font-size:11px;color:var(--text2);font-weight:600">' + icon + ' ' + label + '</div>' +
+    '<button class="btn bsm bo" style="padding:2px 6px;font-size:10px" title="คัดลอกยอดนี้" onclick="poTrackerDealerCopyMetric(\'' + label.replace(/'/g, "\\'") + '\',\'' + copyVal + '\')">📋</button>' +
+    '</div>' +
+    '<div style="font-size:19px;font-weight:700;color:' + color + ';margin-top:4px">' + _poTrackerDealerMoney(exVatVal) + '</div>' +
+    (qtyLabel ? '<div style="font-size:10.5px;color:var(--text3);margin-top:2px">' + qtyLabel + '</div>' : '') +
+    '</div>';
+}
+
+// แผงการ์ดสรุปยอด 4 ใบของ Dealer ที่เลือกอยู่ + ตัวสลับ VAT + ปุ่มคัดลอกรวม — แสดงบนสุดของมุมมอง Dealer เดียว
+function _poTrackerDealerMetricCardsHtml(dealerName, t) {
+  var html = '<div class="card" style="margin-bottom:12px;padding:16px">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">';
+  html += '<div style="font-size:11px;color:var(--text2)">สรุปยอด PO — ' + sanitize(dealerName) + ' (' + t.soCount + ' SO)</div>';
+  html += '<div style="display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:2px">';
+  html += '<button class="btn bsm" style="border:none;' + (poTrackerDealerVatMode === 'ex' ? 'background:var(--accent);color:#fff' : 'background:none;color:var(--text2)') + '" onclick="poTrackerDealerSetVatMode(\'ex\')">ไม่รวม VAT</button>';
+  html += '<button class="btn bsm" style="border:none;' + (poTrackerDealerVatMode === 'in' ? 'background:var(--accent);color:#fff' : 'background:none;color:var(--text2)') + '" onclick="poTrackerDealerSetVatMode(\'in\')">รวม VAT 7%</button>';
+  html += '</div></div>';
+
+  html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+  html += _poTrackerDealerMetricCardHtml('📦', 'รวมทุก PO', 'สั่งรวม ' + t.totalQty + ' ชิ้น', 'var(--text)', t.totalVal);
+  html += _poTrackerDealerMetricCardHtml('✅', 'ส่งแล้ว', 'ส่งแล้ว ' + t.doneQty + ' ชิ้น', '#22c55e', t.doneVal);
+  html += _poTrackerDealerMetricCardHtml('⏳', 'คงเหลือค้างส่ง', 'ค้างส่ง ' + t.leftQty + ' ชิ้น', '#f59e0b', t.leftVal);
+  html += _poTrackerDealerMetricCardHtml('📂', 'PO ที่ยังไม่ปิด', t.openCount + '/' + t.soCount + ' ใบยังไม่ปิด', '#8b5cf6', t.openVal);
+  html += '</div>';
+
+  html += '<div style="margin-top:10px;text-align:right">';
+  html += '<button class="btn bsm bo" onclick="poTrackerDealerCopyAllMetrics()">📋 คัดลอกตัวเลขทั้งหมด (สำหรับ Forecast)</button>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+// เรียงตารางเทียบยอดต่อ Dealer ตามคอลัมน์ที่กด — กดซ้ำคอลัมน์เดิมสลับทิศทาง
+function poTrackerDealerAllSortBy(key) {
+  if (poTrackerDealerAllSortKey === key) poTrackerDealerAllSortDir *= -1;
+  else { poTrackerDealerAllSortKey = key; poTrackerDealerAllSortDir = (key === 'name' ? 1 : -1); }
+  render();
+}
+
+// ตารางเทียบยอดเงิน (รวมทุก PO / ส่งแล้ว / คงเหลือค้างส่ง / PO ที่ยังไม่ปิด) ของทุก Dealer ในหน้าเดียว — นิยามเดียวกับการ์งสรุปในมุมมอง Dealer เดียว
+function _poTrackerAllDealersMoneySummaryHtml() {
+  var all = ST.getAll('salesOrders');
+  var dealerNames = Array.from(new Set(all.map(function(s) { return s.dealerName || ''; }).filter(Boolean)));
+  var rowsData = dealerNames.map(function(name) {
+    var t = _poTrackerDealerMoneyTotals(all.filter(function(s) { return s.dealerName === name; }));
+    t.name = name;
+    return t;
+  });
+  var key = poTrackerDealerAllSortKey, dir = poTrackerDealerAllSortDir;
+  var fieldMap = { name: 'name', totalVal: 'totalVal', doneVal: 'doneVal', leftVal: 'leftVal', openVal: 'openVal' };
+  rowsData.sort(function(a, b) {
+    if (key === 'name') return dir * String(a.name).localeCompare(String(b.name), 'th');
+    return dir * ((b[fieldMap[key]] || 0) - (a[fieldMap[key]] || 0));
+  });
+
+  var html = '<div style="display:flex;justify-content:flex-end;margin-bottom:8px">';
+  html += '<button class="btn bsm bo" onclick="poTrackerDealerAllCopyMoneyTable()">📋 คัดลอกตาราง (วางลง Excel)</button>';
+  html += '</div>';
+  html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--bg2)">';
+  [['name', 'Dealer'], ['totalVal', 'รวมทุก PO'], ['doneVal', 'ส่งแล้ว'], ['leftVal', 'คงเหลือค้างส่ง'], ['openVal', 'PO ที่ยังไม่ปิด']].forEach(function(c) {
+    html += '<th style="text-align:' + (c[0] === 'name' ? 'left' : 'right') + ';padding:8px 10px;font-size:11px;color:var(--text2);white-space:nowrap;cursor:pointer" onclick="poTrackerDealerAllSortBy(\'' + c[0] + '\')">' + c[1] + (poTrackerDealerAllSortKey === c[0] ? (poTrackerDealerAllSortDir === 1 ? ' ▲' : ' ▼') : ' ⇕') + '</th>';
+  });
+  html += '<th style="text-align:right;padding:8px 10px;font-size:11px;color:var(--text2);white-space:nowrap">SO เปิด/ทั้งหมด</th>';
+  html += '</tr></thead><tbody>';
+  if (!rowsData.length) {
+    html += '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--text2)">ยังไม่มีข้อมูล</td></tr>';
+  }
+  rowsData.forEach(function(t) {
+    html += '<tr style="border-top:1px solid var(--border)">';
+    html += '<td style="padding:8px 10px"><a href="#" onclick="go(\'poTrackerDealer\',{dealerName:\'' + sanitize(t.name).replace(/'/g, "\\'") + '\'});return false" style="color:var(--accent);font-weight:600">🏪 ' + sanitize(t.name) + '</a></td>';
+    html += '<td class="num" style="padding:8px 10px;text-align:right">' + _poTrackerDealerMoney(t.totalVal) + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;color:#22c55e">' + _poTrackerDealerMoney(t.doneVal) + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;color:#f59e0b">' + _poTrackerDealerMoney(t.leftVal) + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;color:#8b5cf6">' + _poTrackerDealerMoney(t.openVal) + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;color:var(--text2)">' + t.openCount + '/' + t.soCount + '</td>';
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
+// คัดลอกตารางเทียบยอดต่อ Dealer เป็น TSV (ลำดับ/การเรียงตรงกับที่โชว์บนจอ) — วางลง Excel/Sheets ได้เลย
+function poTrackerDealerAllCopyMoneyTable() {
+  var all = ST.getAll('salesOrders');
+  var dealerNames = Array.from(new Set(all.map(function(s) { return s.dealerName || ''; }).filter(Boolean)));
+  var rowsData = dealerNames.map(function(name) {
+    var t = _poTrackerDealerMoneyTotals(all.filter(function(s) { return s.dealerName === name; }));
+    t.name = name;
+    return t;
+  });
+  var key = poTrackerDealerAllSortKey, dir = poTrackerDealerAllSortDir;
+  var fieldMap = { name: 'name', totalVal: 'totalVal', doneVal: 'doneVal', leftVal: 'leftVal', openVal: 'openVal' };
+  rowsData.sort(function(a, b) {
+    if (key === 'name') return dir * String(a.name).localeCompare(String(b.name), 'th');
+    return dir * ((b[fieldMap[key]] || 0) - (a[fieldMap[key]] || 0));
+  });
+  var tag = poTrackerDealerVatMode === 'in' ? ' (รวม VAT 7%)' : ' (ไม่รวม VAT)';
+  var rows = [['Dealer', 'รวมทุก PO' + tag, 'ส่งแล้ว' + tag, 'คงเหลือค้างส่ง' + tag, 'PO ที่ยังไม่ปิด' + tag, 'SO เปิด/ทั้งหมด'].join('\t')];
+  rowsData.forEach(function(t) {
+    rows.push([t.name, _poTrackerDealerMoney(t.totalVal).replace('฿', ''), _poTrackerDealerMoney(t.doneVal).replace('฿', ''),
+      _poTrackerDealerMoney(t.leftVal).replace('฿', ''), _poTrackerDealerMoney(t.openVal).replace('฿', ''), t.openCount + '/' + t.soCount].join('\t'));
+  });
+  if (typeof copyText === 'function') copyText(rows.join('\n'), '📋 คัดลอกตารางเทียบยอดต่อ Dealer แล้ว');
 }
 
 // รวมสินค้าทุก Dealer (ทุก PO/SO ที่มี dealerName) เป็น product เดียวกัน + แยกยอดต่อ Dealer พร้อมรายการ SO/PO ที่มาของแต่ละยอด
@@ -2248,8 +2420,21 @@ function poTrackerDealerAllProductsToggle(key) {
 
 // มุมมอง "สรุปสินค้ารวมทุก Dealer" — สำหรับ 1 สินค้า ดูได้ว่าสั่งรวมทุกบริษัทกี่ชิ้น ส่งแล้ว/ค้างเท่าไหร่
 // กดขยายดูรายละเอียดต่อ Dealer ได้ว่าแต่ละบริษัทสั่งกี่ชิ้น มาจาก SO/PO ไหนบ้าง (ดูประวัติ ไม่ต้องไล่เปิดทีละ Dealer)
+// สลับมุมมองของ "สรุปสินค้ารวมทุก Dealer": ตามสินค้า (เดิม) หรือเทียบยอดเงินต่อ Dealer
+function poTrackerDealerSetAllViewMode(mode) { poTrackerDealerAllViewMode = mode; render(); }
+
 function _poTrackerAllDealersPageHtml() {
   var html = '';
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
+  html += '<button class="btn bsm ' + (poTrackerDealerAllViewMode === 'byProduct' ? 'bp' : 'bo') + '" onclick="poTrackerDealerSetAllViewMode(\'byProduct\')">🧩 ตามสินค้า</button>';
+  html += '<button class="btn bsm ' + (poTrackerDealerAllViewMode === 'byDealer' ? 'bp' : 'bo') + '" onclick="poTrackerDealerSetAllViewMode(\'byDealer\')">💰 เทียบยอดต่อ Dealer</button>';
+  html += '</div>';
+
+  if (poTrackerDealerAllViewMode === 'byDealer') {
+    html += _poTrackerAllDealersMoneySummaryHtml();
+    return html;
+  }
+
   html += '<div class="card" style="margin-bottom:12px;padding:16px">';
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">';
   html += '<input class="inp" style="flex:1;min-width:160px;max-width:260px" placeholder="🔎 ค้นหาสินค้า/SKU" value="' + sanitize(poTrackerDealerSearch) + '" oninput="poTrackerDealerSearch=this.value;render()">';
@@ -2378,15 +2563,8 @@ function rPOTrackerDealer(el) {
   var built = _poTrackerDealerBuildProducts(poTrackerDealerPageFlt);
   var allProducts = built.products;
 
-  var grandTotal = allProducts.reduce(function(sum, p) { return sum + p.totalQty; }, 0);
-  var grandDelivered = allProducts.reduce(function(sum, p) { return sum + p.deliveredQty; }, 0);
-
-  html += '<div class="card" style="margin-bottom:12px;padding:16px">';
-  html += '<div style="display:flex;gap:16px;flex-wrap:wrap">';
-  html += '<div><div style="font-size:22px;font-weight:600">' + grandTotal + '</div><div style="font-size:11px;color:var(--text2)">รวมทุกรายการ (ชิ้น)</div></div>';
-  html += '<div><div style="font-size:22px;font-weight:600;color:#22c55e">' + grandDelivered + '</div><div style="font-size:11px;color:var(--text2)">ส่งแล้ว</div></div>';
-  html += '<div><div style="font-size:22px;font-weight:600;color:#f59e0b">' + (grandTotal - grandDelivered) + '</div><div style="font-size:11px;color:var(--text2)">ค้างอยู่</div></div>';
-  html += '</div></div>';
+  var moneyTotals = _poTrackerDealerMoneyTotals(built.dealerSOs);
+  html += _poTrackerDealerMetricCardsHtml(poTrackerDealerPageFlt, moneyTotals);
 
   if (!allProducts.length) {
     html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">Dealer นี้ยังไม่มีรายการสินค้า</div>';
