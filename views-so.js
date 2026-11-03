@@ -2511,6 +2511,25 @@ function saveSOItemStatus(soId, idx) {
   }
 }
 
+// มาร์ค/ยกเลิกมาร์ครายการว่า "หลุดจอง" — ใช้ตอนถึงกำหนดวันจองแล้วแต่ของไม่ได้เลื่อน ทำให้เสียสิทธิ์จองไป
+// (ปุ่มอยู่ในแท็บ "จองคลัง 1021" ของ PO Tracker, views-potracker.js) item.reserveLost คือสถานะปัจจุบัน (toggle ได้)
+// ส่วน item.everReserveLost ติดค้างถาวรไว้โชว์ป้าย "เคยหลุดจอง" ต่อแม้จะยกเลิก/จองใหม่ไปแล้ว ไม่มีช่องให้เคลียร์คืน
+function soToggleItemReserveLost(soId, idx) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var it = s.items[idx];
+  var items = s.items.slice();
+  var nowLost = !it.reserveLost;
+  items[idx] = Object.assign({}, it, nowLost ? { reserveLost: true, reserveLostDate: _td(), everReserveLost: true } : { reserveLost: false });
+  var cfg = getConfig();
+  var logs = (s.logs || []).slice();
+  logs.push({ date: _td(), action: nowLost ? '❌ มาร์คหลุดจอง ' + (it.model || '') : '↩️ ยกเลิกหลุดจอง ' + (it.model || ''), note: '', by: cfg.saleName || '' });
+  var updatedSO = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString(), logs: logs });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
+  toast(nowLost ? '❌ มาร์คหลุดจองแล้ว' : '↩️ ยกเลิกหลุดจองแล้ว');
+  render();
+}
+
 // ชื่อสถานะ PR/PO ที่แสดงผล — ใช้ prpoStatusId ผูกกับ cfg.prpoStatuses ปัจจุบันก่อน ถ้าไม่มี (รายการเก่าก่อน
 // เปลี่ยนเป็น dropdown) ค่อย fallback ไปข้อความอิสระเดิมที่เคยพิมพ์ไว้ใน item.prpoStatus
 function _soPrpoStatusLabel(item) {
