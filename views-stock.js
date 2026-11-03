@@ -431,6 +431,13 @@ function stockSOItemReadinessHtml(sku, qty, so, item) {
   var from0001 = info.from0001, fromQI = info.fromQI, shortfall = info.shortfall, reservation = info.reservation;
 
   var h = '';
+  // ป้ายหลุดจอง/เคยหลุดจอง — มาร์คจากแท็บ "จองคลัง 1021" ใน PO Tracker (soToggleItemReserveLost, views-so.js)
+  // item.everReserveLost ติดอยู่ถาวร โชว์ "เคยหลุดจอง" ต่อแม้จะยกเลิกสถานะ/จองใหม่ไปแล้ว ให้เห็นประวัติที่นี่ด้วย
+  if (item.reserveLost) {
+    h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(239,68,68,.15);color:#ef4444;display:inline-block;margin-bottom:3px">❌ หลุดจอง' + (item.reserveLostDate ? ' ' + fD(item.reserveLostDate) : '') + '</div><br>';
+  } else if (item.everReserveLost) {
+    h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(217,119,6,.15);color:#d97706;display:inline-block;margin-bottom:3px">⚠️ เคยหลุดจอง</div><br>';
+  }
   if (deliveredForThisSO > 0) {
     h += '<div style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(107,114,128,.15);color:#6b7280;display:inline-block;margin-bottom:3px">✔ ส่งมอบแล้ว ' + deliveredForThisSO + '</div><br>';
   }
