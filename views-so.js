@@ -1326,6 +1326,8 @@ function rSODetail(el) {
   if (s.quotationId) {
     var _soQuote = (typeof getQuoteById === 'function') ? getQuoteById(s.quotationId) : null;
     infoCells.push({ label:'Quotation', val: '<a href="#" onclick="editQuotation(\'' + s.quotationId + '\');return false" style="color:var(--accent)">' + sanitize(_soQuote ? _soQuote.quoteNo : s.quotationId) + '</a>' });
+  } else {
+    infoCells.push({ label:'Quotation', val: '<span style="color:var(--text2)">ไม่ได้ผูก — <a href="#" onclick="showSOEditModal(\'' + s.id + '\');return false" style="color:var(--accent)">เพิ่มอ้างอิง</a></span>' });
   }
   if (s.deliveryAddress)  infoCells.push({ label:'📍 ที่อยู่จัดส่ง', val: '<span style="white-space:pre-wrap">' + sanitize(s.deliveryAddress) + '</span>' });
   var _soHdrRound = (s.doNumber || s.invoiceNumber) ? _soHeaderShipmentRound(s) : null;
@@ -1664,6 +1666,40 @@ function _soQuotationOptionsHtml(dealerId, pipelineId) {
     h += '<option value="' + q.id + '">' + sanitize(q.quoteNo) + ' · ' + (q.items || []).length + ' รายการ · ฿' + fmtMoney(q.totalAmount || 0) + '</option>';
   });
   return h;
+}
+
+// ตัวเลือกใบเสนอราคาสำหรับฟอร์มแก้ไข SO (soE_quotationId) — เอาของ dealer นี้ก่อน (เผื่อ revise ราคาใหม่แล้วมีใบ
+// เสนอราคาหลายใบของ dealer เดียวกัน) แต่ถ้าใบที่ผูกอยู่ตอนนี้เป็นของ dealer อื่น (เช่นย้าย SO ไป dealer ใหม่
+// ทีหลัง) ก็ยังโชว์ไว้ในลิสต์ด้วย ไม่งั้นเปิดฟอร์มมาจะเห็นเป็นค่าว่างทั้งที่จริงมีผูกอยู่
+function _soEditQuotationOptionsHtml(dealerId, currentQuotationId) {
+  var all = [];
+  try { all = JSON.parse(localStorage.getItem('v7_quotations_v2') || '[]'); } catch (e) {}
+  var matches = all.filter(function(q) { return dealerId && q.dealerId === dealerId; })
+    .sort(function(a, b) { return (b.createdAt || '').localeCompare(a.createdAt || ''); });
+  var curQ = currentQuotationId ? all.filter(function(q) { return q.id === currentQuotationId; })[0] : null;
+  if (curQ && !matches.some(function(q) { return q.id === curQ.id; })) matches.unshift(curQ);
+  var h = '<option value="">-- ไม่ผูกใบเสนอราคา / ยกเลิกลิงก์ --</option>';
+  matches.forEach(function(q) {
+    var sel = (q.id === currentQuotationId) ? ' selected' : '';
+    var dealerTag = (q.dealerId !== dealerId) ? ' [Dealer อื่น]' : '';
+    h += '<option value="' + q.id + '"' + sel + '>' + sanitize(q.quoteNo) + ' · ' + (q.items || []).length + ' รายการ · ฿' + fmtMoney(q.totalAmount || 0) + dealerTag + '</option>';
+  });
+  return h;
+}
+
+// แสดงหมายเหตุใต้ตัวเลือกใบเสนอราคาในฟอร์มแก้ไข SO — เตือนถ้าผูกใบของ dealer อื่น และโชว์เลขใบเดิมที่กำลังจะ
+// ถูกแทนที่ ให้เห็นชัดว่ากำลังเปลี่ยนอ้างอิง ไม่ใช่แค่เลือกเฉยๆ
+function _soEditQuotationChanged(quotationId) {
+  var note = document.getElementById('soE_quotationNote');
+  if (!note) return;
+  if (!quotationId) { note.textContent = window._soEditOrig && window._soEditOrig.quotationId ? '⚠️ จะยกเลิกลิงก์ใบเสนอราคาเดิมตอนบันทึก' : ''; return; }
+  var q = (typeof getQuoteById === 'function') ? getQuoteById(quotationId) : null;
+  if (!q) { note.textContent = ''; return; }
+  var dealerId = (document.getElementById('soE_dealer') || {}).value || '';
+  var msgs = [];
+  if (dealerId && q.dealerId !== dealerId) msgs.push('⚠️ ใบเสนอราคานี้เป็นของ Dealer อื่น');
+  if (window._soEditOrig && window._soEditOrig.quotationId && window._soEditOrig.quotationId !== quotationId) msgs.push('จะเปลี่ยนอ้างอิงจากใบเดิม');
+  note.textContent = msgs.join(' · ');
 }
 
 function _soFillFromQuote(quoteId) {
@@ -3317,6 +3353,14 @@ function _soEditDealerChanged(dealerId) {
   }
   _soFilterAddressByDealer(dealerId);
   _soEditLinkNote();
+  // เปลี่ยน Dealer แล้ว รีเฟรชลิสต์ใบเสนอราคาให้ตรง dealer ใหม่ — คงใบที่เลือกไว้ถ้ายังอยู่ในลิสต์ ไม่งั้นเคลียร์
+  var qSel = document.getElementById('soE_quotationId');
+  if (qSel) {
+    var keepQ = qSel.value;
+    qSel.innerHTML = _soEditQuotationOptionsHtml(dealerId, keepQ);
+    if (qSel.value !== keepQ) qSel.value = '';
+    _soEditQuotationChanged(qSel.value);
+  }
 }
 
 // คำเตือนสดใต้ส่วนการผูกงาน — บอกก่อนกดบันทึกว่ายอดกำลังจะย้ายไปไหน และเลข Project ID มีปัญหาอะไรไหม
@@ -3388,6 +3432,11 @@ function showSOEditModal(soId) {
   html += '<div style="display:flex;gap:8px">';
   html += '<div style="flex:1"><label class="lbl">Dealer</label><select id="soE_dealer" class="inp" onchange="_soEditDealerChanged(this.value)">' + dOpts + '</select></div>';
   html += '</div>';
+  // อ้างอิงใบเสนอราคา — เดิมหน้านี้แสดงเป็น link แก้ไม่ได้ เพิ่มให้เลือก/เปลี่ยนได้เผื่อ revise ราคาใหม่แล้วต้อง
+  // ย้าย SO ไปผูกใบเสนอราคาใบใหม่แทนใบเดิม (ยกเลิกลิงก์ได้ด้วยถ้าเลือก "ไม่ผูก")
+  html += '<div><label class="lbl">ใบเสนอราคา <span style="font-size:10px;color:var(--text2)">(อ้างอิงใบเสนอราคาที่ผูกกับ SO นี้ — เปลี่ยนได้เมื่อมีการ revise ราคาใหม่)</span></label>' +
+    '<select id="soE_quotationId" class="inp" onchange="_soEditQuotationChanged(this.value)">' + _soEditQuotationOptionsHtml(s.dealerId, s.quotationId) + '</select>' +
+    '<div id="soE_quotationNote" class="hint" style="font-size:11px;margin-top:3px"></div></div>';
   html += '<div><label class="lbl">📍 ที่อยู่จัดส่ง</label><select id="soN_addressSel" class="inp" onchange="_soAddressSelChanged(this.value)">' + _soAddressOptionsHtml(s.dealerId, s.deliveryAddress) + '</select>';
   html += '<textarea id="soN_deliveryAddress" class="inp" rows="2" style="margin-top:6px">' + sanitize(s.deliveryAddress||'') + '</textarea></div>';
 
@@ -3441,6 +3490,7 @@ function showSOEditModal(soId) {
   // เก็บสภาพเดิมไว้เทียบว่าการผูกงานเปลี่ยนไปไหม — อ่านจากฟอร์มอย่างเดียวไม่รู้ว่าย้ายมาจากไหน
   window._soEditOrig = s;
   _soEditLinkNote();
+  _soEditQuotationChanged(s.quotationId || '');
 }
 
 function saveSOEdit(soId) {
@@ -3528,6 +3578,7 @@ function saveSOEdit(soId) {
     projectName:      (document.getElementById('soE_projectName')||{}).value || '',
     projectNumber:    (document.getElementById('soE_projectNumber')||{}).value || '',
     remark:           (document.getElementById('soE_remark')||{}).value || '',
+    quotationId:      (document.getElementById('soE_quotationId')||{}).value || '',
     deliveryAddress:  ((document.getElementById('soN_deliveryAddress')||{}).value || '').trim(),
     expectedDelivery: (document.getElementById('soE_eta')||{}).value || '',
     dueDate:          (document.getElementById('soE_due')||{}).value || '',
