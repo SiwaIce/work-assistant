@@ -578,6 +578,30 @@ function poTrackerToggleSummaryBucketAndScroll(key) {
   if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// เช็คว่าแถว SO ผ่านตัวกรองหลัก (สถานะเสร็จ/ยังไม่เสร็จ, ประเภท, สถานะ, พร้อมส่ง, เครดิต, PR/PO, รอของเข้า,
+// บันทึกย้อนหลัง, จองคลังเร่งด่วน, ช่วงวันที่สร้าง) หรือไม่ — ไม่รวม Dealer/คำค้น เพราะแต่ละจุดที่ใช้จัดการเอง
+// ใช้ร่วมกันทั้งมุมมองการ์ด/ตาราง (rows ทั้งหมด) และแผงสรุปรายการสินค้าของ Dealer เดียว กันแผงสรุปโชว์ SO
+// ที่ถูกตัวกรองด้านบนซ่อนไปแล้ว (เช่นเลือก "ยังไม่เสร็จ" แต่แผงสรุปยังโชว์ SO ที่เสร็จแล้วอยู่)
+function _poTrackerRowMatchesTopFilters(r) {
+  if (poTrackerFlt === 'done' && !r.done) return false;
+  if (poTrackerFlt === 'notdone' && r.done) return false;
+  if (poTrackerTypeFlt && (r.so.type || (r.so.runrateId ? 'runrate' : 'project')) !== poTrackerTypeFlt) return false;
+  if (poTrackerStatusFlt && r.so.status !== poTrackerStatusFlt) return false;
+  if (poTrackerReadyFlt === 'ready' && !(r.readiness.total && r.readiness.allReady)) return false;
+  if (poTrackerReadyFlt === 'notready' && !(r.readiness.total && !r.readiness.allReady)) return false;
+  if (poTrackerCreditFlt === 'yes' && !r.credit) return false;
+  if (poTrackerCreditFlt === 'no' && r.credit) return false;
+  if (poTrackerPrpoFlt === 'pending' && !r.pendingPRPO) return false;
+  if (poTrackerPrpoFlt === 'overdue' && !r.prpoOverdue) return false;
+  if (poTrackerRestockFlt === 'pending' && !r.pendingRestock) return false;
+  if (poTrackerRestockFlt === 'overdue' && !r.restockOverdue) return false;
+  if (poTrackerBackdatedFlt === 'pending' && !r.backdatedQty) return false;
+  if (poTrackerReserveUrgentFlt === 'yes' && !r.reserveUrgent) return false;
+  if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
+  if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
+  return true;
+}
+
 function poTrackerResetFilters() {
   poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = ''; poTrackerBackdatedFlt = '';
   poTrackerReserveUrgentFlt = '';
@@ -775,7 +799,7 @@ function rPOTracker(el) {
     html += '<button class="btn bsm ' + (poTrackerMainTab === 'cards' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'cards\';render()">🗂️ PO/SO Cards</button>';
     html += '</div>';
     if (poTrackerMainTab === 'summary') {
-      var dealerRows = rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt; });
+      var dealerRows = rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt && _poTrackerRowMatchesTopFilters(r); });
       html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
       el.innerHTML = html;
       return;
@@ -784,23 +808,8 @@ function rPOTracker(el) {
 
   var q = poTrackerSearch.trim().toLowerCase();
   var filtered = rows.filter(function(r) {
-    if (poTrackerFlt === 'done' && !r.done) return false;
-    if (poTrackerFlt === 'notdone' && r.done) return false;
     if (poTrackerDealerFlt && r.so.dealerName !== poTrackerDealerFlt) return false;
-    if (poTrackerTypeFlt && (r.so.type || (r.so.runrateId ? 'runrate' : 'project')) !== poTrackerTypeFlt) return false;
-    if (poTrackerStatusFlt && r.so.status !== poTrackerStatusFlt) return false;
-    if (poTrackerReadyFlt === 'ready' && !(r.readiness.total && r.readiness.allReady)) return false;
-    if (poTrackerReadyFlt === 'notready' && !(r.readiness.total && !r.readiness.allReady)) return false;
-    if (poTrackerCreditFlt === 'yes' && !r.credit) return false;
-    if (poTrackerCreditFlt === 'no' && r.credit) return false;
-    if (poTrackerPrpoFlt === 'pending' && !r.pendingPRPO) return false;
-    if (poTrackerPrpoFlt === 'overdue' && !r.prpoOverdue) return false;
-    if (poTrackerRestockFlt === 'pending' && !r.pendingRestock) return false;
-    if (poTrackerRestockFlt === 'overdue' && !r.restockOverdue) return false;
-    if (poTrackerBackdatedFlt === 'pending' && !r.backdatedQty) return false;
-    if (poTrackerReserveUrgentFlt === 'yes' && !r.reserveUrgent) return false;
-    if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
-    if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
+    if (!_poTrackerRowMatchesTopFilters(r)) return false;
     if (q) {
       var hay = ((r.so.soNumber || '') + ' ' + (r.so.customerPO || '') + ' ' + (r.so.dealerName || '')).toLowerCase();
       if (hay.indexOf(q) === -1) return false;
