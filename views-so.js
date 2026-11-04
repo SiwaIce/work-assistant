@@ -343,7 +343,7 @@ function showInvoiceDetailModal(soId, roundId) {
 
   html += '<div style="display:flex;gap:8px;margin-top:12px">';
   html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditShipmentRoundModal(\'' + soId + '\',\'' + roundId + '\')">✏️ แก้ไขข้อมูลรอบนี้</button>';
-  html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditSerialsModal(\'' + soId + '\')">🔢 แก้ไข Serial</button>';
+  html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditSerialsModal(\'' + soId + '\',\'' + roundId + '\')">🔢 แก้ไข Serial</button>';
   html += '</div>';
   if (sh.invoiceNumber) {
     html += '<button class="btn bo btn-full bsm" style="margin-top:6px" onclick="_soGoToTrackInvoice(\'' + _jsEsc(sh.invoiceNumber) + '\')">🧾 ดูรวมทุก SO ที่ใช้ Invoice นี้</button>';
@@ -975,15 +975,59 @@ function _soItemSerials(it) {
 
 // Serial เฉพาะของรอบส่งมอบหนึ่ง (ไม่ใช่ทั้งหมดของ SO+SKU) — it.serials เป็น flat list ไม่แยกรอบ จึงอิงตำแหน่งสะสม
 // เรียงตามลำดับรอบจริงจาก soSkuShipmentTimeline เหมือนที่ poTrackerExportInvoiceSNXlsx ใช้ (views-potracker.js) กันโชว์ serial ปนรอบกันเมื่อ SKU เดียวกันส่งมากกว่า 1 รอบ
-function _soRoundItemSerials(soId, roundId, sku, allSerials) {
+// ตำแหน่ง (start, qty) ของรอบหนึ่งใน flat list it.serials ของ SO+SKU — ใช้ทั้งอ่าน (_soRoundItemSerials) และเขียนกลับแบบไม่กระทบรอบอื่น (saveSOEditSerials)
+function _soRoundItemSerialRange(soId, roundId, sku) {
   var timeline = (typeof soSkuShipmentTimeline === 'function') ? soSkuShipmentTimeline(soId, sku) : [];
   var start = 0, qty = 0, found = false;
   timeline.forEach(function(round) {
     if (round.roundId === roundId) { qty = round.qty; found = true; }
     else if (!found) { start += round.qty; }
   });
-  if (!found) return allSerials || [];
-  return (allSerials || []).slice(start, start + qty);
+  return { start: start, qty: qty, found: found };
+}
+
+function _soRoundItemSerials(soId, roundId, sku, allSerials) {
+  var r = _soRoundItemSerialRange(soId, roundId, sku);
+  if (!r.found) return allSerials || [];
+  return (allSerials || []).slice(r.start, r.start + r.qty);
+}
+
+// แบ่ง it.serials (flat) เป็นช่วงตามแต่ละรอบส่งมอบจริง สำหรับโชว์เป็น chip แยกสี/label ต่อรอบในตารางรายการสินค้ารวม
+// คืน [{roundId, invoiceNumber, doNumber, date, serials, colorIdx}] — ส่วนที่เหลือ (serial เกินกว่าที่ timeline คาดไว้ เช่นกรอกเผื่อ) ใส่ไว้ท้ายสุดเป็น roundId:null
+function _soItemSerialsByRound(soId, sku, allSerials) {
+  var timeline = (typeof soSkuShipmentTimeline === 'function') ? soSkuShipmentTimeline(soId, sku) : [];
+  var all = allSerials || [];
+  var out = [];
+  var pos = 0;
+  timeline.forEach(function(round, i) {
+    var slice = all.slice(pos, pos + round.qty);
+    pos += round.qty;
+    out.push({ roundId: round.roundId, invoiceNumber: round.invoiceNumber, doNumber: round.doNumber, date: round.date, serials: slice, colorIdx: i });
+  });
+  if (pos < all.length) out.push({ roundId: null, invoiceNumber: '', doNumber: '', date: '', serials: all.slice(pos), colorIdx: timeline.length });
+  return out;
+}
+
+var _SO_INVOICE_CHIP_COLORS = ['#2563eb', '#16a34a', '#d97706', '#db2777', '#7c3aed', '#0891b2', '#dc2626', '#4d7c0f'];
+
+// Serial รวมทั้งหมดของ SKU หนึ่งใน SO แต่แยกกลุ่ม/สี/label ตามรอบส่งมอบ-Invoice จริง ไว้ใช้ในตารางรายการสินค้ารวม (ดู sns ปนรอบไม่ได้ว่า Serial ไหนอยู่ Invoice ไหน)
+function _soItemSerialCellHtml(soId, it) {
+  var allSns = _soItemSerials(it);
+  if (!allSns.length) return '<span style="color:var(--text2)">-</span>';
+  var groups = _soItemSerialsByRound(soId, it.sku, allSns);
+  var _esc = function(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); };
+  var html = '';
+  groups.forEach(function(g) {
+    if (!g.serials.length) return;
+    var color = g.roundId ? _SO_INVOICE_CHIP_COLORS[g.colorIdx % _SO_INVOICE_CHIP_COLORS.length] : 'var(--text2)';
+    var label = g.roundId ? (g.invoiceNumber ? ('INV ' + g.invoiceNumber) : (g.date ? fD(g.date) : 'รอบ ' + (g.colorIdx + 1))) : '⚠️ ไม่ทราบรอบ';
+    html += '<div style="margin-bottom:2px;border-left:2px solid ' + color + ';padding-left:4px">';
+    html += '<div style="font-size:9px;color:' + color + ';font-weight:600">' + sanitize(label) + '</div>';
+    html += g.serials.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('');
+    html += '</div>';
+  });
+  if (allSns.length > 1) html += '<button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอก Serial ทั้งหมด" onclick="copyToClip(\''+_esc(allSns.join(', '))+'\')">📋all</button>';
+  return html;
 }
 
 function _soSerialSpan(sn) {
@@ -1463,8 +1507,6 @@ function rSODetail(el) {
     '<th style="padding:8px 10px;font-weight:600;color:var(--text2)">ลิงก์</th></tr></thead><tbody>';
   (s.items||[]).forEach(function(it,idx){
     var lineTotal = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
-    var sns = _soItemSerials(it);
-    var _esc = function(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); };
     html += '<tr style="border-top:1px solid var(--border)">';
     html += '<td style="padding:10px">' + (idx+1) + '</td>';
     html += '<td style="padding:10px"><b>' + sanitize(it.model||'-') + '</b></td>';
@@ -1472,7 +1514,7 @@ function rSODetail(el) {
     html += '<td style="padding:10px;text-align:center">' + (it.qty||0) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(Number(it.unitPrice)||0)) + '</td>';
     html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(lineTotal)) + '</td>';
-    html += '<td style="padding:10px;font-size:10px">' + (sns.length ? sns.map(function(sn){ return '<span style="display:inline-block;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:0 4px;margin:1px;font-family:monospace">'+qcopyHtml(sn)+'</span>'; }).join('') + (sns.length>1?' <button class="qcopy-btn" style="opacity:.6;position:static" title="คัดลอกทั้งหมด" onclick="copyToClip(\''+_esc(sns.join(', '))+'\')">📋all</button>':'') : '<span style="color:var(--text2)">-</span>') + '</td>';
+    html += '<td style="padding:10px;font-size:10px;min-width:110px">' + _soItemSerialCellHtml(s.id, it) + '</td>';
     html += '<td style="padding:10px;min-width:150px">' + (typeof stockSOItemReadinessHtml === 'function' ? stockSOItemReadinessHtml(it.sku, it.qty, s, it) : '') +
       (!_soIsDone(s.status) ? '<button class="btn bsm bo" style="font-size:10px;padding:2px 7px;margin-top:4px" onclick="showSOItemStatusM(\'' + s.id + '\',' + idx + ')" title="อัปเดตสถานะรายการนี้โดยไม่ต้องเปิดหน้าแก้ไขรายการทั้งหมด">🏷️ อัปเดตสถานะ</button>' : '') +
       '</td>';
@@ -3281,18 +3323,36 @@ function revertSOStatus(soId) {
 
 // ---------------------------------------------------------------- แก้ไข Serial ย้อนหลัง (ไม่ผูกกับ status — กดได้แม้ SO ปิดจบแล้ว)
 
-function showSOEditSerialsModal(soId) {
+// roundId (ถ้าให้มา): จำกัดให้โชว์/แก้ได้เฉพาะ Serial ของรอบส่งมอบ-Invoice นั้น (ตัดมาจาก flat list ตามตำแหน่งสะสม — ดู _soRoundItemSerialRange) — Serial รอบอื่นไม่โชว์และไม่ถูกแก้
+function showSOEditSerialsModal(soId, roundId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
+  var round = null;
+  if (roundId) {
+    var shipments = _soMigrateLegacyShipment(s);
+    round = shipments.filter(function(x) { return x.id === roundId; })[0];
+  }
+  var roundQtyBySku = {};
+  if (round) (round.items || []).forEach(function(it) { roundQtyBySku[it.sku] = (roundQtyBySku[it.sku] || 0) + (it.qty || 0); });
+
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
-  html += '<div class="hint">แก้ไข Serial รับ/ส่งของแต่ละสินค้าได้ทุกเมื่อ ไม่ต้องรอเปลี่ยนสถานะ</div>';
+  if (round) {
+    var roundLabel = round.invoiceNumber ? ('Invoice ' + round.invoiceNumber) : (round.date ? fD(round.date) : 'รอบนี้');
+    html += '<div class="hint">แก้ไข Serial เฉพาะ ' + sanitize(roundLabel) + ' — Serial ของรอบ/Invoice อื่นไม่แสดงและไม่ถูกแก้ตรงนี้ (ถ้าเพิ่ม/ลบจำนวน Serial ในรอบนี้ไม่เท่าของเดิม ให้ตรวจ Serial ของรอบหลังจากนี้ซ้ำอีกครั้ง เพราะระบบเก็บ Serial เรียงเป็น list เดียวตามลำดับรอบ)</div>';
+  } else {
+    html += '<div class="hint">แก้ไข Serial รับ/ส่งของแต่ละสินค้าได้ทุกเมื่อ ไม่ต้องรอเปลี่ยนสถานะ</div>';
+  }
+  var renderedAny = false;
   (s.items||[]).forEach(function(it, idx){
+    if (round && !(it.sku && roundQtyBySku[it.sku])) return;
+    renderedAny = true;
+    var displaySns = round ? _soRoundItemSerials(soId, round.id, it.sku, _soItemSerials(it)) : _soItemSerials(it);
     html += '<div style="padding:10px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">';
-    html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px">' + sanitize(it.model||'-') + ' × ' + (it.qty||0) + ' หน่วย</div>';
+    html += '<div style="font-size:12px;font-weight:600;margin-bottom:8px">' + sanitize(it.model||'-') + ' × ' + (round ? roundQtyBySku[it.sku] : (it.qty||0)) + ' หน่วย' + (round ? ' (รอบนี้)' : '') + '</div>';
 
     html += '<label class="lbl" style="font-size:11px">Serial</label>';
     html += '<div id="soEs_' + idx + '" style="min-height:20px;margin-bottom:4px">';
-    _soItemSerials(it).forEach(function(sn){ html += _soSerialSpan(sn); });
+    displaySns.forEach(function(sn){ html += _soSerialSpan(sn); });
     html += '</div>';
     html += '<div style="display:flex;gap:4px">';
     html += '<input class="inp" id="soEsi_' + idx + '" style="flex:1;font-family:monospace;font-size:12px" placeholder="กรอก Serial (วางได้หลายตัว เว้นวรรค/ขึ้นบรรทัดคั่น) แล้วกด Enter"';
@@ -3300,8 +3360,11 @@ function showSOEditSerialsModal(soId) {
     html += '<button class="btn bo bsm" onclick="_addSOSerialEdit(' + idx + ')">+ เพิ่ม</button>';
     html += '</div></div>';
   });
-  html += '<button class="btn bp" onclick="saveSOEditSerials(\'' + soId + '\')">💾 บันทึก</button></div>';
-  openM('🔢 แก้ไข Serial ย้อนหลัง', html);
+  if (round && !renderedAny) {
+    html += '<div class="hint">ไม่มีรายละเอียดรายการสินค้าของรอบนี้ (ข้อมูลเก่าก่อนรองรับแบ่งส่ง) — กรุณาแก้ Serial แบบรวมทั้ง SO แทน</div>';
+  }
+  html += '<button class="btn bp" onclick="saveSOEditSerials(\'' + soId + '\'' + (round ? ',\'' + round.id + '\'' : '') + ')">💾 บันทึก</button></div>';
+  openM(round ? '🔢 แก้ไข Serial — รอบนี้' : '🔢 แก้ไข Serial ย้อนหลัง', html);
 }
 
 function _addSOSerialEdit(idx) {
@@ -3330,19 +3393,34 @@ function _collectSerialsEdit(idx) {
   return out;
 }
 
-function saveSOEditSerials(soId) {
+// roundId (ถ้าให้มา): modal แสดงแค่บางรายการ/บาง Serial (เฉพาะรอบนั้น) — แก้ไขเฉพาะช่วงตำแหน่งของรอบนั้นใน flat list, รายการ/รอบอื่นที่ไม่ได้โชว์ใน modal คงค่าเดิมไว้ทั้งหมด
+function saveSOEditSerials(soId, roundId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var newItems = (s.items||[]).map(function(it, idx){
     var clone = JSON.parse(JSON.stringify(it));
-    clone.serials = _collectSerialsEdit(idx);
+    var wrap = document.getElementById('soEs_' + idx);
+    if (!wrap) return clone; // รายการนี้ไม่ได้แสดงใน modal (อยู่นอกรอบที่กำลังแก้) — ไม่แตะ
+    var collected = _collectSerialsEdit(idx);
+    if (roundId) {
+      var allSns = _soItemSerials(it);
+      var range = _soRoundItemSerialRange(soId, roundId, it.sku);
+      clone.serials = range.found
+        ? allSns.slice(0, range.start).concat(collected).concat(allSns.slice(range.start + range.qty))
+        : collected;
+    } else {
+      clone.serials = collected;
+    }
     delete clone.serialsReceived;
     delete clone.serialsShipped;
     return clone;
   });
   var cfg = getConfig();
   var logs = (s.logs||[]).slice();
-  logs.push({ date: _td(), action: '🔢 แก้ไข Serial ย้อนหลัง', note: '', by: cfg.saleName||'' });
+  var shipments = roundId ? _soMigrateLegacyShipment(s) : [];
+  var round = roundId ? shipments.filter(function(x) { return x.id === roundId; })[0] : null;
+  var actionNote = round ? ('เฉพาะรอบ ' + (round.invoiceNumber || round.doNumber || fD(round.date || ''))) : '';
+  logs.push({ date: _td(), action: round ? '🔢 แก้ไข Serial (เฉพาะรอบ/Invoice)' : '🔢 แก้ไข Serial ย้อนหลัง', note: actionNote, by: cfg.saleName||'' });
   var updatedSO = ST.update('salesOrders', soId, { items: newItems, logs: logs, updatedAt: new Date().toISOString() });
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   closeMForce();
