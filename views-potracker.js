@@ -33,6 +33,8 @@ var poTrackerSummaryMinWaitDays = ''; // '' = ไม่กรอง, ไม่�
 var poTrackerSelectMode = false; // โหมดเลือกหลายใบ — ใช้สำหรับปุ่ม "📦 สรุปของพร้อมส่งให้ลูกค้า" (เหมือนหน้า Sales Orders)
 var poTrackerSelected = {};
 var _poTrackerVisibleIds = [];
+var poTrackerViewMode = 'cards'; // cards | table — สลับมุมมองรายการหลัก (แบบเดียวกับหน้า "สินค้าตาม Dealer")
+var poTrackerReserveUrgentFlt = ''; // '' | 'yes' — กรองเฉพาะ SO ที่มีรายการจองคลัง 1021/8D01 ใกล้/เลยกำหนด (คลิกจากแถบงานด่วน)
 
 // 5 สถานะสรุปต่อรายการสินค้า (ใช้ในแผงสรุปตามบริษัท และหน้าแยก Dealer) — เรียงตามลำดับที่ควรแสดง
 var POTRACKER_ITEM_BUCKETS = [
@@ -576,9 +578,47 @@ function poTrackerToggleSummaryBucketAndScroll(key) {
 
 function poTrackerResetFilters() {
   poTrackerStatusFlt = ''; poTrackerReadyFlt = ''; poTrackerCreditFlt = ''; poTrackerPrpoFlt = ''; poTrackerRestockFlt = ''; poTrackerBackdatedFlt = '';
+  poTrackerReserveUrgentFlt = '';
   poTrackerDateFrom = ''; poTrackerDateTo = ''; poTrackerDealerFlt = ''; poTrackerTypeFlt = '';
   poTrackerSummarySelectedBuckets = []; poTrackerSummaryMinWaitDays = '';
   render();
+}
+
+// นับจำนวน SO ที่มีงานด่วนแต่ละประเภท ใช้ทำแถบสรุป "งานด่วน" บนสุดของหน้า — เดิมต้องไล่อ่าน badge ทีละการ์ด
+// ถึงจะรู้ว่ามีกี่ใบที่ต้องรีบ ใช้ field เดียวกับที่การ์ดแต่ละใบโชว์อยู่แล้ว (_poTrackerBuildRow) ไม่คำนวณซ้ำ
+function _poTrackerUrgentCounts(rows) {
+  return {
+    prpoOverdue: rows.filter(function(r) { return r.prpoOverdue > 0; }).length,
+    restockOverdue: rows.filter(function(r) { return r.restockOverdue > 0; }).length,
+    reserveUrgent: rows.filter(function(r) { return r.reserveUrgent > 0; }).length,
+    backdatedQty: rows.filter(function(r) { return r.backdatedQty > 0; }).length
+  };
+}
+
+// toggle filter จากแถบงานด่วน — กดซ้ำอันที่ active อยู่แล้วเพื่อล้างกลับ (เหมือนปุ่ม filter ทั่วไปในแอป)
+function poTrackerToggleUrgentFlt(which) {
+  if (which === 'prpo') poTrackerPrpoFlt = (poTrackerPrpoFlt === 'overdue') ? '' : 'overdue';
+  if (which === 'restock') poTrackerRestockFlt = (poTrackerRestockFlt === 'overdue') ? '' : 'overdue';
+  if (which === 'reserve') poTrackerReserveUrgentFlt = (poTrackerReserveUrgentFlt === 'yes') ? '' : 'yes';
+  if (which === 'backdated') poTrackerBackdatedFlt = (poTrackerBackdatedFlt === 'pending') ? '' : 'pending';
+  render();
+}
+
+// เมนู "⋯ เพิ่มเติม" ของ toolbar PO Tracker — ใช้ตัวช่วยกลาง toggleOvMenu()/closeOvMenu() จาก app.js (เดิมใช้ที่หน้า Pipeline)
+// รวมปุ่ม Export/Import/มุมมอง Dealer/จองคลัง/Invoice ที่เดิมเรียงเป็นแถวแยก กินพื้นที่ก่อนเจอรายการจริง
+function _poTrackerMoreMenuHtml() {
+  var dealerGo = poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '';
+  return (
+    '<div class="ov-grp-label">มุมมอง</div>' +
+    '<button onclick="closeOvMenu();go(\'poTrackerDealer\'' + dealerGo + ')">🏪 ดูแยกตาม Dealer</button>' +
+    '<button onclick="closeOvMenu();poTrackerMainTab=(poTrackerMainTab===\'reserve1021\'?\'summary\':\'reserve1021\');render()">🔖 จองคลัง 1021</button>' +
+    '<button onclick="closeOvMenu();poTrackerMainTab=(poTrackerMainTab===\'invoice\'?\'summary\':\'invoice\');render()">🧾 Track Invoice</button>' +
+    '<hr>' +
+    '<div class="ov-grp-label">Export / Import</div>' +
+    '<button onclick="closeOvMenu();poTrackerExportXlsx()">📤 Export Excel</button>' +
+    '<button onclick="closeOvMenu();poTrackerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขที่เอากลับมา Import ได้">📝 Export แบบฟอร์มแก้ไข</button>' +
+    '<button onclick="closeOvMenu();showPoTrackerImportModal()" title="นำเข้าแบบฟอร์มแก้ไขที่กรอกแล้วกลับเข้าระบบ">📥 Import แก้ไข</button>'
+  );
 }
 
 function rPOTracker(el) {
@@ -590,17 +630,41 @@ function rPOTracker(el) {
 
   var doneCount = rows.filter(function(r) { return r.done; }).length;
   var notDoneCount = rows.length - doneCount;
+  var urgentCounts = _poTrackerUrgentCounts(rows);
 
   var html = '<div class="card" style="margin-bottom:12px;padding:16px">';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
-  html += '<button class="btn bp" onclick="showCreateSOModal({})">➕ สร้าง PO/SO ใหม่</button>';
+
+  // แถวบนสุด: ช่องค้นหา (ของที่ใช้บ่อยสุด) ขึ้นมาอยู่แถวแรกแทนที่จะอยู่แถวที่ 4 เหมือนเดิม + ปุ่มสร้าง/เลือก/เพิ่มเติม
+  // ปุ่ม "สร้าง PO/SO ใหม่" เป็นปุ่มรอง (bo) เพราะมีปุ่ม + ลอย (fab) เป็นปุ่มหลักของการสร้างอยู่แล้วทุกหน้าในแอป
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">';
+  html += '<input class="inp" style="flex:1;min-width:160px" placeholder="🔍 ค้นหา PO / SO / Dealer" value="' + sanitize(poTrackerSearch) + '" oninput="poTrackerSearch=this.value;render()">';
+  html += '<button class="btn bo" onclick="showCreateSOModal({})">➕ สร้าง PO/SO ใหม่</button>';
   html += '<button class="btn ' + (poTrackerSelectMode ? 'bd' : 'bo') + '" onclick="togglePOTrackerSelectMode()">☑️ ' + (poTrackerSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>';
+  html += '<button class="btn bo ov-trigger" onclick="event.stopPropagation();toggleOvMenu(this, _poTrackerMoreMenuHtml())">⋯ เพิ่มเติม</button>';
   html += '</div>';
-  html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px">';
+
+  html += '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">';
   html += '<div><div style="font-size:22px;font-weight:600">' + rows.length + '</div><div style="font-size:11px;color:var(--text2)">ทั้งหมด</div></div>';
   html += '<div><div style="font-size:22px;font-weight:600;color:#22c55e">' + doneCount + '</div><div style="font-size:11px;color:var(--text2)">เสร็จแล้ว</div></div>';
   html += '<div><div style="font-size:22px;font-weight:600;color:#f59e0b">' + notDoneCount + '</div><div style="font-size:11px;color:var(--text2)">ยังไม่เสร็จ</div></div>';
   html += '</div>';
+
+  // แถบสรุป "งานด่วน" — เดิมต้องไล่อ่าน badge ทีละการ์ดถึงจะรู้ว่ามีกี่ใบที่ร้อน ตอนนี้เห็นตัวเลขรวมทันที
+  // กดแล้ว toggle filter ตรงไปที่กลุ่มนั้นเลย (ไม่โชว์แถบนี้เลยถ้าไม่มีงานด่วนอะไรค้าง)
+  var urgentChips = [];
+  if (urgentCounts.prpoOverdue) urgentChips.push(['prpo', urgentCounts.prpoOverdue, '🛒 PR/PO เลยกำหนด', poTrackerPrpoFlt === 'overdue']);
+  if (urgentCounts.reserveUrgent) urgentChips.push(['reserve', urgentCounts.reserveUrgent, '🔴 จองคลังใกล้หมดเขต', poTrackerReserveUrgentFlt === 'yes']);
+  if (urgentCounts.restockOverdue) urgentChips.push(['restock', urgentCounts.restockOverdue, '⏳ ของเข้าเลยกำหนด', poTrackerRestockFlt === 'overdue']);
+  if (urgentCounts.backdatedQty) urgentChips.push(['backdated', urgentCounts.backdatedQty, '⚠️ รอสต็อกจริง', poTrackerBackdatedFlt === 'pending']);
+  if (urgentChips.length) {
+    html += '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;margin-bottom:10px">';
+    urgentChips.forEach(function(c) {
+      html += '<div onclick="poTrackerToggleUrgentFlt(\'' + c[0] + '\')" style="flex:0 0 auto;cursor:pointer;display:flex;align-items:center;gap:7px;border-radius:10px;padding:7px 11px;' +
+        'background:rgba(239,68,68,' + (c[3] ? '.28' : '.12') + ');border:1px solid rgba(239,68,68,' + (c[3] ? '.6' : '.3') + ');color:#ef4444">' +
+        '<span style="font-size:15px;font-weight:700">' + c[1] + '</span><span style="font-size:11px;font-weight:600;white-space:nowrap">' + c[2] + '</span></div>';
+    });
+    html += '</div>';
+  }
 
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
   ['all', 'notdone', 'done'].forEach(function(f) {
@@ -610,7 +674,6 @@ function rPOTracker(el) {
   html += '</div>';
 
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
-  html += '<input class="inp" style="flex:1;min-width:160px" placeholder="ค้นหา PO / SO / Dealer" value="' + sanitize(poTrackerSearch) + '" oninput="poTrackerSearch=this.value;render()">';
   html += '<select class="inp" style="max-width:200px" onchange="poTrackerDealerFlt=this.value;render()">';
   html += '<option value="">-- ทุก Dealer --</option>';
   dealers.forEach(function(d) { html += '<option value="' + sanitize(d) + '"' + (poTrackerDealerFlt === d ? ' selected' : '') + '>' + sanitize(d) + '</option>'; });
@@ -620,23 +683,26 @@ function rPOTracker(el) {
   html += '<option value="project"' + (poTrackerTypeFlt === 'project' ? ' selected' : '') + '>📋 Project</option>';
   html += '<option value="runrate"' + (poTrackerTypeFlt === 'runrate' ? ' selected' : '') + '>🏪 Run rate</option>';
   html += '</select>';
-  html += '<select class="inp" style="max-width:190px" onchange="poTrackerSort=this.value;render()">';
-  [['newest','🕒 ใหม่ล่าสุด'],['oldest','🕒 เก่าสุด'],['urgent','🔥 รอนานสุดก่อน (PO ลูกค้า)'],['amount_desc','💰 ยอดมาก → น้อย'],['amount_asc','💰 ยอดน้อย → มาก'],['dealer','🏪 Dealer A-Z']].forEach(function(o) {
-    html += '<option value="' + o[0] + '"' + (poTrackerSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+  html += '<select class="inp" style="max-width:150px" onchange="poTrackerSort=this.value;render()" title="เรียงลำดับรายการ">';
+  [['newest','🕒 ใหม่สุด',''],['oldest','🕒 เก่าสุด',''],['urgent','🔥 รอนานสุด','รอนานสุดก่อน นับจากวันที่ PO ลูกค้า'],['amount_desc','💰 มาก→น้อย',''],['amount_asc','💰 น้อย→มาก',''],['dealer','🏪 Dealer A-Z','']].forEach(function(o) {
+    html += '<option value="' + o[0] + '"' + (poTrackerSort === o[0] ? ' selected' : '') + (o[2] ? ' title="' + sanitize(o[2]) + '"' : '') + '>' + o[1] + '</option>';
   });
   html += '</select>';
-  html += '<button class="btn bo" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
+  html += '<div class="viewtoggle" style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+  html += '<button class="btn bsm ' + (poTrackerViewMode === 'cards' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'cards\';render()">🗂️ การ์ด</button>';
+  html += '<button class="btn bsm ' + (poTrackerViewMode === 'table' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'table\';render()">📋 ตาราง</button>';
+  html += '</div>';
+  html += '<button class="btn bo" style="margin-left:auto" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
   html += '</div>';
 
-  // แยกปุ่ม "มุมมอง/Export/Import" ออกจากแถวตัวกรองค้นหา — เดิมอยู่แถวเดียวกับ search/dealer/type/sort
-  // ยาวจนล้นเป็น 4-5 แถวบนจอเล็ก ทำให้หาปุ่มที่ต้องใช้บ่อย (Export/Import) ยากกว่าที่ควร
-  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">';
-  html += '<button class="btn bo" onclick="go(\'poTrackerDealer\'' + (poTrackerDealerFlt ? ',{dealerName:\'' + sanitize(poTrackerDealerFlt).replace(/'/g, "\\'") + '\'}' : '') + ')">🏪 ดูแยกตาม Dealer</button>';
-  html += '<button class="btn bo" onclick="poTrackerExportXlsx()">📤 Export Excel</button>';
-  html += '<button class="btn bo" onclick="poTrackerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขที่เอากลับมา Import ได้ (ต่างจาก Export Excel ปกติที่เป็นรายงานอ่านอย่างเดียว)">📝 Export แบบฟอร์มแก้ไข</button>';
-  html += '<button class="btn bo" onclick="showPoTrackerImportModal()" title="นำเข้าแบบฟอร์มแก้ไขที่กรอกแล้วกลับเข้าระบบ">📥 Import แก้ไข</button>';
-  html += '<button class="btn ' + (poTrackerMainTab === 'reserve1021' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'reserve1021\'?\'summary\':\'reserve1021\');render()">🔖 จองคลัง 1021</button>';
-  html += '<button class="btn ' + (poTrackerMainTab === 'invoice' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=(poTrackerMainTab===\'invoice\'?\'summary\':\'invoice\');render()">🧾 Track Invoice</button>';
+  // ตัวกรองที่ใช้บ่อย ดึงออกมาเป็น chip กดครั้งเดียว แทนที่ต้องเปิด "ตัวกรองเพิ่มเติม" ทุกครั้ง (ตัวกรองละเอียดอื่นยังอยู่ด้านล่างเหมือนเดิม)
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  html += '<div onclick="poTrackerCreditFlt=(poTrackerCreditFlt===\'no\'?\'\':\'no\');render()" style="cursor:pointer;border-radius:999px;padding:5px 10px;font-size:11px;border:1px solid ' +
+    (poTrackerCreditFlt === 'no' ? 'var(--accent)' : 'var(--border)') + ';background:' + (poTrackerCreditFlt === 'no' ? 'var(--accent-light,rgba(59,130,246,.15))' : 'var(--bg2)') +
+    ';color:' + (poTrackerCreditFlt === 'no' ? 'var(--accent)' : 'var(--text2)') + '">💳 ยังไม่ขอเครดิต</div>';
+  html += '<div onclick="poTrackerReadyFlt=(poTrackerReadyFlt===\'notready\'?\'\':\'notready\');render()" style="cursor:pointer;border-radius:999px;padding:5px 10px;font-size:11px;border:1px solid ' +
+    (poTrackerReadyFlt === 'notready' ? 'var(--accent)' : 'var(--border)') + ';background:' + (poTrackerReadyFlt === 'notready' ? 'var(--accent-light,rgba(59,130,246,.15))' : 'var(--bg2)') +
+    ';color:' + (poTrackerReadyFlt === 'notready' ? 'var(--accent)' : 'var(--text2)') + '">📦 ยังขาดของ</div>';
   html += '</div>';
 
   if (poTrackerMoreFlt) {
@@ -730,6 +796,7 @@ function rPOTracker(el) {
     if (poTrackerRestockFlt === 'pending' && !r.pendingRestock) return false;
     if (poTrackerRestockFlt === 'overdue' && !r.restockOverdue) return false;
     if (poTrackerBackdatedFlt === 'pending' && !r.backdatedQty) return false;
+    if (poTrackerReserveUrgentFlt === 'yes' && !r.reserveUrgent) return false;
     if (poTrackerDateFrom && (!r.so.createdAt || r.so.createdAt.slice(0, 10) < poTrackerDateFrom)) return false;
     if (poTrackerDateTo && (!r.so.createdAt || r.so.createdAt.slice(0, 10) > poTrackerDateTo)) return false;
     if (q) {
@@ -752,6 +819,13 @@ function rPOTracker(el) {
 
   if (!filtered.length) {
     html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">ไม่พบรายการ</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  if (poTrackerViewMode === 'table') {
+    html += _poTrackerMainTableHtml(filtered);
+    if (poTrackerSelectMode) html += _poTrackerSelectBarHtml();
     el.innerHTML = html;
     return;
   }
@@ -779,10 +853,10 @@ function rPOTracker(el) {
     if (r.readiness.total) {
       html += '<span style="padding:2px 8px;border-radius:8px;background:' + (r.readiness.allReady ? 'rgba(34,197,94,.12)' : 'rgba(245,158,11,.12)') + ';color:' + (r.readiness.allReady ? '#22c55e' : '#f59e0b') + '">📦 ' + r.readiness.readyCount + '/' + r.readiness.total + ' พร้อมส่ง</span>';
     }
-    if (r.pendingPRPO) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444">🛒 รอ PR/PO ' + r.pendingPRPO + ' รายการ' + (r.prpoOverdue ? ' (เลยกำหนด ' + r.prpoOverdue + ')' : '') + '</span>';
-    if (r.pendingRestock) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(217,119,6,.12);color:#d97706">⏳ รอของเข้า ' + r.pendingRestock + ' รายการ' + (r.restockOverdue ? ' (เลยกำหนด ' + r.restockOverdue + ')' : '') + '</span>';
-    if (r.reserveUrgent) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444" title="ใกล้/เลยกำหนดจองคลัง ดูในแท็บจองคลัง 1021">🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent + ' รายการ</span>';
-    if (r.backdatedQty) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(234,88,12,.12);color:#ea580c" title="บันทึกว่าส่งมอบแล้วตอนของยังไม่เข้าสต็อกจริง — รอ PR/PO เข้ามาสะท้อนยอดจริง">⚠️ บันทึกย้อนหลังรอสต็อกจริง ' + r.backdatedQty + ' ชิ้น</span>';
+    if (r.pendingPRPO) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444' + (r.prpoOverdue ? ';font-weight:700' : '') + '">🛒 รอ PR/PO ' + r.pendingPRPO + ' รายการ' + (r.prpoOverdue ? ' (เลยกำหนด ' + r.prpoOverdue + ')' : '') + '</span>';
+    if (r.pendingRestock) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(217,119,6,.12);color:#d97706' + (r.restockOverdue ? ';font-weight:700' : '') + '">⏳ รอของเข้า ' + r.pendingRestock + ' รายการ' + (r.restockOverdue ? ' (เลยกำหนด ' + r.restockOverdue + ')' : '') + '</span>';
+    if (r.reserveUrgent) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444;font-weight:700" title="ใกล้/เลยกำหนดจองคลัง ดูในแท็บจองคลัง 1021">🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent + ' รายการ</span>';
+    if (r.backdatedQty) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(234,88,12,.12);color:#ea580c;font-weight:700" title="บันทึกว่าส่งมอบแล้วตอนของยังไม่เข้าสต็อกจริง — รอ PR/PO เข้ามาสะท้อนยอดจริง">⚠️ บันทึกย้อนหลังรอสต็อกจริง ' + r.backdatedQty + ' ชิ้น</span>';
     html += '<span style="padding:2px 8px;border-radius:8px;background:' + (r.credit ? 'rgba(37,99,235,.12);color:#2563eb' : 'var(--bg2);color:var(--text2)') + '">💳 ' + (r.credit ? sanitize(r.credit.status) : 'ไม่ได้ขอเครดิต') + '</span>';
     if (s.doNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(139,92,246,.12);color:#8b5cf6">🚚 DO ' + sanitize(s.doNumber) + '</span>';
     if (s.pendingSoNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(245,158,11,.12);color:#f59e0b">🕗 รอเลข SO</span>';
@@ -803,18 +877,63 @@ function rPOTracker(el) {
     html += '</div>';
   });
 
-  if (poTrackerSelectMode) {
-    var selCnt = Object.keys(poTrackerSelected).length;
-    html += '<div id="poTrkSelBar" class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;margin-top:12px;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
-      '<span id="poTrkSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
-      '<button class="btn bo bsm" onclick="togglePOTrackerSelectAll(true)">เลือกทั้งหมด (' + _poTrackerVisibleIds.length + ')</button>' +
-      '<button class="btn bo bsm" onclick="togglePOTrackerSelectAll(false)">ยกเลิกเลือก</button>' +
-      '<button class="btn bo bsm" id="poTrkSelReadyBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="showReadySummaryForSelectedPOTracker()">📦 สรุปของพร้อมส่งให้ลูกค้า</button>' +
-      '<button class="btn bo bsm" style="margin-left:auto" onclick="togglePOTrackerSelectMode()">✕ ออก</button>' +
-      '</div>';
-  }
+  if (poTrackerSelectMode) html += _poTrackerSelectBarHtml();
 
   el.innerHTML = html;
+}
+
+// แถบ bulk action ตอนเปิดโหมด "เลือก" — ดึงออกมาเป็นฟังก์ชันเดียวเพราะใช้ร่วมกันทั้งมุมมองการ์ดและตาราง
+// เพิ่มปุ่ม "Export เฉพาะที่เลือก" จากเดิมที่มีแค่ "สรุปของพร้อมส่ง" ปุ่มเดียว (bulk เปลี่ยนสถานะพร้อมกันไม่ทำ เพราะการเปลี่ยนสถานะ
+// แต่ละ SO ต้องกรอกข้อมูลเฉพาะใบ เช่น Serial/DO/Invoice — ทำพร้อมกันหลายใบแล้วเสี่ยงกรอกผิดใบมากกว่าจะประหยัดเวลา)
+function _poTrackerSelectBarHtml() {
+  var selCnt = Object.keys(poTrackerSelected).length;
+  return '<div id="poTrkSelBar" class="sel-bar" style="background:var(--card);border-top:2px solid var(--accent);padding:10px 14px;margin-top:12px;border-radius:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+    '<span id="poTrkSelCount" style="font-size:13px;font-weight:600;min-width:80px">' + selCnt + ' รายการที่เลือก</span>' +
+    '<button class="btn bo bsm" onclick="togglePOTrackerSelectAll(true)">เลือกทั้งหมด (' + _poTrackerVisibleIds.length + ')</button>' +
+    '<button class="btn bo bsm" onclick="togglePOTrackerSelectAll(false)">ยกเลิกเลือก</button>' +
+    '<button class="btn bo bsm" id="poTrkSelReadyBtn" ' + (!selCnt ? 'disabled' : '') + ' onclick="showReadySummaryForSelectedPOTracker()">📦 สรุปของพร้อมส่งให้ลูกค้า</button>' +
+    '<button class="btn bo bsm" ' + (!selCnt ? 'disabled' : '') + ' onclick="poTrackerExportSelectedXlsx()">📤 Export เฉพาะที่เลือก</button>' +
+    '<button class="btn bo bsm" style="margin-left:auto" onclick="togglePOTrackerSelectMode()">✕ ออก</button>' +
+    '</div>';
+}
+
+// มุมมองตาราง — ทางเลือกแทนการ์ด เวลาต้องไล่ดู PO/SO เยอะๆ ทีเดียว (แบบเดียวกับหน้า "สินค้าตาม Dealer")
+function _poTrackerMainTableHtml(filtered) {
+  var html = '<div style="overflow-x:auto">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:11.5px">';
+  html += '<tr>' + ['SO', 'Dealer', 'สถานะ', 'พร้อมส่ง', 'เตือน', 'มูลค่า'].map(function(h) {
+    return '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + h + '</th>';
+  }).join('') + '</tr>';
+  filtered.forEach(function(r) {
+    var s = r.so;
+    var warn = [];
+    if (r.prpoOverdue) warn.push('🛒 PR/PO เลยกำหนด ' + r.prpoOverdue);
+    if (r.restockOverdue) warn.push('⏳ ของเข้าเลยกำหนด ' + r.restockOverdue);
+    if (r.reserveUrgent) warn.push('🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent);
+    if (r.backdatedQty) warn.push('⚠️ รอสต็อกจริง ' + r.backdatedQty);
+    html += '<tr style="cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sanitize(s.soNumber || '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sanitize(s.dealerName || '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (SO_STATUS[s.status] ? SO_STATUS[s.status].icon + ' ' + SO_STATUS[s.status].label : '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (r.readiness.total ? r.readiness.readyCount + '/' + r.readiness.total : '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap;color:' + (warn.length ? '#ef4444' : 'var(--text2)') + ';font-weight:' + (warn.length ? '700' : '400') + '">' + (warn.length ? sanitize(warn.join(' · ')) : '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">฿' + nmI(r.total) + '</td>';
+    html += '</tr>';
+  });
+  html += '</table></div>';
+  return html;
+}
+
+// Export เฉพาะ SO ที่เลือกไว้ในโหมด "เลือก" — ใช้ implementation เดิมของ Export Excel ทั้งหน้า ส่ง list มาเองแทน
+function poTrackerExportSelectedXlsx() {
+  var ids = Object.keys(poTrackerSelected);
+  if (!ids.length) return;
+  var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);
+  ensureXLSX().then(function() {
+    _poTrackerExportXlsxImpl(list, '-ที่เลือก');
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
 }
 
 function togglePOTrackerSelectMode() {
