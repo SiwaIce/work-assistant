@@ -352,15 +352,6 @@ function showInvoiceDetailModal(soId, roundId) {
   openM('🧾 รายละเอียด Invoice — ' + sanitize(s.soNumber || ''), html);
 }
 
-// หารอบส่งมอบที่ field ระดับ SO (s.doNumber/invoiceNumber) กำลัง mirror อยู่ — ใช้ให้ช่อง Invoice/DO บนหัว SO detail กดดูรายละเอียดรอบนั้นได้ (ไม่ใช่แค่ copy เลขเหมือนเดิม)
-function _soHeaderShipmentRound(s) {
-  var shipments = _soMigrateLegacyShipment(s);
-  var matches = shipments.filter(function(sh) {
-    return (s.invoiceNumber && sh.invoiceNumber === s.invoiceNumber) || (s.doNumber && sh.doNumber === s.doNumber);
-  });
-  return matches.length ? matches[matches.length - 1] : null;
-}
-
 // escape ค่าที่จะฝังใน onclick='...' โดยตรง (กันเลข Invoice ที่อาจมีเครื่องหมาย ' ปนมาทำ syntax พัง)
 function _jsEsc(str) {
   return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -735,6 +726,17 @@ function _soSummaryHeaderLines(s) {
   if (_soSumPid) lines.push('Project ID: ' + _soSumPid);
   if (s.remark) lines.push('Remark: ' + s.remark);
   if (s.deliveryAddress) lines.push('ที่อยู่จัดส่ง: ' + s.deliveryAddress);
+  // แสดง DO/Invoice ของทุกรอบที่เคยบันทึก (ไม่ใช่แค่รอบล่าสุด) — กันเลข invoice รอบแรกๆ "หายไป" ตอนแบ่งส่งหลายรอบ
+  var _soSumShipRounds = (s.doNumber || s.invoiceNumber) ? _soMigrateLegacyShipment(s).filter(function(r) { return r.doNumber || r.invoiceNumber; }) : [];
+  if (_soSumShipRounds.length) {
+    lines.push('DO/Invoice:');
+    _soSumShipRounds.forEach(function(r, i) {
+      var parts = [];
+      if (r.doNumber) parts.push('DO ' + r.doNumber);
+      if (r.invoiceNumber) parts.push('INV ' + r.invoiceNumber + (r.invoiceDate ? ' (' + fD(r.invoiceDate) + ')' : ''));
+      lines.push('  รอบที่ ' + (i + 1) + ': ' + parts.join(' · '));
+    });
+  }
   var creditReq = creditRequestOpenForSO(s.id);
   if (creditReq) {
     lines.push('เครดิต: ' + creditReq.status +
@@ -1387,10 +1389,19 @@ function rSODetail(el) {
     infoCells.push({ label:'Quotation', val: '<span style="color:var(--text2)">ไม่ได้ผูก — <a href="#" onclick="showSOEditModal(\'' + s.id + '\');return false" style="color:var(--accent)">เพิ่มอ้างอิง</a></span>' });
   }
   if (s.deliveryAddress)  infoCells.push({ label:'📍 ที่อยู่จัดส่ง', val: '<span style="white-space:pre-wrap">' + sanitize(s.deliveryAddress) + '</span>' });
-  var _soHdrRound = (s.doNumber || s.invoiceNumber) ? _soHeaderShipmentRound(s) : null;
-  var _soHdrViewLink = _soHdrRound ? ' <a href="#" onclick="showInvoiceDetailModal(\'' + s.id + '\',\'' + _soHdrRound.id + '\');return false" title="ดูรายละเอียด Invoice/DO รอบนี้ (รายการ+ราคา+Serial)" style="margin-left:2px">🔎</a>' : '';
-  if (s.doNumber)         infoCells.push({ label:'DO',            val: qcopyHtml(s.doNumber) + _soHdrViewLink });
-  if (s.invoiceNumber)    infoCells.push({ label:'Invoice',       val: qcopyHtml(s.invoiceNumber) + (s.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(s.invoiceDate) + ')</span>' : '') + _soHdrViewLink });
+  // แสดง DO/Invoice ของ "ทุกรอบ" ที่เคยบันทึก ไม่ใช่แค่รอบล่าสุด (เดิม mirror จาก s.doNumber/invoiceNumber เห็นแค่รอบท้าย ทำให้เลข invoice รอบก่อนๆ ดูเหมือนหายไปตอนแบ่งส่งหลายรอบ)
+  var _soHdrShipRounds = (s.doNumber || s.invoiceNumber) ? _soMigrateLegacyShipment(s).filter(function(r) { return r.doNumber || r.invoiceNumber; }) : [];
+  var _soHdrDoRounds = _soHdrShipRounds.filter(function(r) { return r.doNumber; });
+  var _soHdrInvRounds = _soHdrShipRounds.filter(function(r) { return r.invoiceNumber; });
+  var _soHdrRoundLink = function(r) { return ' <a href="#" onclick="showInvoiceDetailModal(\'' + s.id + '\',\'' + r.id + '\');return false" title="ดูรายละเอียด Invoice/DO รอบนี้ (รายการ+ราคา+Serial)" style="margin-left:2px">🔎</a>'; };
+  if (_soHdrDoRounds.length) {
+    infoCells.push({ label: 'DO' + (_soHdrDoRounds.length > 1 ? ' (' + _soHdrDoRounds.length + ' รอบ)' : ''),
+      val: _soHdrDoRounds.map(function(r) { return qcopyHtml(r.doNumber) + _soHdrRoundLink(r); }).join('<br>') });
+  }
+  if (_soHdrInvRounds.length) {
+    infoCells.push({ label: 'Invoice' + (_soHdrInvRounds.length > 1 ? ' (' + _soHdrInvRounds.length + ' รอบ)' : ''),
+      val: _soHdrInvRounds.map(function(r) { return qcopyHtml(r.invoiceNumber) + (r.invoiceDate ? ' <span style="color:var(--text2);font-size:11px">(' + fD(r.invoiceDate) + ')</span>' : '') + _soHdrRoundLink(r); }).join('<br>') });
+  }
   if (s.expectedDelivery) infoCells.push({ label:'ETA Vendor',    val: fD(s.expectedDelivery) });
   if (!_soIsDone(s.status) && _soDays != null) infoCells.push({ label:'อยู่ในขั้นนี้',   val: _soDays + ' วัน' });
   if (s.dueDate)          infoCells.push({ label:'ต้องติดตามภายใน', val: '<b>' + fD(s.dueDate) + '</b>' });

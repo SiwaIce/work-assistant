@@ -858,7 +858,12 @@ function rPOTracker(el) {
     if (r.reserveUrgent) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(239,68,68,.12);color:#ef4444;font-weight:700" title="ใกล้/เลยกำหนดจองคลัง ดูในแท็บจองคลัง 1021">🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent + ' รายการ</span>';
     if (r.backdatedQty) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(234,88,12,.12);color:#ea580c;font-weight:700" title="บันทึกว่าส่งมอบแล้วตอนของยังไม่เข้าสต็อกจริง — รอ PR/PO เข้ามาสะท้อนยอดจริง">⚠️ บันทึกย้อนหลังรอสต็อกจริง ' + r.backdatedQty + ' ชิ้น</span>';
     html += '<span style="padding:2px 8px;border-radius:8px;background:' + (r.credit ? 'rgba(37,99,235,.12);color:#2563eb' : 'var(--bg2);color:var(--text2)') + '">💳 ' + (r.credit ? sanitize(r.credit.status) : 'ไม่ได้ขอเครดิต') + '</span>';
-    if (s.doNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(139,92,246,.12);color:#8b5cf6">🚚 DO ' + sanitize(s.doNumber) + '</span>';
+    var _poTrkDoRounds = (typeof _soMigrateLegacyShipment === 'function') ? _soMigrateLegacyShipment(s).filter(function(r) { return r.doNumber; }) : (s.doNumber ? [{ doNumber: s.doNumber }] : []);
+    if (_poTrkDoRounds.length) {
+      var _poTrkDoTxt = _poTrkDoRounds.length > 1 ? ('×' + _poTrkDoRounds.length) : sanitize(_poTrkDoRounds[0].doNumber);
+      var _poTrkDoTitle = _poTrkDoRounds.length > 1 ? ' title="' + sanitize(_poTrkDoRounds.map(function(r) { return r.doNumber; }).join(', ')) + '"' : '';
+      html += '<span' + _poTrkDoTitle + ' style="padding:2px 8px;border-radius:8px;background:rgba(139,92,246,.12);color:#8b5cf6">🚚 DO ' + _poTrkDoTxt + '</span>';
+    }
     if (s.pendingSoNumber) html += '<span style="padding:2px 8px;border-radius:8px;background:rgba(245,158,11,.12);color:#f59e0b">🕗 รอเลข SO</span>';
     html += '<span style="padding:2px 8px;border-radius:8px;background:var(--bg2);color:var(--text2)">฿' + nmI(r.total) + '</span>';
     html += '</div>';
@@ -1216,6 +1221,10 @@ function _poTrackerExportXlsxImpl(soList, filenameSuffix) {
   var overviewRows = all.map(function(s) {
     var readiness = soComputeReadiness(s);
     var credit = creditRequestOpenForSO(s.id);
+    // รวม DO/Invoice ของ "ทุกรอบ" ที่เคยบันทึก คั่นด้วย ; — กันเลขรอบแรกๆ หายไปตอนแบ่งส่งหลายรอบ (เดิมใช้แค่ s.doNumber/invoiceNumber ซึ่ง mirror รอบล่าสุด)
+    var _xlsShipRounds = (typeof _soMigrateLegacyShipment === 'function') ? _soMigrateLegacyShipment(s) : [];
+    var _xlsDoNums = _xlsShipRounds.filter(function(r) { return r.doNumber; }).map(function(r) { return r.doNumber; });
+    var _xlsInvNums = _xlsShipRounds.filter(function(r) { return r.invoiceNumber; }).map(function(r) { return r.invoiceNumber + (r.invoiceDate ? ' (' + fD(r.invoiceDate) + ')' : ''); });
     return [
       s.customerPO || '', s.soNumber || '', s.dealerName || '',
       (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || '')), s.projectName || '',
@@ -1224,7 +1233,7 @@ function _poTrackerExportXlsxImpl(soList, filenameSuffix) {
       credit ? credit.status : 'ยังไม่ได้ขอ',
       credit ? (credit.creditDaysRequested || '') : '',
       credit ? (credit.approvedBy || '') : '',
-      s.prNumber || '', s.doNumber || '', s.invoiceNumber || '', s.invoiceDate ? fD(s.invoiceDate) : '',
+      s.prNumber || '', (_xlsDoNums.length ? _xlsDoNums.join('; ') : (s.doNumber || '')), (_xlsInvNums.length ? _xlsInvNums.join('; ') : (s.invoiceNumber || '')), s.invoiceDate ? fD(s.invoiceDate) : '',
       _poTrackerSOTotal(s),
       s.createdAt ? s.createdAt.slice(0, 10) : ''
     ];
