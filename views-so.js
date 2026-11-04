@@ -708,6 +708,12 @@ function _soStatusBadge(st) {
     s.color + '22;border-color:' + s.color + '55;color:' + s.color + '">' + s.icon + ' ' + s.label + '</span>';
 }
 
+// ป้าย "ปิดแล้ว" เด่นกว่า badge สถานะปกติ (ตัวหนา) — ใช้แปะเสริมตรงหัวการ์ด/แถวตาราง เพื่อให้หาใบที่ปิดแล้วง่ายๆ โดยไม่ต้องไล่อ่านสีของ badge สถานะ
+function _soClosedBadgeHtml(so) {
+  if (!so || so.status !== 'closed') return '';
+  return ' <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(100,116,139,.2);color:#64748b;white-space:nowrap">🔒 ปิดแล้ว</span>';
+}
+
 // สถานะการจอง/หมายเหตุ/อ้างอิง ของสินค้า 1 รายการ — ใช้ในตาราง copy สรุปส่ง Sales Support
 // แยกจาก _poTrackerItemRemark เพราะตรงนั้นรวม status+note เป็นข้อความเดียว ส่วนตารางต้องการแยกคอลัมน์
 function _soSummaryItemStatusInfo(it, s) {
