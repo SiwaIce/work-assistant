@@ -344,6 +344,7 @@ function showInvoiceDetailModal(soId, roundId) {
   html += '<div style="display:flex;gap:8px;margin-top:12px">';
   html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditShipmentRoundModal(\'' + soId + '\',\'' + roundId + '\')">✏️ แก้ไขข้อมูลรอบนี้</button>';
   html += '<button class="btn bo bsm" style="flex:1" onclick="closeMForce();showSOEditSerialsModal(\'' + soId + '\',\'' + roundId + '\')">🔢 แก้ไข Serial</button>';
+  html += '<button class="btn bd bsm" onclick="deleteSOShipmentRound(\'' + soId + '\',\'' + roundId + '\')" title="ลบรอบส่งมอบนี้">🗑️</button>';
   html += '</div>';
   if (sh.invoiceNumber) {
     html += '<button class="btn bo btn-full bsm" style="margin-top:6px" onclick="_soGoToTrackInvoice(\'' + _jsEsc(sh.invoiceNumber) + '\')">🧾 ดูรวมทุก SO ที่ใช้ Invoice นี้</button>';
@@ -1383,6 +1384,7 @@ function rSODetail(el) {
   html += '<button class="btn bo bsm" onclick="showSOEditModal(\'' + s.id + '\')">✏️ แก้ไข</button>';
   if (nexts.length) html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">🔄 อัปเดตสถานะ</button>';
   if (_soPrevStatusFromLogs(s)) html += '<button class="btn bo bsm" onclick="revertSOStatus(\'' + s.id + '\')" title="ย้อนสถานะกลับไปขั้นก่อนหน้า เผื่อกดผิด">↩️ ย้อนกลับสถานะ</button>';
+  if (_soMigrateLegacyShipment(s).length) html += '<button class="btn bo bsm" onclick="showResetSODeliveriesModal(\'' + s.id + '\')" title="ล้างรอบส่งมอบ/DO/Invoice ทั้งหมด กลับไปบันทึกใหม่ตั้งแต่ต้น">🔄 รีเซ็ตการส่งมอบ</button>';
   html += '<button class="btn bo bsm" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุปส่ง Sales Support</button>';
   html += '<button class="btn bd bsm" onclick="deleteSalesOrder(\'' + s.id + '\')" title="ลบ SO">🗑️</button>';
   html += '</div></div>';
@@ -3318,6 +3320,137 @@ function revertSOStatus(soId) {
   var updatedSO = ST.update('salesOrders', soId, { status: prev, logs: logs, updatedAt: new Date().toISOString() });
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updatedSO);
   toast('↩️ ย้อนสถานะแล้ว');
+  go('soDetail', { soId: soId });
+}
+
+// ---------------------------------------------------------------- รีเซ็ตการส่งมอบทั้งหมด (ย้อนกลับไปตั้งแต่ "ได้รับ PO")
+
+// ใช้ตอนบันทึกการส่งมอบ/invoice ผิดไปหลายรอบจนแก้ทีละรอบไม่คุ้ม — ล้าง shipments[]/DO/Invoice ทั้งหมดและคืนสต็อกที่ "ส่งมอบแล้ว" กลับเป็น "เตรียมส่งมอบ"
+// (ของจริงไม่ได้ย้ายคลังกลับเพราะออกจากโกดังไปแล้วจริง — แค่คืนสถานะการจองให้ตรงกับที่ยังไม่ยืนยันว่าส่งมอบ เหมือนที่ stockAdjustSOItemDeliveredQty ทำตอนแก้จำนวนรอบส่งมอบลง)
+// ไม่ล้าง Serial โดย default (เผื่อของจริงชุดเดิม ยังใช้เลขเดิมตอนบันทึกส่งใหม่ได้) — ให้เลือกล้างด้วยถ้าต้องการผ่าน checkbox ใน modal
+function showResetSODeliveriesModal(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s);
+  if (!shipments.length) { toast('⚠️ ไม่มีรอบส่งมอบให้รีเซ็ต'); return; }
+
+  var totalQty = 0;
+  (s.items || []).forEach(function(it) {
+    if (!it.sku) return;
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : { deliveredForThisSO: 0 };
+    totalQty += info.deliveredForThisSO || 0;
+  });
+  var hasSerials = (s.items || []).some(function(it) { return ((typeof _soItemSerials === 'function') ? _soItemSerials(it) : (it.serials || [])).length; });
+
+  var html = '<div class="hint" style="margin-bottom:10px;color:#ef4444">⚠️ การกระทำนี้ย้อนกลับไม่ได้ — ล้างข้อมูลการส่งมอบของ SO นี้กลับไปเป็นก่อนส่งมอบครั้งแรก เพื่อบันทึกแบ่งส่งมอบใหม่ตั้งแต่ต้น</div>';
+  html += '<div style="padding:10px;background:var(--bg2);border-radius:8px;margin-bottom:10px;font-size:12px">';
+  html += '<b>จะถูกล้าง:</b><ul style="margin:6px 0 0 18px;padding:0;line-height:1.6">';
+  html += '<li>รอบส่งมอบทั้งหมด ' + shipments.length + ' รอบ (รวม ' + totalQty + ' ชิ้น)</li>';
+  html += '<li>เลข DO และ Invoice ของทุกรอบ</li>';
+  html += '<li>จำนวนที่นับว่า "ส่งมอบแล้ว" — คืนเป็น "เตรียมส่งมอบ" ในคลังจอง (รายการที่บันทึกย้อนหลังแบบยังไม่มีสต็อกจริงจะถูกลบทิ้งไปเลย)</li>';
+  html += '<li>สถานะ SO — กลับเป็น "📄 ได้รับ PO"</li>';
+  html += '</ul></div>';
+  if (hasSerials) {
+    html += '<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:10px"><input type="checkbox" id="soReset_keepSn" checked> เก็บเลข Serial เดิมของสินค้าไว้ (ไม่ล้าง SN)</label>';
+  }
+  html += '<div class="hint" style="font-size:11px;margin-bottom:10px">รายการรอบส่งมอบเดิมจะหายไปทั้งหมด แต่การรีเซ็ตจะถูกบันทึกไว้ใน Timeline ของ SO นี้</div>';
+  html += '<button class="btn bd btn-full" onclick="resetSODeliveries(\'' + soId + '\')">🔄 ยืนยันรีเซ็ตการส่งมอบ</button>';
+  openM('🔄 รีเซ็ตการส่งมอบ — ' + sanitize(s.soNumber || ''), html);
+}
+
+function resetSODeliveries(soId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s);
+  if (!shipments.length) { toast('⚠️ ไม่มีรอบส่งมอบให้รีเซ็ต'); closeMForce(); return; }
+  var keepSnEl = document.getElementById('soReset_keepSn');
+  var keepSn = keepSnEl ? keepSnEl.checked : true;
+  if (!confirm('ยืนยันรีเซ็ตการส่งมอบของ ' + (s.soNumber || '') + ' ใช่หรือไม่? ย้อนกลับไม่ได้')) return;
+
+  var totalQty = 0;
+  (s.items || []).forEach(function(it) {
+    if (!it.sku) return;
+    var info = (typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, it.qty, s) : { deliveredForThisSO: 0 };
+    var delivered = info.deliveredForThisSO || 0;
+    if (delivered > 0 && typeof stockAdjustSOItemDeliveredQty === 'function') {
+      stockAdjustSOItemDeliveredQty(it.sku, it.model, s, -delivered);
+      totalQty += delivered;
+    }
+  });
+
+  var update = { shipments: [], doNumber: '', invoiceNumber: '', invoiceDate: '', status: 'po_received' };
+  if (!keepSn) {
+    update.items = (s.items || []).map(function(it) {
+      var clone = Object.assign({}, it);
+      delete clone.serials; delete clone.serialsReceived; delete clone.serialsShipped;
+      return clone;
+    });
+  }
+
+  var cfg = getConfig();
+  var logs = (s.logs || []).slice();
+  logs.push({
+    date: _td(), action: '🔄 รีเซ็ตการส่งมอบทั้งหมด → 📄 ได้รับ PO',
+    note: 'ล้าง ' + shipments.length + ' รอบส่งมอบ (' + totalQty + ' ชิ้น) และ DO/Invoice ทุกรอบ' + (keepSn ? '' : ', ล้าง Serial ทั้งหมดด้วย'),
+    by: cfg.saleName || '', fromStatus: s.status, toStatus: 'po_received'
+  });
+  update.logs = logs;
+
+  var updated = ST.update('salesOrders', soId, update);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  closeMForce();
+  toast('🔄 รีเซ็ตการส่งมอบแล้ว — บันทึกใหม่ได้เลย');
+  go('soDetail', { soId: soId });
+}
+
+// ลบรอบส่งมอบเดียวที่บันทึกผิด (ไม่ต้องรีเซ็ตทั้งหมด) — คืนสต็อกของรอบนั้นกลับเป็น "เตรียมส่งมอบ" และปรับสถานะ SO ใหม่ตามรอบที่เหลือ
+// ถ้า SO อยู่สถานะ invoiced/closed แล้วจะไม่ไปแก้สถานะกลับให้ (เลยไปขั้นส่งมอบแล้ว ถือเป็นเรื่องบิล ไม่เกี่ยวกับการนับจำนวนส่งมอบอีก)
+// หมายเหตุ: ไม่ลบ Serial ของรอบนี้ให้อัตโนมัติ เพราะ Serial เก็บเป็น flat list ไม่แยกรอบจริง (ดู _soRoundItemSerialRange) ลบเองผ่าน "แก้ไข Serial" ถ้าจำเป็น
+function deleteSOShipmentRound(soId, roundId) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s) return;
+  var shipments = _soMigrateLegacyShipment(s).slice();
+  var idx = -1;
+  shipments.forEach(function(sh, i) { if (sh.id === roundId) idx = i; });
+  if (idx === -1) { toast('⚠️ ไม่พบรอบส่งมอบนี้แล้ว'); return; }
+  var sh = shipments[idx];
+  var totalQty = (sh.items || []).reduce(function(sum, it) { return sum + (it.qty || 0); }, 0);
+  var label = sh.invoiceNumber ? ('Invoice ' + sh.invoiceNumber) : (sh.date ? fD(sh.date) : 'รอบนี้');
+  if (!confirm('ลบรอบส่งมอบ ' + label + ' (' + totalQty + ' ชิ้น) ใช่หรือไม่?\nจะคืนสต็อกของรอบนี้กลับเป็น "เตรียมส่งมอบ" และลบ DO/Invoice ของรอบนี้ไป — Serial จะไม่ถูกลบอัตโนมัติ (ตรวจ/ลบเองถ้าจำเป็น)')) return;
+
+  (sh.items || []).forEach(function(it) {
+    if (it.sku && it.qty && typeof stockAdjustSOItemDeliveredQty === 'function') {
+      var soItem = (s.items || []).filter(function(x) { return x.sku === it.sku; })[0];
+      var productName = soItem ? soItem.model : (it.model || it.sku);
+      stockAdjustSOItemDeliveredQty(it.sku, productName, s, -(it.qty || 0));
+    }
+  });
+
+  shipments.splice(idx, 1);
+  var update = { shipments: shipments };
+  var last = shipments[shipments.length - 1];
+  update.doNumber = last ? (last.doNumber || '') : '';
+  update.invoiceNumber = last ? (last.invoiceNumber || '') : '';
+  update.invoiceDate = last ? (last.invoiceDate || '') : '';
+
+  if (['so_open', 'partial_shipped', 'shipped'].indexOf(s.status) !== -1) {
+    var progress = soComputeShipmentProgress(Object.assign({}, s, update));
+    update.status = progress.allDelivered ? 'shipped' : (progress.anyDelivered ? 'partial_shipped' : 'so_open');
+  }
+
+  var cfg = getConfig();
+  var logs = (s.logs || []).slice();
+  logs.push({
+    date: _td(), action: '🗑️ ลบรอบส่งมอบ' + (sh.invoiceNumber ? ' (Invoice ' + sh.invoiceNumber + ')' : ''),
+    note: 'ลบรอบส่งมอบ ' + totalQty + ' ชิ้น คืนสต็อกกลับเป็นเตรียมส่งมอบ', by: cfg.saleName || '',
+    fromStatus: s.status, toStatus: update.status || s.status
+  });
+  update.logs = logs;
+
+  var updated = ST.update('salesOrders', soId, update);
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+  closeMForce();
+  toast('🗑️ ลบรอบส่งมอบแล้ว');
   go('soDetail', { soId: soId });
 }
 
