@@ -6464,6 +6464,34 @@ body.mobile-mode .ftab.act {
 .td2 .dlb { border-radius: 20px; padding: 3px 10px; }
 .td2 .badge-red, .td2 .badge-yellow, .td2 .badge-green { border-radius: 20px; }
 
+/* ปุ่ม "⋯ เพิ่มเติม" (หัวข้อขั้นตอน + ต่อ step) — ของจริงเฉพาะมือถือ จอกว้างยังเห็นปุ่มเดิมครบตามปกติ
+   (ดู media query ด้านล่าง ที่สลับว่าฝั่งไหนโชว์) */
+.td2-steps-ov-trigger, .td2-step-ov-trigger { display: none; }
+
+/* รีวิว UX มือถือ Task Detail (2026-11-04) — ไม่มี media query สำหรับ .td2 มาก่อนเลย ปุ่มเยอะ/ข้อความยาว
+   ล้นเป็นหลายบรรทัดบนจอแคบ */
+@media (max-width: 768px) {
+  /* 1) หัวข้อ "ขั้นตอน" มี 5 ปุ่ม — ยุบ 4 ปุ่มรอง (☰ เพิ่มหลายข้อ/📋 Copy ต่างๆ) เป็น "⋯ เพิ่มเติม" เดียว
+     เหลือ ➕ ไว้นอกเพราะกดบ่อยสุด */
+  .td2-steps-extra-btns { display: none; }
+  .td2-steps-ov-trigger { display: inline-flex; }
+
+  /* 2) แถวกำหนดการ (เลื่อนกำหนด/ตั้งนัด/ติดตามแล้ว/เพิ่มนัด/แก้ไขวันเริ่ม) — ปุ่มมีทั้งไอคอน+ข้อความยาว
+     เหลือแค่ไอคอนบนมือถือ ชื่อเต็มยังอยู่ใน title (แตะค้างดูได้) */
+  .td2-btn-label { display: none; }
+  .td2-row { flex-wrap: nowrap; }
+  .td2-row-label { min-width: 88px; }
+
+  /* 3) ปุ่ม action ต่อ step เรียงแถวตั้ง 5 ปุ่ม ทำให้การ์ด step สูงมาก — ย้าย ⚙️/✏️ เข้าเมนู "⋯" ของ
+     step นั้นๆ เหลือ ⋯/📞/🔄/⏱️/✕ เรียงแถวนอนแทน */
+  .td2-step-extra-btns { display: none; }
+  .td2-step-ov-trigger { display: inline-flex; }
+  .td2-step-actions { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; }
+
+  /* 4) แถววันที่ในไทม์ไลน์ไม่มี wrap เผื่อไว้ — วันที่แบบเต็ม (มีเวลา) + ปุ่มแก้ไข/ลบ อาจชนกันบนจอแคบมาก */
+  .td2-tl-date { flex-wrap: wrap; }
+}
+
 /* Timeline View */
 .timeline-view {
   display: flex;

@@ -1357,6 +1357,27 @@ function toggleStepQuickNote(tid, idx) {
     }, 30);
   }
 }
+// เมนู "⋯ เพิ่มเติม" (ใช้ toggleOvMenu/#ovMenu แบบเดียวกับ PO Tracker/Pipeline) สำหรับปุ่มรองในหัวข้อ
+// "ขั้นตอน" บนหน้า Task Detail — โชว์แทนปุ่มเดิม (☰ เพิ่มหลายข้อ/📋 Copy ต่างๆ) บนมือถือ กันหัวข้อ
+// ล้นเป็นหลายบรรทัด (ผู้ใช้แจ้ง 2026-11-04 ดูรีวิว UX มือถือ Task Detail) ส่วนจอกว้างยังเห็นปุ่มเดิมครบ
+function _taskStepsMoreMenuHtml(taskId) {
+  return (
+    '<button onclick="closeOvMenu();showBulkAddStepsM(\'' + taskId + '\')">☰ เพิ่มหลายข้อ</button>' +
+    '<button onclick="closeOvMenu();copyStepsAsBullets(\'' + taskId + '\')">📋 Copy</button>' +
+    '<button onclick="closeOvMenu();copyStepsAsBullets(\'' + taskId + '\', true)">📋 Copy (- ล้วน)</button>' +
+    '<button onclick="closeOvMenu();copyStepsByDate(\'' + taskId + '\')">📋 Copy ตามวันที่</button>'
+  );
+}
+
+// เมนู "⋯" ต่อ step เดียว — รวม ⚙️ แก้ไขรายละเอียด กับ ✏️ หมายเหตุด่วน (ปุ่มที่กดไม่บ่อยเท่า 📞/⏱️/✕)
+// เข้าเมนูเดียวบนมือถือ กันแถวปุ่มต่อ step สูงเกินไปตอนมีหลาย step (เหมือนปัญหาข้อ 1 แต่ระดับ step)
+function _taskStepMoreMenuHtml(taskId, idx) {
+  return (
+    '<button onclick="closeOvMenu();editStep(\'' + taskId + '\',' + idx + ')">⚙️ แก้ไขรายละเอียด</button>' +
+    '<button onclick="closeOvMenu();toggleStepQuickNote(\'' + taskId + '\',' + idx + ')">✏️ พิมพ์หมายเหตุด่วน</button>'
+  );
+}
+
 function saveStepQuickNote(tid, idx) {
   var t = ST.getOne('tasks', tid);
   if (!t || !t.steps || !t.steps[idx]) return;
@@ -1454,7 +1475,7 @@ function rTaskDet(el) {
       <div class="td2-row">
         <div class="td2-row-label">📅 กำหนดเสร็จ</div>
         <div class="td2-row-value"><strong>${fD(t.dueDate) || 'ไม่ได้ตั้ง'}</strong> ${formatDueDateStatus(t.dueDate, t.status)}</div>
-        <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')">📅 เลื่อนกำหนด</button>
+        <button class="btn bsm bo" onclick="showRescheduleModal('${t.id}')" title="เลื่อนกำหนด">📅<span class="td2-btn-label"> เลื่อนกำหนด</span></button>
       </div>
       <div class="td2-row">
         <div class="td2-row-label">📞 นัดติดตาม</div>
@@ -1462,14 +1483,14 @@ function rTaskDet(el) {
           ${t.followupDate ? fD(t.followupDate) : 'ไม่ได้ตั้ง'}
           ${t.followupDate && dTo(t.followupDate) <= 0 ? '<span class="badge-red">⚠️ ต้องติดตามวันนี้!</span>' : ''}
         </div>
-        <button class="btn bsm bo" onclick="setFollowupDate('${t.id}')">📞 ตั้ง/แก้ไข</button>
-        ${t.followupDate ? `<button class="btn bsm bs" onclick="markFollowupDone('${t.id}')">✅ ติดตามแล้ว</button>` : ''}
-        <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')">➕ เพิ่มนัด</button>
+        <button class="btn bsm bo" onclick="setFollowupDate('${t.id}')" title="ตั้ง/แก้ไขนัดติดตาม">📞<span class="td2-btn-label"> ตั้ง/แก้ไข</span></button>
+        ${t.followupDate ? `<button class="btn bsm bs" onclick="markFollowupDone('${t.id}')" title="ติดตามแล้ว">✅<span class="td2-btn-label"> ติดตามแล้ว</span></button>` : ''}
+        <button class="btn bsm bo" onclick="addFollowupToTimeline('${t.id}')" title="เพิ่มนัด">➕<span class="td2-btn-label"> เพิ่มนัด</span></button>
       </div>
       <div class="td2-row">
         <div class="td2-row-label">🚀 วันที่เริ่ม</div>
         <div class="td2-row-value">${fD(t.startDate) || 'ไม่ได้ตั้ง'}</div>
-        <button class="btn bsm bo" onclick="setStartDate('${t.id}')">✏️ แก้ไข</button>
+        <button class="btn bsm bo" onclick="setStartDate('${t.id}')" title="แก้ไขวันที่เริ่ม">✏️<span class="td2-btn-label"> แก้ไข</span></button>
       </div>
 
       ${t.dueDateHistory && t.dueDateHistory.length ? `
@@ -1491,10 +1512,14 @@ function rTaskDet(el) {
     <div class="td2-card">
       <h3 class="td2-h">ขั้นตอน · ${doneSteps}/${(t.steps || []).length} ${t.sequential ? '(⚡ ไล่ลำดับ)' : ''}
         <button class="btn bsm bp" onclick="showStepM('${t.id}')" title="เพิ่มทีละขั้นตอน (กรอกรายละเอียด/วันที่/link ได้)">➕</button>
-        <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button>
-        <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}')" title="คัดลอกขั้นตอนทั้งหมดเป็น bullet list (มี ✓/- บอกเสร็จหรือยัง + หมายเหตุถ้ามี) เอาไปวางสรุปใน Visit Report ได้เลย">📋 Copy</button>
-        <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}', true)" title="คัดลอกเฉพาะหัวข้อ ขึ้นต้นด้วย - ล้วนทุกบรรทัด ไม่มี ✓/หมายเหตุปน">📋 Copy (- ล้วน)</button>
-        <button class="btn bsm bo" onclick="copyStepsByDate('${t.id}')" title="คัดลอกหัวข้อ+หมายเหตุ แบ่งเป็นหมวดตามวันที่ทำ (วว/ดด/ปปปป) เรียงเก่าไปใหม่">📋 Copy ตามวันที่</button></h3>
+        <span class="td2-steps-extra-btns">
+          <button class="btn bsm bo" onclick="showBulkAddStepsM('${t.id}')" title="เพิ่มหลายขั้นตอนพร้อมกัน แบบพิมพ์เป็น bullet list เหมือนตอนสร้างงานครั้งแรก">☰ เพิ่มหลายข้อ</button>
+          <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}')" title="คัดลอกขั้นตอนทั้งหมดเป็น bullet list (มี ✓/- บอกเสร็จหรือยัง + หมายเหตุถ้ามี) เอาไปวางสรุปใน Visit Report ได้เลย">📋 Copy</button>
+          <button class="btn bsm bo" onclick="copyStepsAsBullets('${t.id}', true)" title="คัดลอกเฉพาะหัวข้อ ขึ้นต้นด้วย - ล้วนทุกบรรทัด ไม่มี ✓/หมายเหตุปน">📋 Copy (- ล้วน)</button>
+          <button class="btn bsm bo" onclick="copyStepsByDate('${t.id}')" title="คัดลอกหัวข้อ+หมายเหตุ แบ่งเป็นหมวดตามวันที่ทำ (วว/ดด/ปปปป) เรียงเก่าไปใหม่">📋 Copy ตามวันที่</button>
+        </span>
+        <button class="btn bsm bo ov-trigger td2-steps-ov-trigger" onclick="event.stopPropagation();toggleOvMenu(this, _taskStepsMoreMenuHtml('${t.id}'))" title="ตัวเลือกเพิ่มเติม">⋯ เพิ่มเติม</button>
+      </h3>
       ${(t.steps || []).length ? `<div class="td2-progress-track"><div class="td2-progress-fill" style="width:${pg}%"></div></div>` : ''}
       ${(t.steps || []).length ? t.steps.map(function(s, i) {
         var lk = isStepLocked(t, i);
@@ -1518,8 +1543,11 @@ function rTaskDet(el) {
             ${buildFuTimeline(t.id, i)}
           </div>
           <div class="td2-step-actions">
-            ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();editStep('${t.id}',${i})" title="แก้ไขรายละเอียด (ชื่อ/วันที่/link/รูปแนบ)">⚙️</button>`}
-            ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();toggleStepQuickNote('${t.id}',${i})" title="พิมพ์หมายเหตุแบบไวๆ ตรงนี้เลย (กด Enter เพื่อบันทึก)">✏️</button>`}
+            <span class="td2-step-extra-btns">
+              ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();editStep('${t.id}',${i})" title="แก้ไขรายละเอียด (ชื่อ/วันที่/link/รูปแนบ)">⚙️</button>`}
+              ${lk ? '' : `<button class="btn bsm bo" onclick="event.stopPropagation();toggleStepQuickNote('${t.id}',${i})" title="พิมพ์หมายเหตุแบบไวๆ ตรงนี้เลย (กด Enter เพื่อบันทึก)">✏️</button>`}
+            </span>
+            ${lk ? '' : `<button class="btn bsm bo ov-trigger td2-step-ov-trigger" onclick="event.stopPropagation();toggleOvMenu(this, _taskStepMoreMenuHtml('${t.id}',${i}))" title="ตัวเลือกเพิ่มเติม">⋯</button>`}
             <button class="btn bsm bp" onclick="event.stopPropagation();showStepFuM('${t.id}',${i})" title="ติดตาม">📞</button>
             ${countActiveFu(s) > 0 ? `<button class="btn bsm bw" onclick="event.stopPropagation();quickFuAgain('${t.id}',${i})" title="ติดตามอีกครั้ง">🔄</button>` : ''}
             <button class="btn bsm bs" onclick="event.stopPropagation();startTimer('step', '${s.id || i}', '${sanitize(s.title).substr(0, 18)}')" title="จับเวลา">⏱️</button>
