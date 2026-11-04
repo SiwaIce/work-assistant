@@ -2300,6 +2300,8 @@ var poTrackerDealerVatMode = 'ex';     // ex | in — การ์ดสรุ�
 var poTrackerDealerAllViewMode = 'byProduct'; // byProduct | byDealer — มุมมอง "สรุปสินค้ารวมทุก Dealer": จัดกลุ่มตามสินค้า (เดิม) หรือเทียบยอดต่อ Dealer
 var poTrackerDealerAllSortKey = 'totalVal'; // name | totalVal | doneVal | leftVal | openVal — คอลัมน์ที่เรียงอยู่ในตารางเทียบยอดต่อ Dealer
 var poTrackerDealerAllSortDir = -1; // 1 = น้อยไปมาก, -1 = มากไปน้อย (ชื่อ Dealer ใช้ -1 = Z→A)
+var poTrackerDealerPOStatusFlt = ''; // '' | pending | partial | closed — กรองมุมมอง "ตาม PO" ตามสถานะทั้งใบ (ต่างจาก poTrackerDealerStatusFlt ที่กรองระดับรายการสินค้า)
+var poTrackerDealerPOExpanded = {}; // soId -> เปิด/ปิดรายการสินค้าทั้งหมดของ PO/SO นั้นในมุมมอง "ตาม PO"
 var POTRACKER_DEALER_LS_KEY = 'v7_poTrackerDealer_lastDealer'; // จำ Dealer ล่าสุดที่เปิดดู (ต่อเครื่อง)
 var POTRACKER_VAT_RATE = 0.07;
 
@@ -2663,6 +2665,119 @@ function _poTrackerAllDealersPageHtml() {
   return html;
 }
 
+// สถานะทั้งใบของ PO/SO หนึ่งใบ สำหรับมุมมอง "ตาม PO" — ปิดแล้ว / แบ่งส่งบางส่วน (รวมส่งครบแล้วแต่ยังไม่ปิด) / ค้างส่ง (ยังไม่ส่งเลย)
+// ต่างจาก _poTrackerItemBucket ที่เป็นสถานะต่อรายการสินค้า — ที่นี่สรุปเป็นสถานะเดียวของทั้งใบ ใช้กรอง/โชว์ badge บนหัวการ์ด
+function _poTrackerSoWholeStatus(so, items) {
+  var totalQty = 0, deliveredQty = 0;
+  items.forEach(function(x) { totalQty += x.qty; if (x.bucket === 'shipped') deliveredQty += x.qty; });
+  if (so.status === 'closed') return { key: 'closed', totalQty: totalQty, deliveredQty: deliveredQty };
+  if (deliveredQty <= 0) return { key: 'pending', totalQty: totalQty, deliveredQty: deliveredQty };
+  return { key: 'partial', totalQty: totalQty, deliveredQty: deliveredQty };
+}
+
+// badge สถานะทั้งใบ — ปิดแล้ว ใช้สไตล์เดียวกับ _soClosedBadgeHtml (views-so.js) ส่วนค้างส่ง/แบ่งส่งบางส่วนทำสไตล์ใกล้เคียงกัน
+function _poTrackerSoWholeStatusBadgeHtml(ws) {
+  if (ws.key === 'closed') return (typeof _soClosedBadgeHtml === 'function') ? _soClosedBadgeHtml({ status: 'closed' }).trim() :
+    '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(100,116,139,.2);color:#64748b;white-space:nowrap">🔒 ปิดแล้ว</span>';
+  if (ws.key === 'pending') return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(239,68,68,.15);color:#ef4444;white-space:nowrap">⏳ ค้างส่ง</span>';
+  var full = ws.totalQty > 0 && ws.deliveredQty >= ws.totalQty;
+  return '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,.15);color:#f59e0b;white-space:nowrap">🚚 ' +
+    (full ? 'ส่งครบแล้ว (รอปิด)' : 'แบ่งส่งบางส่วน (ยังไม่ปิด)') + '</span>';
+}
+
+// ปุ่มกรองสถานะทั้งใบ — เฉพาะมุมมอง "ตาม PO"
+function _poTrackerDealerPOStatusFltHtml() {
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+  html += '<span style="font-size:12px;color:var(--text2)">สถานะ PO:</span>';
+  [['', 'ทั้งหมด'], ['pending', '⏳ ค้างส่ง'], ['partial', '🚚 แบ่งส่งบางส่วนยังไม่ปิด'], ['closed', '🔒 ปิดแล้ว']].forEach(function(o) {
+    html += '<button class="btn bsm ' + (poTrackerDealerPOStatusFlt === o[0] ? 'bp' : 'bo') + '" onclick="poTrackerDealerPOStatusFlt=\'' + o[0] + '\';render()">' + o[1] + '</button>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function poTrackerDealerPOToggle(soId) {
+  poTrackerDealerPOExpanded[soId] = !poTrackerDealerPOExpanded[soId];
+  render();
+}
+
+// มุมมอง "ตาม PO" — แยกตามใบ PO/SO ของ Dealer ที่เลือกอยู่ ดูได้ทีเดียวว่าใบไหนค้างส่ง/แบ่งส่งบางส่วนยังไม่ปิด/ปิดแล้ว
+// กดขยายดูทุกรายการสินค้าในใบนั้นพร้อมสถานะแต่ละชิ้น (ไม่ต้องไปไล่เปิดทีละ SO)
+function _poTrackerDealerPOViewHtml(dealerSOs, search, statusFlt) {
+  var q = (search || '').trim().toLowerCase();
+  var rows = dealerSOs.map(function(so) {
+    var items = (so.items || []).map(function(it, idx) {
+      return { idx: idx, item: it, qty: Number(it.qty) || 0, bucket: _poTrackerItemBucket(it, so), model: it.model || it.sku || '-', sku: it.sku || '' };
+    });
+    return { so: so, items: items, ws: _poTrackerSoWholeStatus(so, items) };
+  });
+
+  if (q) {
+    rows = rows.filter(function(r) {
+      if ((r.so.soNumber || '').toLowerCase().indexOf(q) !== -1) return true;
+      if ((r.so.customerPO || '').toLowerCase().indexOf(q) !== -1) return true;
+      return r.items.some(function(x) { return (x.model || '').toLowerCase().indexOf(q) !== -1 || (x.sku || '').toLowerCase().indexOf(q) !== -1; });
+    });
+  }
+  if (statusFlt) rows = rows.filter(function(r) { return r.ws.key === statusFlt; });
+
+  var prio = { pending: 0, partial: 1, closed: 2 };
+  rows.sort(function(a, b) {
+    if (prio[a.ws.key] !== prio[b.ws.key]) return prio[a.ws.key] - prio[b.ws.key];
+    return (b.so.createdAt || '').localeCompare(a.so.createdAt || '');
+  });
+
+  var html = '<div style="margin-bottom:10px">' + _poTrackerDealerPOStatusFltHtml() + '</div>';
+
+  if (!rows.length) {
+    html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">ไม่พบ PO/SO ที่ค้นหา/ตรงกับสถานะที่กรอง</div>';
+    return html;
+  }
+
+  rows.forEach(function(r) {
+    var so = r.so, ws = r.ws, open = !!poTrackerDealerPOExpanded[so.id];
+    var pct = ws.totalQty > 0 ? Math.min(100, Math.round(ws.deliveredQty / ws.totalQty * 100)) : 0;
+    html += '<div class="card" style="margin-bottom:10px;padding:14px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">';
+    html += '<div style="min-width:0">';
+    html += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+      '<a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="font-weight:600;color:var(--accent)">📋 ' + sanitize(so.soNumber || '-') + '</a>' +
+      (so.customerPO ? '<span style="font-size:11px;color:var(--text2)">· PO ' + sanitize(so.customerPO) + '</span>' : '') +
+      _poTrackerSoWholeStatusBadgeHtml(ws) + '</div>';
+    html += _poTrackerDateLineHtml(so);
+    html += '</div>';
+    html += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">';
+    if (ws.key !== 'closed') html += _poTrackerWaitBadgeHtml(so);
+    html += '</div></div>';
+
+    html += '<div style="margin-top:10px">';
+    html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:3px">' +
+      '<span>ส่งแล้ว ' + ws.deliveredQty + '/' + ws.totalQty + ' ชิ้น</span><span>' + pct + '%</span></div>';
+    html += '<div style="height:7px;border-radius:5px;background:var(--bg2);overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + (ws.key === 'closed' ? '#64748b' : (pct >= 100 ? '#22c55e' : '#f59e0b')) + '"></div></div>';
+    html += '</div>';
+
+    html += '<div style="margin-top:10px">';
+    html += '<a href="#" onclick="poTrackerDealerPOToggle(\'' + so.id + '\');return false" style="font-size:12px;color:var(--accent)">' + (open ? '▼ ซ่อนรายการสินค้า' : '▶ ดูทุกรายการสินค้า (' + r.items.length + ')') + '</a>';
+    html += '</div>';
+
+    if (open) {
+      html += '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">';
+      r.items.forEach(function(x) {
+        var b = _poTrackerBucketInfo(x.bucket);
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;background:var(--bg2);margin-bottom:4px;font-size:12px;flex-wrap:wrap">';
+        html += '<div style="min-width:0">' + sanitize(x.model) + (x.sku ? ' <span style="font-size:10px;color:var(--text2)">(' + sanitize(x.sku) + ')</span>' : '') + '</div>';
+        html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
+        html += '<span>x' + x.qty + '</span>';
+        html += '<span style="color:' + b.color + '">' + b.icon + ' ' + b.label + '</span>';
+        html += '</div></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  return html;
+}
+
 function rPOTrackerDealer(el) {
   document.getElementById('pgT').textContent = '🏪 สินค้าตาม Dealer';
   if (S.dealerName) {
@@ -2721,11 +2836,19 @@ function rPOTrackerDealer(el) {
   html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">';
   html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'table' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'table\';render()">📋 ตาราง</button>';
   html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'card' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'card\';render()">🗂️ การ์ด</button>';
+  html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'po' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'po\';render()" title="ดูทีละ PO/SO ว่าใบไหนค้างส่ง/แบ่งส่งบางส่วนยังไม่ปิด/ปิดแล้ว">🧾 ตาม PO</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerCopySummary()" title="คัดลอกเป็นตาราง (Tab-separated) วางลง Excel ได้เลย">📋 คัดลอกสรุปของค้าง</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerExportXlsx()">📤 Export Excel (Dealer นี้)</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขเฉพาะ Dealer นี้ ที่เอากลับมา Import ได้">📝 Export แบบฟอร์มแก้ไข (Dealer นี้)</button>';
-  html += '<input class="inp" style="flex:1;min-width:160px;max-width:260px" placeholder="🔎 ค้นหาสินค้า/SKU" value="' + sanitize(poTrackerDealerSearch) + '" oninput="poTrackerDealerSearch=this.value;render()">';
+  html += '<input class="inp" style="flex:1;min-width:160px;max-width:260px" placeholder="🔎 ค้นหาสินค้า/SKU/SO/PO" value="' + sanitize(poTrackerDealerSearch) + '" oninput="poTrackerDealerSearch=this.value;render()">';
   html += '</div>';
+
+  if (poTrackerDealerViewMode === 'po') {
+    html += _poTrackerDealerPOViewHtml(built.dealerSOs, poTrackerDealerSearch, poTrackerDealerPOStatusFlt);
+    el.innerHTML = html;
+    return;
+  }
+
   html += '<div style="margin-bottom:10px">' + _poTrackerDealerStatusFltHtml() + '</div>';
 
   var q = poTrackerDealerSearch.trim().toLowerCase();
