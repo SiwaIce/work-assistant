@@ -166,7 +166,8 @@ function soAllShipmentRounds() {
   return out;
 }
 
-// sh.items เก็บแค่ sku/model/qty ที่ส่งจริง (ไม่มีราคา) — จับคู่ราคาต่อหน่วยจาก s.items ปัจจุบันของ SO นั้น
+// sh.items เก็บ sku/model/qty ที่ส่งจริง — รอบที่บันทึก/แก้ไขตั้งแต่รองรับ snapshot ราคา (2026-11) จะมี it.unitPrice ของตัวเองติดมาด้วย (ราคา ณ ตอนส่งรอบนั้น ไม่ขยับตามราคาที่แก้ทีหลัง)
+// รอบเก่าก่อนหน้านั้นไม่มี unitPrice เก็บไว้ → fallback ไปใช้ราคาปัจจุบันจาก s.items (พฤติกรรมเดิม ไม่มีทางรู้ราคาจริงตอนนั้นถ้าไม่ได้บันทึกไว้)
 // รอบเก่าที่ย้ายมาจากข้อมูลก่อนรองรับแบ่งส่ง (legacy) ไม่มี items[] เลย — fallback ไปใช้รายการทั้งหมดของ SO แทน (ตั้ง estimated:true) กันโชว์ 0 รายการ/0 บาททั้งที่มีของจริง
 function _soShipRoundItemsWithPrice(round) {
   var items = round.items || [];
@@ -178,10 +179,45 @@ function _soShipRoundItemsWithPrice(round) {
     });
   }
   return items.map(function(it) {
-    var src = (round.soItems || []).filter(function(x) { return x.sku === it.sku; })[0];
-    var price = src ? (Number(src.unitPrice) || 0) : 0;
+    var price;
+    if (it.unitPrice != null) {
+      price = Number(it.unitPrice) || 0;
+    } else {
+      var src = (round.soItems || []).filter(function(x) { return x.sku === it.sku; })[0];
+      price = src ? (Number(src.unitPrice) || 0) : 0;
+    }
     return { sku: it.sku, model: it.model, qty: it.qty || 0, unitPrice: price, total: price * (it.qty || 0) };
   });
+}
+
+// มูลค่ารวมของ SO ที่ถูกต้องแม้มีการปรับราคากลางทาง (ลูกค้าแก้ PO เฉพาะส่วนที่ยังไม่ส่ง ราคาเดิมคงไว้สำหรับของที่ส่งไปแล้ว):
+// - ของที่ส่งไปแล้ว (ทุกรอบ) คิดด้วยราคา ณ ตอนบันทึกรอบนั้น (snapshot ใน shipments[].items[].unitPrice ถ้ามี ไม่งั้น fallback ราคาปัจจุบัน สำหรับรอบเก่าก่อนรองรับ)
+// - ส่วนที่เหลือยังไม่ส่งคิดด้วยราคาปัจจุบันใน s.items เสมอ
+// ใช้แทนสูตร qty*unitPrice รวมทั้ง SO ตรงๆ ทุกจุดที่ต้องการ "มูลค่ารวม SO" ที่ถูกต้อง (SO list/detail, PO Tracker, Export, Copy summary)
+function soComputeTotal(s) {
+  var deliveredQty = {}, deliveredValue = 0;
+  _soMigrateLegacyShipment(s).forEach(function(sh) {
+    (sh.items || []).forEach(function(it) {
+      if (!it.sku) return;
+      var qty = Number(it.qty) || 0;
+      var price;
+      if (it.unitPrice != null) {
+        price = Number(it.unitPrice) || 0;
+      } else {
+        var src = (s.items || []).filter(function(x) { return x.sku === it.sku; })[0];
+        price = src ? (Number(src.unitPrice) || 0) : 0;
+      }
+      deliveredQty[it.sku] = (deliveredQty[it.sku] || 0) + qty;
+      deliveredValue += qty * price;
+    });
+  });
+  var remainingValue = (s.items || []).reduce(function(sum, it) {
+    var price = Number(it.unitPrice) || 0;
+    if (!it.sku) return sum + (Number(it.qty) || 0) * price; // by-order ไม่ track ส่งมอบแยกต่อ sku ถือว่ายังไม่ส่งเสมอ
+    var remainQty = Math.max(0, (Number(it.qty) || 0) - (deliveredQty[it.sku] || 0));
+    return sum + remainQty * price;
+  }, 0);
+  return deliveredValue + remainingValue;
 }
 
 // ลำดับรอบส่งมอบของ SKU หนึ่งใน SO เดียว เรียงตามลำดับที่บันทึกจริงใน shipments[] — ใช้จับคู่ "หน่วยที่เท่าไหร่" ของ it.serials (flat list ไม่แยกรอบ) ว่าอยู่ในรอบ/Invoice ไหน ตอน export/import SN จากหน้า Track Invoice
@@ -218,12 +254,14 @@ function soUpdateShipmentRound(soId, roundId, fields) {
       var oldQty = old ? (Number(old.qty) || 0) : 0;
       var newQty = Math.max(0, Math.round(Number(ni.qty) || 0));
       var delta = newQty - oldQty;
+      var soItem = (s.items || []).filter(function(x) { return x.sku === ni.sku; })[0];
       if (delta !== 0 && typeof stockAdjustSOItemDeliveredQty === 'function') {
-        var soItem = (s.items || []).filter(function(x) { return x.sku === ni.sku; })[0];
         var productName = soItem ? soItem.model : (old ? old.model : ni.sku);
         stockAdjustSOItemDeliveredQty(ni.sku, productName, s, delta);
       }
-      return { sku: ni.sku, model: old ? old.model : ni.sku, qty: newQty };
+      // คงราคาที่ snapshot ไว้ของรอบนี้ (ไม่ดึงราคาปัจจุบันใหม่) กันแก้จำนวนแล้วมูลค่ารอบเก่ากลายเป็นราคาปัจจุบันผิดๆ — รอบเก่าที่ไม่มี unitPrice เก็บไว้เลย (ก่อนรองรับ) ค่อย fallback ราคาปัจจุบัน
+      var price = (old && old.unitPrice != null) ? Number(old.unitPrice) || 0 : (soItem ? Number(soItem.unitPrice) || 0 : 0);
+      return { sku: ni.sku, model: old ? old.model : ni.sku, qty: newQty, unitPrice: price };
     });
     fields = Object.assign({}, fields, { items: newItems });
   }
@@ -437,7 +475,8 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
     if (qty1021 > 0 && typeof stockDeliverSOItemQty === 'function') delivered += stockDeliverSOItemQty(ri.sku, productName, soId, qty1021);
     if (qty0001 > 0 && typeof stockDeliverSOItemFrom0001 === 'function') delivered += stockDeliverSOItemFrom0001(ri.sku, productName, s, qty0001);
     if (qtyShortage > 0 && typeof stockDeliverSOItemBackdated === 'function') delivered += stockDeliverSOItemBackdated(ri.sku, productName, s, qtyShortage);
-    if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered });
+    // snapshot ราคาต่อหน่วย ณ ตอนบันทึกรอบนี้ไว้ด้วย กันราคาที่ของรอบนี้ถูกตีใหม่ผิดๆ ถ้ามีการแก้ราคาใน SO ทีหลัง (ดู soComputeTotal/_soShipRoundItemsWithPrice)
+    if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered, unitPrice: it ? (Number(it.unitPrice) || 0) : 0 });
   });
   if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
 
@@ -910,7 +949,7 @@ function showSOCreditModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
   var existing = creditRequestOpenForSO(soId);
-  var total = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+  var total = soComputeTotal(s);
 
   // SO อื่นของ dealer เดียวกันที่ยังไม่ปิด — เลือกรวมขอเครดิตพร้อมกันได้ (เทอมเดียวกัน)
   var siblings = ST.getAll('salesOrders').filter(function(o) {
@@ -1187,7 +1226,7 @@ function _soTableHtml(list) {
     '<th style="padding:10px 12px;font-weight:600;color:var(--text2);min-width:190px">ความคืบหน้า</th>' +
     '<th style="padding:10px 12px"></th></tr></thead><tbody>';
   list.forEach(function(s){
-    var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
+    var total  = soComputeTotal(s);
     var models = (s.items||[]).map(function(it){ return it.model; }).filter(Boolean);
     var modelsTxt = models.length ? (models[0] + (models.length>1 ? ', +' + (models.length-1) + ' more' : '')) : '-';
     var days   = _soDaysInStage(s);
@@ -1221,7 +1260,7 @@ function _soTableHtml(list) {
 function _soCardsHtml(list) {
   var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">';
   list.forEach(function(s) {
-    var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
+    var total  = soComputeTotal(s);
     var models = (s.items||[]).map(function(it){ return it.model; }).filter(Boolean);
     var modelsTxt = models.length ? (models[0] + (models.length>1 ? ', +' + (models.length-1) + ' more' : '')) : '-';
     var days   = _soDaysInStage(s);
@@ -1323,7 +1362,7 @@ function _bulkExportSO_impl() {
   var list = ids.map(function(id) { return ST.getOne('salesOrders', id); }).filter(Boolean);
   var headers = ['SO No.', 'Dealer', 'เลขที่โครงการ (Project ID)', 'ชื่อโครงการ', 'สถานะ', 'สินค้า', 'มูลค่า', 'PO', 'Invoice', 'สร้างเมื่อ'];
   var rows = [headers].concat(list.map(function(s) {
-    var total = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+    var total = soComputeTotal(s);
     var models = (s.items || []).map(function(it) { return it.model; }).filter(Boolean).join(', ');
     var pid = (typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : (s.projectId || s.runrateProjectId || ''));
     return [s.soNumber || '', s.dealerName || '', pid, s.projectName || '', (SO_STATUS[s.status] || {}).label || s.status || '', models, total, s.customerPO || '', s.invoiceNumber || '', s.createdAt ? s.createdAt.slice(0, 10) : ''];
@@ -1361,7 +1400,8 @@ function rSODetail(el) {
 
   var pipe   = s.pipelineId   ? ST.getOne('pipeline', s.pipelineId)     : null;
   var dealer = s.dealerId     ? ST.getOne('dealers',  s.dealerId)        : null;
-  var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
+  var total  = soComputeTotal(s);
+  var nexts  = _SO_NEXT[s.status] || [];
   var cfg    = getConfig();
 
   var html = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';

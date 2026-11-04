@@ -124,6 +124,8 @@ function _poTrackerItemReadinessForExport(it, so) {
 }
 
 function _poTrackerSOTotal(s) {
+  // ใช้ soComputeTotal (views-so.js) กันมูลค่าของที่ส่งไปแล้วถูกตีราคาใหม่ผิดๆ ถ้ามีการแก้ราคาใน SO หลังส่งไปแล้วบางส่วน
+  if (typeof soComputeTotal === 'function') return soComputeTotal(s);
   return (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
 }
 
