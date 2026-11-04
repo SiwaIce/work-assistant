@@ -1942,7 +1942,7 @@ function _poTrackerInvoiceTrackHtml() {
     g.rounds.forEach(function(r) {
       var items = (typeof _soShipRoundItemsWithPrice === 'function') ? _soShipRoundItemsWithPrice(r) : [];
       var roundActions = ' <a href="#" onclick="showSOEditShipmentRoundModal(\'' + r.soId + '\',\'' + r.id + '\');return false" title="แก้ไขเลข Invoice/DO/วันที่/หมายเหตุของรอบนี้" style="margin-left:4px;text-decoration:none">✏️</a>' +
-        ' <a href="#" onclick="showSOEditSerialsModal(\'' + r.soId + '\');return false" title="บันทึก/แก้ไข Serial ของ SO นี้" style="margin-left:2px;text-decoration:none">🔢</a>';
+        ' <a href="#" onclick="showSOEditSerialsModal(\'' + r.soId + '\',\'' + r.id + '\');return false" title="บันทึก/แก้ไข Serial เฉพาะรอบ/Invoice นี้" style="margin-left:2px;text-decoration:none">🔢</a>';
       if (!items.length) {
         html += '<tr style="border-top:1px solid var(--border)">';
         html += '<td style="padding:6px 10px">' + sanitize(r.soNumber || '-') + '</td>';
