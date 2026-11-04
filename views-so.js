@@ -1362,7 +1362,6 @@ function rSODetail(el) {
   var pipe   = s.pipelineId   ? ST.getOne('pipeline', s.pipelineId)     : null;
   var dealer = s.dealerId     ? ST.getOne('dealers',  s.dealerId)        : null;
   var total  = (s.items||[]).reduce(function(sum,it){ return sum+(Number(it.qty)||0)*(Number(it.unitPrice)||0); },0);
-  var nexts  = _SO_NEXT[s.status] || [];
   var cfg    = getConfig();
 
   var html = navHistory.length ? '<div class="bc"><a class="back-btn" onclick="goBack()"><span class="ic">←</span> กลับ</a></div>' : '<button class="btn bo bsm" onclick="go(\'salesOrders\')" style="margin-bottom:10px">← กลับ</button>';
@@ -1382,7 +1381,7 @@ function rSODetail(el) {
   html += '</div>';
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   html += '<button class="btn bo bsm" onclick="showSOEditModal(\'' + s.id + '\')">✏️ แก้ไข</button>';
-  if (nexts.length) html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">🔄 อัปเดตสถานะ</button>';
+  if (s.status !== 'closed') html += '<button class="btn bp bsm" onclick="showSOStatusModal(\'' + s.id + '\')">🔄 อัปเดตสถานะ</button>';
   if (_soPrevStatusFromLogs(s)) html += '<button class="btn bo bsm" onclick="revertSOStatus(\'' + s.id + '\')" title="ย้อนสถานะกลับไปขั้นก่อนหน้า เผื่อกดผิด">↩️ ย้อนกลับสถานะ</button>';
   if (_soMigrateLegacyShipment(s).length) html += '<button class="btn bo bsm" onclick="showResetSODeliveriesModal(\'' + s.id + '\')" title="ล้างรอบส่งมอบ/DO/Invoice ทั้งหมด กลับไปบันทึกใหม่ตั้งแต่ต้น">🔄 รีเซ็ตการส่งมอบ</button>';
   html += '<button class="btn bo bsm" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุปส่ง Sales Support</button>';
@@ -3149,13 +3148,21 @@ function deleteSOTimelineEntry(soId, idx) {
 function showSOStatusModal(soId) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
-  var nexts = _SO_NEXT[s.status] || [];
-  if (!nexts.length) { toast('SO นี้ปิดแล้ว ไม่มีสถานะถัดไป'); return; }
+  if (s.status === 'closed') { toast('SO นี้ปิดแล้ว ไม่มีสถานะถัดไป'); return; }
+
+  // เลือกข้ามขั้นได้เลย (เช่นเปิด SO -> ปิดตรงๆ) ไม่บังคับไล่ทีละสถานะ — เรียงตามลำดับเอกสารจริง ไม่รวม
+  // 'partial_shipped' เพราะสถานะนั้นเข้าอัตโนมัติจาก soRecordShipmentRound() เท่านั้น (ดูหมายเหตุที่ _SO_NEXT)
+  var curIdx = _SO_ORDER.indexOf(s.status);
+  var forwardStatuses = _SO_ORDER.filter(function(st) {
+    if (st === s.status || st === 'partial_shipped') return false;
+    var idx = _SO_ORDER.indexOf(st);
+    return curIdx < 0 || idx > curIdx;
+  });
 
   var html = '<div style="display:flex;flex-direction:column;gap:10px">';
   html += '<div style="font-size:12px;color:var(--text2)">สถานะปัจจุบัน: ' + _soStatusBadge(s.status) + '</div>';
 
-  // เตือนถ้ายังมีสินค้าไม่พร้อมส่ง — ไม่บล็อก แค่เตือนก่อนกดยืนยันเปลี่ยนเป็น "ส่งแล้ว" (มี confirm ซ้ำอีกชั้นตอนบันทึกจริง)
+  // เตือนถ้ายังมีสินค้าไม่พร้อมส่ง — ไม่บล็อก แค่เตือนก่อนกดยืนยันเปลี่ยนเป็นสถานะที่ถือว่าส่งแล้ว (มี confirm ซ้ำอีกชั้นตอนบันทึกจริง)
   if (s.status === 'so_open') {
     var readiness = soComputeReadiness(s);
     if (!readiness.allReady) {
@@ -3164,11 +3171,12 @@ function showSOStatusModal(soId) {
   }
 
   html += '<div><label class="lbl">เปลี่ยนเป็น *</label><select id="soSt_next" class="inp" onchange="_toggleSOFields(\'' + soId + '\',this.value)">';
-  nexts.forEach(function(st){
+  forwardStatuses.forEach(function(st){
     var info = SO_STATUS[st]||{label:st,icon:'?'};
     html += '<option value="' + st + '">' + info.icon + ' ' + info.label + '</option>';
   });
   html += '</select></div>';
+  html += '<div id="soSt_skipWarn" class="warn-box" style="display:none;font-size:11px"></div>';
 
   // PR/PO section — โชว์ตอนเปิด SO/รอของ (ไม่บังคับกรอก เผื่อต้องออก PR ภายในหรือมี ETA จาก Vendor)
   html += '<div id="soSt_prSec" style="display:none"><div style="display:flex;gap:8px">';
@@ -3223,6 +3231,21 @@ function _toggleSOFields(soId, nextSt) {
   if (prSec)  prSec.style.display  = isPR    ? '' : 'none';
   if (serSec) serSec.style.display = showSer ? '' : 'none';
   if (invSec) invSec.style.display = (isShip||isInv) ? '' : 'none';
+
+  // เตือนถ้าเลือกข้ามขั้น (เช่นเปิด SO -> ปิดตรงๆ โดยไม่ผ่านส่งแล้ว/Invoice) — ไม่บล็อก แค่เตือนให้รู้ตัวก่อนบันทึกจริง
+  var skipWarn = document.getElementById('soSt_skipWarn');
+  if (skipWarn) {
+    var s = ST.getOne('salesOrders', soId);
+    var curIdx  = s ? _SO_ORDER.indexOf(s.status) : -1;
+    var nextIdx = _SO_ORDER.indexOf(nextSt);
+    var skipped = (curIdx >= 0 && nextIdx > curIdx + 1) ? _SO_ORDER.slice(curIdx + 1, nextIdx).filter(function(st){ return st !== 'partial_shipped'; }) : [];
+    if (skipped.length) {
+      skipWarn.style.display = '';
+      skipWarn.textContent = '⚠️ ข้ามขั้น: ' + skipped.map(function(st){ return (SO_STATUS[st]||{}).label || st; }).join(' → ') + ' — ยังบันทึกได้ แต่ข้อมูลของขั้นที่ข้ามจะไม่ถูกบันทึก';
+    } else {
+      skipWarn.style.display = 'none';
+    }
+  }
 }
 
 function saveSOStatus(soId) {
@@ -3234,10 +3257,10 @@ function saveSOStatus(soId) {
   var info   = SO_STATUS[nextSt] || { label: nextSt, icon:'?' };
   var cfg    = getConfig();
 
-  // ยังมีสินค้าไม่พร้อมส่งอยู่ แต่จะเปลี่ยนเป็น "ส่งแล้ว" — เตือนอีกชั้น ไม่บล็อก (บางทีส่งบางส่วนก่อนจริงๆ ก็มี)
-  if (nextSt === 'shipped') {
+  // ยังมีสินค้าไม่พร้อมส่งอยู่ แต่จะเปลี่ยนเป็นสถานะที่ถือว่าส่งแล้ว (รวมกรณีเลือกข้ามขั้นไปปิด/ออก Invoice ตรงๆ) — เตือนอีกชั้น ไม่บล็อก
+  if (['shipped', 'invoiced', 'closed'].indexOf(nextSt) !== -1) {
     var readiness = soComputeReadiness(s);
-    if (!readiness.allReady && !confirm('ยังมีสินค้าไม่พร้อมส่ง ' + (readiness.total - readiness.readyCount) + ' รายการ\nยืนยันจะเปลี่ยนสถานะเป็น "ส่งแล้ว" ไหม?')) return;
+    if (!readiness.allReady && !confirm('ยังมีสินค้าไม่พร้อมส่ง ' + (readiness.total - readiness.readyCount) + ' รายการ\nยืนยันจะเปลี่ยนสถานะเป็น "' + info.label + '" ไหม?')) return;
   }
 
   var update = { status: nextSt, updatedAt: new Date().toISOString() };
