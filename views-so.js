@@ -1001,11 +1001,16 @@ function _addSOSerial(idx) {
   var inp  = document.getElementById('soSt_si_' + idx);
   var wrap = document.getElementById('soSt_sw_' + idx);
   if (!inp || !wrap) return;
-  var val = inp.value.trim();
-  if (!val) return;
-  var span = document.createElement('span');
-  span.innerHTML = _soSerialSpan(val);
-  wrap.appendChild(span.firstChild);
+  var tokens = _splitSerialTokens(inp.value);
+  if (!tokens.length) return;
+  var existing = _collectSerials(idx);
+  tokens.forEach(function(val) {
+    if (existing.indexOf(val) !== -1) return;
+    var span = document.createElement('span');
+    span.innerHTML = _soSerialSpan(val);
+    wrap.appendChild(span.firstChild);
+    existing.push(val);
+  });
   inp.value = '';
   inp.focus();
 }
@@ -3127,7 +3132,7 @@ function showSOStatusModal(soId) {
     preload.forEach(function(sn){ html += _soSerialSpan(sn); });
     html += '</div>';
     html += '<div style="display:flex;gap:4px;margin-top:5px">';
-    html += '<input class="inp" id="soSt_si_' + idx + '" style="flex:1;font-family:monospace;font-size:12px" placeholder="กรอก Serial แล้วกด Enter หรือกด +"';
+    html += '<input class="inp" id="soSt_si_' + idx + '" style="flex:1;font-family:monospace;font-size:12px" placeholder="กรอก Serial (วางได้หลายตัว เว้นวรรค/ขึ้นบรรทัดคั่น) แล้วกด Enter หรือกด +"';
     html += ' onkeydown="if(event.key===\'Enter\'){_addSOSerial(' + idx + ');event.preventDefault();}">';
     html += '<button class="btn bp bsm" onclick="_addSOSerial(' + idx + ')">+ เพิ่ม</button>';
     html += '</div></div>';
@@ -3279,7 +3284,7 @@ function showSOEditSerialsModal(soId) {
     _soItemSerials(it).forEach(function(sn){ html += _soSerialSpan(sn); });
     html += '</div>';
     html += '<div style="display:flex;gap:4px">';
-    html += '<input class="inp" id="soEsi_' + idx + '" style="flex:1;font-family:monospace;font-size:12px" placeholder="กรอก Serial แล้วกด Enter"';
+    html += '<input class="inp" id="soEsi_' + idx + '" style="flex:1;font-family:monospace;font-size:12px" placeholder="กรอก Serial (วางได้หลายตัว เว้นวรรค/ขึ้นบรรทัดคั่น) แล้วกด Enter"';
     html += ' onkeydown="if(event.key===\'Enter\'){_addSOSerialEdit(' + idx + ');event.preventDefault();}">';
     html += '<button class="btn bo bsm" onclick="_addSOSerialEdit(' + idx + ')">+ เพิ่ม</button>';
     html += '</div></div>';
@@ -3292,11 +3297,16 @@ function _addSOSerialEdit(idx) {
   var inp  = document.getElementById('soEsi_' + idx);
   var wrap = document.getElementById('soEs_' + idx);
   if (!inp || !wrap) return;
-  var val = inp.value.trim();
-  if (!val) return;
-  var span = document.createElement('span');
-  span.innerHTML = _soSerialSpan(val);
-  wrap.appendChild(span.firstChild);
+  var tokens = _splitSerialTokens(inp.value);
+  if (!tokens.length) return;
+  var existing = _collectSerialsEdit(idx);
+  tokens.forEach(function(val) {
+    if (existing.indexOf(val) !== -1) return;
+    var span = document.createElement('span');
+    span.innerHTML = _soSerialSpan(val);
+    wrap.appendChild(span.firstChild);
+    existing.push(val);
+  });
   inp.value = '';
   inp.focus();
 }
