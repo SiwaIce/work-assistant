@@ -989,6 +989,65 @@ function stockDeliverSOItemBackdated(sku, productName, so, qty) {
   return qty;
 }
 
+// แก้ไขจำนวนที่ "ส่งมอบแล้ว" ของ SKU หนึ่งใน SO นี้ย้อนหลัง ตามส่วนต่าง deltaQty ที่ผู้ใช้แก้ไขรอบส่งมอบที่บันทึกไปแล้ว (เช่น บันทึกไป 4 จริงๆ ส่งไป 5 → deltaQty = +1)
+// เพิ่ม (delta > 0): เหมือน stockDeliverSOItemBackdated คือแค่บันทึกเพิ่ม ไม่หักสต็อกจริงที่ไหน (ของส่งไปแล้วจริงตั้งแต่ตอนนั้น แค่บันทึกไว้ไม่ครบ)
+// ลด (delta < 0): คืนสถานะ lot ที่เพิ่งมาร์ค "ส่งมอบแล้ว" ของ SO+SKU นี้ ใหม่สุดก่อน — lot แบบ backdated (ไม่มีของจริงอยู่แล้ว) ลบทิ้งไปเลย, lot อื่นคืนสถานะเป็น "เตรียมส่งมอบ" (ของยังอยู่ใน 1021 เหมือนเดิม ไม่ได้ย้ายคลังจริง)
+// คืนค่าจำนวนที่ปรับได้จริง (ค่าสัมบูรณ์ อาจน้อยกว่า |deltaQty| ที่ขอลด ถ้า lot ที่ส่งมอบแล้วของ SO นี้ไม่พอให้คืน)
+function stockAdjustSOItemDeliveredQty(sku, productName, so, deltaQty) {
+  deltaQty = Math.round(Number(deltaQty) || 0);
+  if (!sku || !so || !so.id || deltaQty === 0) return 0;
+  if (deltaQty > 0) return stockDeliverSOItemBackdated(sku, productName, so, deltaQty);
+
+  var need = -deltaQty;
+  var lots = stockGetLots(sku).slice();
+  var candidates = [];
+  lots.forEach(function(l, i) {
+    if (l.location === '1021' && l.soId === so.id && l.status === 'ส่งมอบแล้ว') candidates.push({ lot: l, idx: i });
+  });
+  candidates.sort(function(a, b) {
+    var bd = (b.lot.backdated ? 1 : 0) - (a.lot.backdated ? 1 : 0);
+    if (bd !== 0) return bd;
+    return (b.lot.deliveredDate || '').localeCompare(a.lot.deliveredDate || '');
+  });
+
+  var reverted = 0;
+  var toRemove = [];
+  for (var i = 0; i < candidates.length && need > 0; i++) {
+    var lot = candidates[i].lot;
+    var idx = candidates[i].idx;
+    var lotQty = Number(lot.qty) || 0;
+    var take = Math.min(need, lotQty);
+    if (take <= 0) continue;
+    if (lot.backdated) {
+      if (take >= lotQty) toRemove.push(idx);
+      else lots[idx] = Object.assign({}, lot, { qty: lotQty - take });
+    } else {
+      if (take >= lotQty) {
+        lots[idx] = Object.assign({}, lot, { status: 'เตรียมส่งมอบ', deliveredDate: '' });
+      } else {
+        lots[idx] = Object.assign({}, lot, { qty: lotQty - take });
+        lots.push({
+          id: _stockLotId(), location: '1021', ref: lot.ref, qty: take, dateIn: lot.dateIn, note: lot.note || '',
+          soNumber: lot.soNumber, soId: lot.soId, bookedDate: lot.bookedDate, salesperson: lot.salesperson,
+          dealerName: lot.dealerName, projectName: lot.projectName, status: 'เตรียมส่งมอบ',
+          fromLotId: lot.id, batchRef: lot.batchRef || ''
+        });
+      }
+    }
+    need -= take;
+    reverted += take;
+  }
+  toRemove.sort(function(a, b) { return b - a; }).forEach(function(i) { lots.splice(i, 1); });
+  if (reverted > 0) {
+    _stockSaveLots(sku, productName, lots);
+    ST.add('stockLog', {
+      sku: sku, productName: productName, locationCode: '1021', locationName: stockLocationName('1021'),
+      qty: -reverted, note: 'แก้ไขจำนวนรอบส่งมอบ (ลดลง) — SO ' + (so.soNumber || ''), date: _nw(), type: 'adjust'
+    });
+  }
+  return reverted;
+}
+
 // ลบ lot ที่เผลอกรอกผิดทิ้งทั้งรายการ
 function stockDeleteLot(sku, lotId) {
   if (!confirm('ลบรายการนี้ทิ้ง?\nใช้ตอนกรอกผิดเท่านั้น ไม่สามารถกู้คืนได้')) return;
