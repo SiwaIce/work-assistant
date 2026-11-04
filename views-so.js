@@ -203,6 +203,7 @@ function soSkuShipmentTimeline(soId, sku) {
 // แก้ไขข้อมูลรอบส่งมอบที่บันทึกไว้แล้ว (DO/Invoice/วันที่/หมายเหตุ) — ใช้จากหน้า Track Invoice
 // ตั้งเลข Invoice ให้ตรงกับรอบอื่นได้เพื่อรวมเข้า invoice เดียวกัน (soGroupShipmentsByInvoice group ตามเลขอัตโนมัติ)
 // field เดิมระดับ SO (s.doNumber/invoiceNumber/invoiceDate) มีไว้ mirror รอบล่าสุดเสมอ (ตามที่ soRecordShipmentRound ทำ) — คำนวณใหม่จากรอบสุดท้ายทุกครั้งที่แก้ กันข้อมูลสองที่ไม่ตรงกัน
+// fields.items (ถ้ามี): [{sku, qty}] จำนวนที่แก้ไขใหม่ของแต่ละรายการในรอบนี้ — เทียบกับจำนวนเดิมแล้วปรับสต็อกตามส่วนต่างให้ด้วย (stockAdjustSOItemDeliveredQty)
 function soUpdateShipmentRound(soId, roundId, fields) {
   var s = ST.getOne('salesOrders', soId);
   if (!s) return;
@@ -210,6 +211,22 @@ function soUpdateShipmentRound(soId, roundId, fields) {
   var idx = -1;
   shipments.forEach(function(sh, i) { if (sh.id === roundId) idx = i; });
   if (idx === -1) return;
+  var oldItems = shipments[idx].items || [];
+  if (fields.items) {
+    var newItems = fields.items.map(function(ni) {
+      var old = oldItems.filter(function(x) { return x.sku === ni.sku; })[0];
+      var oldQty = old ? (Number(old.qty) || 0) : 0;
+      var newQty = Math.max(0, Math.round(Number(ni.qty) || 0));
+      var delta = newQty - oldQty;
+      if (delta !== 0 && typeof stockAdjustSOItemDeliveredQty === 'function') {
+        var soItem = (s.items || []).filter(function(x) { return x.sku === ni.sku; })[0];
+        var productName = soItem ? soItem.model : (old ? old.model : ni.sku);
+        stockAdjustSOItemDeliveredQty(ni.sku, productName, s, delta);
+      }
+      return { sku: ni.sku, model: old ? old.model : ni.sku, qty: newQty };
+    });
+    fields = Object.assign({}, fields, { items: newItems });
+  }
   shipments[idx] = Object.assign({}, shipments[idx], fields);
   var last = shipments[shipments.length - 1];
   var update = {
@@ -218,6 +235,22 @@ function soUpdateShipmentRound(soId, roundId, fields) {
     invoiceNumber: last.invoiceNumber || '',
     invoiceDate: last.invoiceDate || ''
   };
+  // อัปเกรดสถานะ SO อัตโนมัติถ้าแก้จำนวนแล้วทำให้ส่งครบ/บางส่วนมากขึ้น (ตามแบบ soRecordShipmentRound) — ไม่ถอยสถานะอัตโนมัติแม้แก้ลดจำนวน กันพลาด
+  if (fields.items) {
+    var progress = soComputeShipmentProgress(Object.assign({}, s, update));
+    var order = ['po_received', 'so_open', 'partial_shipped', 'shipped', 'invoiced', 'closed'];
+    var curIdx = order.indexOf(s.status);
+    var target = progress.allDelivered ? 'shipped' : (progress.anyDelivered ? 'partial_shipped' : s.status);
+    var targetIdx = order.indexOf(target);
+    if (targetIdx > curIdx) {
+      update.status = target;
+      var cfg = getConfig();
+      var targetInfo = SO_STATUS[target] || { label: target, icon: '?' };
+      var logs = (s.logs || []).slice();
+      logs.push({ date: _td(), action: targetInfo.icon + ' ' + targetInfo.label, note: 'อัตโนมัติจากการแก้ไขจำนวนรอบส่งมอบ', by: cfg.saleName || '', fromStatus: s.status, toStatus: target });
+      update.logs = logs;
+    }
+  }
   var updated = ST.update('salesOrders', soId, update);
   if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
   return updated;
@@ -231,10 +264,20 @@ function showSOEditShipmentRoundModal(soId, roundId) {
   var shipments = _soMigrateLegacyShipment(s);
   var sh = shipments.filter(function(x) { return x.id === roundId; })[0];
   if (!sh) { toast('⚠️ ไม่พบรอบส่งมอบนี้แล้ว'); return; }
-  var itemsLine = (sh.items || []).length
-    ? (sh.items || []).map(function(it) { return sanitize(it.model || it.sku) + ' ×' + (it.qty || 0); }).join(', ')
-    : '<span style="color:var(--text2)">ไม่มีรายละเอียดรายการ (ย้ายจากข้อมูลเดิมก่อนรองรับแบ่งส่ง)</span>';
-  var html = '<div class="hint" style="margin-bottom:10px">' + sanitize(s.soNumber || '') + (sh.date ? ' · ส่งวันที่ ' + fD(sh.date) : '') + '<br>' + itemsLine + '</div>';
+  var items = sh.items || [];
+  var html = '<div class="hint" style="margin-bottom:10px">' + sanitize(s.soNumber || '') + (sh.date ? ' · ส่งวันที่ ' + fD(sh.date) : '') + '</div>';
+  if (items.length) {
+    html += '<div style="margin-bottom:10px"><label class="lbl">จำนวนที่ส่งจริงในรอบนี้</label><div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">';
+    items.forEach(function(it, i) {
+      html += '<div style="display:flex;align-items:center;gap:8px">' +
+        '<div style="flex:1;font-size:13px">' + sanitize(it.model || it.sku) + '<div style="font-size:10px;color:var(--text2);font-family:monospace">' + sanitize(it.sku || '') + '</div></div>' +
+        '<input id="soEr_qty_' + i + '" type="number" min="0" class="inp" style="width:80px" value="' + (it.qty || 0) + '" data-sku="' + sanitize(it.sku || '') + '">' +
+        '</div>';
+    });
+    html += '</div><div class="hint" style="font-size:10px;margin-top:4px">💡 แก้จำนวนตรงนี้ถ้าบันทึกผิด เช่น บันทึกไป 4 แต่จริงๆ ส่ง 5 — ระบบจะปรับยอดสต็อก/สถานะ SO ให้อัตโนมัติ</div></div>';
+  } else {
+    html += '<div class="hint" style="margin-bottom:10px"><span style="color:var(--text2)">ไม่มีรายละเอียดรายการ (ย้ายจากข้อมูลเดิมก่อนรองรับแบ่งส่ง) — แก้จำนวนไม่ได้</span></div>';
+  }
   html += '<div style="display:flex;gap:8px"><div style="flex:1"><label class="lbl">DO Number</label><input id="soEr_do" class="inp" value="' + sanitize(sh.doNumber || '') + '"></div>';
   html += '<div style="flex:1"><label class="lbl">Invoice Number</label><input id="soEr_inv" class="inp" value="' + sanitize(sh.invoiceNumber || '') + '" list="soEr_invList"></div></div>';
   var allInv = {};
@@ -243,7 +286,7 @@ function showSOEditShipmentRoundModal(soId, roundId) {
   html += '<div style="display:flex;gap:8px;margin-top:8px"><div style="flex:1"><label class="lbl">Invoice Date</label><input id="soEr_invDate" type="date" class="inp" value="' + sanitize(sh.invoiceDate || '') + '"></div>';
   html += '<div style="flex:1"><label class="lbl">หมายเหตุ</label><input id="soEr_note" class="inp" value="' + sanitize(sh.note || '') + '"></div></div>';
   html += '<div class="hint" style="margin-top:6px;font-size:11px">💡 ตั้งเลข Invoice ให้ตรงกับ Invoice ที่มีอยู่แล้ว เพื่อรวมรอบนี้เข้า Invoice เดียวกัน</div>';
-  html += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSOEditShipmentRound(\'' + soId + '\',\'' + roundId + '\')">💾 บันทึก</button>';
+  html += '<button class="btn bp btn-full" style="margin-top:12px" onclick="_saveSOEditShipmentRound(\'' + soId + '\',\'' + roundId + '\',' + items.length + ')">💾 บันทึก</button>';
   openM('✏️ แก้ไขข้อมูลรอบส่งมอบ', html);
 }
 
@@ -331,13 +374,22 @@ function _soGoToTrackInvoice(invNum) {
   if (typeof go === 'function') go('poTracker');
 }
 
-function _saveSOEditShipmentRound(soId, roundId) {
+function _saveSOEditShipmentRound(soId, roundId, itemCount) {
   var fields = {
     doNumber: (document.getElementById('soEr_do').value || '').trim(),
     invoiceNumber: (document.getElementById('soEr_inv').value || '').trim(),
     invoiceDate: document.getElementById('soEr_invDate').value || '',
     note: (document.getElementById('soEr_note').value || '').trim()
   };
+  if (itemCount) {
+    var items = [];
+    for (var i = 0; i < itemCount; i++) {
+      var el = document.getElementById('soEr_qty_' + i);
+      if (!el) continue;
+      items.push({ sku: el.getAttribute('data-sku') || '', qty: Math.max(0, Math.round(Number(el.value) || 0)) });
+    }
+    fields.items = items;
+  }
   soUpdateShipmentRound(soId, roundId, fields);
   closeMForce();
   toast('💾 บันทึกข้อมูลรอบส่งมอบแล้ว');
