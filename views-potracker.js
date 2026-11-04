@@ -477,7 +477,7 @@ function _poTrackerSOGroupHtml(so, items, selectedBuckets) {
   html += '<div style="min-width:0;display:flex;align-items:center;gap:6px">';
   html += '<span style="font-size:10px;color:var(--text3,var(--text2))">' + (collapsed ? '▶' : '▼') + '</span>';
   html += '<div>';
-  html += '<div style="font-size:12px;font-weight:700" onclick="event.stopPropagation()">' + _poTrackerSoLinksHtml(so) + (so.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:11px">· PO ' + sanitize(so.customerPO) + '</span>' : '') + '</div>';
+  html += '<div style="font-size:12px;font-weight:700" onclick="event.stopPropagation()">' + _poTrackerSoLinksHtml(so) + (so.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:11px">· PO ' + sanitize(so.customerPO) + '</span>' : '') + _soClosedBadgeHtml(so) + '</div>';
   var sub = [];
   if (pid) sub.push('Project ID ' + sanitize(pid));
   if (sub.length) html += '<div style="font-size:10px;color:var(--text3,var(--text2));margin-top:1px">' + sub.join(' · ') + '</div>';
@@ -839,7 +839,7 @@ function rPOTracker(el) {
     if (poTrackerSelectMode) html += '<input type="checkbox" id="poTrkChk_' + s.id + '" ' + (poTrackerSelected[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();togglePOTrackerSelect(\'' + s.id + '\')" style="position:absolute;top:12px;right:12px;width:18px;height:18px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">';
     html += '<div>';
-    html += '<div style="font-weight:600;font-size:14px">' + sanitize(s.soNumber || '-') + (s.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:12px">· PO ' + sanitize(s.customerPO) + '</span>' : '') + '</div>';
+    html += '<div style="font-weight:600;font-size:14px">' + sanitize(s.soNumber || '-') + (s.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:12px">· PO ' + sanitize(s.customerPO) + '</span>' : '') + _soClosedBadgeHtml(s) + '</div>';
     html += '<div style="font-size:12px;color:var(--text2)">🏪 ' + sanitize(s.dealerName || '-') + '</div>';
     html += _poTrackerTypeBadgeHtml(s);
     html += '<div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
@@ -921,7 +921,7 @@ function _poTrackerMainTableHtml(filtered) {
     html += '<tr style="cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sanitize(s.soNumber || '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sanitize(s.dealerName || '-') + '</td>';
-    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (SO_STATUS[s.status] ? SO_STATUS[s.status].icon + ' ' + SO_STATUS[s.status].label : '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (s.status === 'closed' ? _soClosedBadgeHtml(s) : (SO_STATUS[s.status] ? SO_STATUS[s.status].icon + ' ' + SO_STATUS[s.status].label : '-')) + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (r.readiness.total ? r.readiness.readyCount + '/' + r.readiness.total : '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap;color:' + (warn.length ? '#ef4444' : 'var(--text2)') + ';font-weight:' + (warn.length ? '700' : '400') + '">' + (warn.length ? sanitize(warn.join(' · ')) : '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">฿' + nmI(r.total) + '</td>';
