@@ -6344,6 +6344,19 @@ body.mobile-mode .ftab.act {
 .task-date-badge.tier-red .task-date-num { color: #fecaca; }
 .task-date-badge.tier-amber .task-date-pill { background: #f59e0b; color: #422006; }
 .task-date-badge.tier-amber .task-date-num { color: #fde68a; }
+/* เว้นที่ให้ป้ายวันที่ลอยมุมขวาบนไม่ไปทับชื่องาน — ค่าคงที่นี้ใช้ได้บนจอกว้าง (desktop/tablet)
+   เท่านั้น บนมือถือ (<=700px) การ์ดแคบกว่า 190px มาก เปลี่ยนเป็นป้ายลอยอยู่เหนือการ์ดแทน
+   ไม่กันที่ในแถวชื่องานเลย (ดู media query ด้านล่าง) */
+.task-card-main-row.has-date-badge { padding-right: 190px; }
+
+/* แถบตัวกรองงาน (รายการ Tasks) — ความกว้างต่อช่องบนจอกว้าง (tablet/desktop); มือถือดู media query */
+.task-filter-grid { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.task-filter-select.tfs-status { width: 110px; }
+.task-filter-select.tfs-priority { width: 100px; }
+.task-filter-select.tfs-dealer { min-width: 130px; }
+.task-filter-select.tfs-cat { min-width: 120px; }
+.task-filter-select.tfs-group { width: 130px; }
+.task-filter-select.tfs-sort { width: 150px; }
 
 .task-date-shift-bar { display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0,0,0,.25); padding: 6px; border-radius: 10px; margin-bottom: 9px; }
 .task-date-shift-bar button { background: rgba(255,255,255,.18); border: none; color: var(--text); width: 26px; height: 26px; border-radius: 50%; font-size: 12px; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -6530,9 +6543,39 @@ body.mobile-mode .ftab.act {
   }
   .task-card-actions {
     margin-left: 32px;
+    flex-wrap: wrap;
   }
   .timeline-item {
     flex-wrap: wrap;
+  }
+
+  /* ป้ายวันกำหนด — จอแคบไม่พอให้กันที่ 190px ไว้ข้างชื่องาน (ข้อ 1 รีวิว UX มือถือ)
+     เปลี่ยนจากลอย absolute มุมขวาบน เป็นแถบลอยอยู่เหนือการ์ด (static) แทน ไม่กินที่ชื่องานเลย */
+  .task-date-badge {
+    position: static;
+    display: flex;
+    margin-bottom: 8px;
+  }
+  .task-card-main-row.has-date-badge {
+    padding-right: 0;
+  }
+
+  /* แถบตัวกรองงาน (ข้อ 2) — select 6 ตัวกว้างตายตัวรวมกันเกิน 600px พอดีเดียวบนมือถือ
+     เปลี่ยนเป็นกริด 2 คอลัมน์เท่ากันแทน */
+  .task-filter-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .task-filter-select {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* ปุ่มสลับ 1/2 คอลัมน์การ์ด (ข้อ 3) ไม่มีผลที่ <700px อยู่แล้ว (.task-grid บังคับ 1 คอลัมน์เสมอ)
+     ซ่อนทิ้งกันเปลืองที่แถบ tab */
+  .task-colswitch {
+    display: none !important;
   }
 }
 /* ================================================================

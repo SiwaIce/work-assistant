@@ -79,7 +79,7 @@ function rUnifiedTasks(el) {
   
   var h = '';
   
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">';
   h += '<h2 style="font-size:1rem;margin:0">📋 จัดการงาน</h2>';
   h += '<span>';
   if (tasksView === 'list') h += '<button class="btn ' + (taskSelectMode ? 'bd' : 'bo') + '" onclick="toggleTaskSelectMode()" style="margin-right:6px">☑️ ' + (taskSelectMode ? 'ยกเลิก' : 'เลือก') + '</button>';
@@ -96,7 +96,10 @@ function rUnifiedTasks(el) {
   h += '<div class="today-tab ' + (tasksView === 'kanban' ? 'act' : '') + '" onclick="tasksView=\'kanban\';render()">📊 Kanban</div>';
   h += '<div class="today-tab ' + (tasksView === 'timeline' ? 'act' : '') + '" onclick="tasksView=\'timeline\';render()">⏰ เส้นเวลา</div>';
   if (tasksView === 'list') {
-    h += '<div style="margin-left:auto;display:flex;gap:2px">';
+    // ซ่อนบนมือถือ (<700px) ด้วย CSS (.task-colswitch) — ปุ่มนี้ไม่มีผลใดๆที่จอแคบเพราะ
+    // .task-grid บังคับ 1 คอลัมน์เสมออยู่แล้ว (ดู media query ของ .task-grid-2col) การแสดงไว้
+    // มีแต่เปลืองที่ ดันให้แถบ tab หลัก (รายการ/Kanban/เส้นเวลา) ต้อง scroll ถึงจะเห็นครบ
+    h += '<div class="task-colswitch" style="margin-left:auto;display:flex;gap:2px">';
     h += '<div class="today-tab ' + (taskCardCols === 1 ? 'act' : '') + '" title="1 การ์ดต่อแถว" onclick="taskCardCols=1;render()">🔲 1</div>';
     h += '<div class="today-tab ' + (taskCardCols === 2 ? 'act' : '') + '" title="2 การ์ดต่อแถว" onclick="taskCardCols=2;render()">⚏ 2</div>';
     h += '</div>';
@@ -262,37 +265,37 @@ function renderTaskFilterBar(dealers, categories, stats) {
       <button class="btn bsm bo" onclick="clearTaskFilters()">✕ ล้างตัวกรอง</button>
     </div>
 
-    <div style="display:${taskFilterCollapsed ? 'none' : 'flex'};gap:6px;flex-wrap:wrap;align-items:center">
-      <select id="taskStatusFilter" onchange="tasksFilterStatus=this.value;render()" style="width:110px">
+    <div class="task-filter-grid" style="display:${taskFilterCollapsed ? 'none' : 'flex'}">
+      <select id="taskStatusFilter" class="task-filter-select tfs-status" onchange="tasksFilterStatus=this.value;render()">
         <option value="all" ${tasksFilterStatus === 'all' ? 'selected' : ''}>✅ สถานะทั้งหมด</option>
         <option value="active" ${tasksFilterStatus === 'active' ? 'selected' : ''}>🔄 กำลังทำ</option>
         <option value="completed" ${tasksFilterStatus === 'completed' ? 'selected' : ''}>✅ เสร็จ</option>
         <option value="on-hold" ${tasksFilterStatus === 'on-hold' ? 'selected' : ''}>⏸ พัก</option>
       </select>
 
-      <select id="taskPriorityFilter" onchange="tasksFilterPriority=this.value;render()" style="width:100px">
+      <select id="taskPriorityFilter" class="task-filter-select tfs-priority" onchange="tasksFilterPriority=this.value;render()">
         <option value="all" ${tasksFilterPriority === 'all' ? 'selected' : ''}>🎯 ทุกระดับ</option>
         <option value="high" ${tasksFilterPriority === 'high' ? 'selected' : ''}>🔴 สำคัญ</option>
         <option value="medium" ${tasksFilterPriority === 'medium' ? 'selected' : ''}>🟡 กลาง</option>
         <option value="low" ${tasksFilterPriority === 'low' ? 'selected' : ''}>🟢 ทั่วไป</option>
       </select>
 
-      <select id="taskDealerFilter" onchange="tasksFilterDealer=this.value;render()" style="min-width:130px">
+      <select id="taskDealerFilter" class="task-filter-select tfs-dealer" onchange="tasksFilterDealer=this.value;render()">
         ${dealerOpts}
       </select>
 
-      <select id="taskCatFilter" onchange="tasksFilterCategory=this.value;render()" style="min-width:120px">
+      <select id="taskCatFilter" class="task-filter-select tfs-cat" onchange="tasksFilterCategory=this.value;render()">
         ${catOpts}
       </select>
 
-      <select id="taskGroupBy" onchange="tasksGroupBy=this.value;render()" style="width:130px">
+      <select id="taskGroupBy" class="task-filter-select tfs-group" onchange="tasksGroupBy=this.value;render()">
         <option value="none" ${tasksGroupBy === 'none' ? 'selected' : ''}>📌 ไม่จัดกลุ่ม</option>
         <option value="dealer" ${tasksGroupBy === 'dealer' ? 'selected' : ''}>🏪 ตาม Dealer</option>
         <option value="status" ${tasksGroupBy === 'status' ? 'selected' : ''}>📊 ตามสถานะ</option>
         <option value="dueDate" ${tasksGroupBy === 'dueDate' ? 'selected' : ''}>📅 ตามกำหนด</option>
       </select>
 
-      <select id="taskSortDate" onchange="tasksSortDate=this.value;render()" style="width:150px">
+      <select id="taskSortDate" class="task-filter-select tfs-sort" onchange="tasksSortDate=this.value;render()">
         <option value="asc" ${tasksSortDate === 'asc' ? 'selected' : ''}>🔃 วันที่: เก่าสุด→ใหม่สุด</option>
         <option value="desc" ${tasksSortDate === 'desc' ? 'selected' : ''}>🔃 วันที่: ใหม่สุด→เก่าสุด</option>
       </select>
@@ -597,7 +600,7 @@ function renderTaskCard(t) {
     ${dateBadgeHtml}
     <div class="task-card-body" onclick="go('taskDetail',{taskId:'${t.id}'})">
       ${dateShiftBarHtml}
-      <div class="task-card-main-row" style="${t.dueDate && _taskDateShiftId !== t.id ? 'padding-right:190px' : ''}">
+      <div class="task-card-main-row${t.dueDate && _taskDateShiftId !== t.id ? ' has-date-badge' : ''}">
         ${taskSelectMode ? `<input type="checkbox" id="taskChk_${t.id}" class="task-complete-chk" ${taskSelected[t.id] ? 'checked' : ''}
           onclick="event.stopPropagation();toggleTaskSelect('${t.id}')" title="เลือกงานนี้">` : `<input type="checkbox" class="task-complete-chk" ${checkedAttr}
           onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">`}
