@@ -2311,6 +2311,9 @@ var poTrackerDealerAllSortKey = 'totalVal'; // name | totalVal | doneVal | leftV
 var poTrackerDealerAllSortDir = -1; // 1 = น้อยไปมาก, -1 = มากไปน้อย (ชื่อ Dealer ใช้ -1 = Z→A)
 var poTrackerDealerPOStatusFlt = ''; // '' | pending | partial | closed — กรองมุมมอง "ตาม PO" ตามสถานะทั้งใบ (ต่างจาก poTrackerDealerStatusFlt ที่กรองระดับรายการสินค้า)
 var poTrackerDealerPOExpanded = {}; // soId -> เปิด/ปิดรายการสินค้าทั้งหมดของ PO/SO นั้นในมุมมอง "ตาม PO"
+var poTrackerDealerMonthlySubView = 'po'; // po | invoice — มุมมอง "รายเดือน": ยอด PO รายเดือน (ตามวันที่ PO ลูกค้า) หรือ ยอด Invoice รายเดือน (ตามวันที่ Invoice ของแต่ละรอบส่งมอบ)
+var poTrackerDealerMonthlyYear = '';      // '' = ทุกปี, else 'YYYY' — กรองปีในมุมมอง "รายเดือน"
+var poTrackerDealerMonthlyExpanded = {};  // 'po:YYYY-MM' / 'invoice:YYYY-MM' -> เปิด/ปิด drill-down รายการของเดือนนั้น
 var POTRACKER_DEALER_LS_KEY = 'v7_poTrackerDealer_lastDealer'; // จำ Dealer ล่าสุดที่เปิดดู (ต่อเครื่อง)
 var POTRACKER_VAT_RATE = 0.07;
 
@@ -2787,6 +2790,127 @@ function _poTrackerDealerPOViewHtml(dealerSOs, search, statusFlt) {
   return html;
 }
 
+// สรุปยอด PO ของ Dealer แยกตามเดือน — ใช้วันที่ PO ลูกค้า (customerPODate) ถ้ามี ไม่งั้น fallback วันที่สร้าง SO (createdAt)
+// ยอด = มูลค่ารวมทั้งใบ (นิยามเดียวกับ totalVal ใน _poTrackerDealerMoneyTotals) ไม่ขึ้นกับว่าส่งแล้วหรือยัง เพราะเป็นยอดตาม "วันที่ตั้ง PO" ไม่ใช่วันส่ง
+function _poTrackerDealerMonthlyPOData(dealerSOs) {
+  var map = {};
+  dealerSOs.forEach(function(s) {
+    var d = s.customerPODate || (s.createdAt || '').slice(0, 10);
+    if (!d) return;
+    var month = d.slice(0, 7);
+    if (!map[month]) map[month] = { month: month, amount: 0, count: 0, list: [] };
+    var val = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+    map[month].amount += val;
+    map[month].count++;
+    map[month].list.push({ so: s, date: d, amount: val });
+  });
+  return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.month.localeCompare(a.month); });
+}
+
+// สรุปยอด Invoice ของ Dealer แยกตามเดือน — ใช้วันที่ Invoice ของแต่ละรอบส่งมอบ (invoiceDate) นับเฉพาะรอบที่ตั้งเลข Invoice แล้ว
+// ยอดต่อรอบคิดจากราคา ณ ตอนส่งรอบนั้น (snapshot จาก PR #122 ผ่าน _soShipRoundItemsWithPrice) ไม่ใช่ราคาปัจจุบันของ SO กันมูลค่า Invoice เก่าขยับถ้ามีการแก้ราคาทีหลัง
+function _poTrackerDealerMonthlyInvoiceData(dealerName) {
+  var rounds = (typeof soAllShipmentRounds === 'function' ? soAllShipmentRounds() : [])
+    .filter(function(r) { return r.dealerName === dealerName && r.invoiceNumber; });
+  var map = {};
+  rounds.forEach(function(r) {
+    var d = r.invoiceDate || r.date || '';
+    if (!d) return;
+    var month = d.slice(0, 7);
+    var items = (typeof _soShipRoundItemsWithPrice === 'function') ? _soShipRoundItemsWithPrice(r) : [];
+    var val = items.reduce(function(sum, it) { return sum + (Number(it.total) || 0); }, 0);
+    if (!map[month]) map[month] = { month: month, amount: 0, invoiceSet: {}, list: [] };
+    map[month].amount += val;
+    map[month].invoiceSet[r.invoiceNumber] = true;
+    map[month].list.push({ round: r, date: d, amount: val });
+  });
+  return Object.keys(map).map(function(k) {
+    var m = map[k];
+    return { month: m.month, amount: m.amount, count: Object.keys(m.invoiceSet).length, list: m.list };
+  }).sort(function(a, b) { return b.month.localeCompare(a.month); });
+}
+
+function _poTrackerDealerMonthlyYears(rows) {
+  return Array.from(new Set(rows.map(function(r) { return r.month.slice(0, 4); }))).sort().reverse();
+}
+
+var POTRACKER_TH_MONTH_SHORT = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function _poTrackerMonthLabel(month) {
+  var parts = month.split('-');
+  return (POTRACKER_TH_MONTH_SHORT[parseInt(parts[1], 10)] || parts[1]) + ' ' + parts[0];
+}
+
+function poTrackerDealerMonthlySetSubView(v) { poTrackerDealerMonthlySubView = v; render(); }
+function poTrackerDealerMonthlySetYear(v) { poTrackerDealerMonthlyYear = v; render(); }
+function poTrackerDealerMonthlyToggle(key) { poTrackerDealerMonthlyExpanded[key] = !poTrackerDealerMonthlyExpanded[key]; render(); }
+
+// มุมมอง "รายเดือน" — สองแท็บย่อยสลับกันดู: ยอด PO รายเดือน (ตามวันที่ PO ลูกค้า) / ยอด Invoice รายเดือน (ตามวันที่ Invoice ของแต่ละรอบส่งมอบ)
+// แต่ละแถวกดดูรายการ (drill-down) PO/Invoice ของเดือนนั้นได้ รองรับตัวกรองปี และตัวสลับ VAT ร่วมกับทั้งหน้า (poTrackerDealerVatMode)
+function _poTrackerDealerMonthlyHtml(dealerName, dealerSOs) {
+  var isInvoice = poTrackerDealerMonthlySubView === 'invoice';
+  var rows = isInvoice ? _poTrackerDealerMonthlyInvoiceData(dealerName) : _poTrackerDealerMonthlyPOData(dealerSOs);
+  var years = _poTrackerDealerMonthlyYears(rows);
+  if (poTrackerDealerMonthlyYear && years.indexOf(poTrackerDealerMonthlyYear) === -1) poTrackerDealerMonthlyYear = '';
+  var filtered = poTrackerDealerMonthlyYear ? rows.filter(function(r) { return r.month.slice(0, 4) === poTrackerDealerMonthlyYear; }) : rows;
+
+  var html = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">';
+  html += '<div style="display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:2px">';
+  html += '<button class="btn bsm" style="border:none;' + (!isInvoice ? 'background:var(--accent);color:#fff' : 'background:none;color:var(--text2)') + '" onclick="poTrackerDealerMonthlySetSubView(\'po\')">📄 ยอด PO รายเดือน</button>';
+  html += '<button class="btn bsm" style="border:none;' + (isInvoice ? 'background:var(--accent);color:#fff' : 'background:none;color:var(--text2)') + '" onclick="poTrackerDealerMonthlySetSubView(\'invoice\')">🧾 ยอด Invoice รายเดือน</button>';
+  html += '</div>';
+  if (years.length > 1) {
+    html += '<select class="inp bsm" style="width:auto" onchange="poTrackerDealerMonthlySetYear(this.value)">';
+    html += '<option value=""' + (!poTrackerDealerMonthlyYear ? ' selected' : '') + '>ทุกปี</option>';
+    years.forEach(function(y) { html += '<option value="' + y + '"' + (poTrackerDealerMonthlyYear === y ? ' selected' : '') + '>ปี ' + y + '</option>'; });
+    html += '</select>';
+  }
+  html += '</div>';
+
+  if (!filtered.length) {
+    html += '<div class="card" style="padding:20px;text-align:center;color:var(--text2)">ยังไม่มีข้อมูล' + (isInvoice ? ' Invoice' : ' PO') + '</div>';
+    return html;
+  }
+
+  html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--bg2)">';
+  html += '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2)">เดือน</th>';
+  html += '<th style="text-align:right;padding:8px 10px;font-size:11px;color:var(--text2)">ยอด</th>';
+  html += '<th style="text-align:right;padding:8px 10px;font-size:11px;color:var(--text2);white-space:nowrap">จำนวน ' + (isInvoice ? 'Invoice' : 'PO') + '</th>';
+  html += '<th></th>';
+  html += '</tr></thead><tbody>';
+  filtered.forEach(function(r) {
+    var key = (isInvoice ? 'invoice:' : 'po:') + r.month;
+    var open = !!poTrackerDealerMonthlyExpanded[key];
+    html += '<tr style="border-top:1px solid var(--border)">';
+    html += '<td style="padding:8px 10px;font-weight:600;white-space:nowrap">' + _poTrackerMonthLabel(r.month) + '</td>';
+    html += '<td class="num" style="padding:8px 10px;text-align:right;font-weight:700">' + _poTrackerDealerMoney(r.amount) + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;color:var(--text2)">' + r.count + '</td>';
+    html += '<td style="padding:8px 10px;text-align:right;white-space:nowrap"><a href="#" onclick="poTrackerDealerMonthlyToggle(\'' + key + '\');return false" style="color:var(--accent)">' + (open ? '▼ ซ่อน' : '▶ ดูรายการ') + '</a></td>';
+    html += '</tr>';
+    if (open) {
+      html += '<tr><td colspan="4" style="padding:0 10px 10px 10px;background:var(--bg2)"><div style="padding-top:6px">';
+      r.list.forEach(function(x) {
+        html += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 6px;border-bottom:1px solid var(--border);flex-wrap:wrap">';
+        if (isInvoice) {
+          var rr = x.round;
+          html += '<div style="min-width:0"><a href="#" onclick="go(\'soDetail\',{soId:\'' + rr.soId + '\'});return false" style="color:var(--accent);font-weight:600">🧾 ' + sanitize(rr.invoiceNumber) + '</a>' +
+            '<span style="font-size:11px;color:var(--text2)"> · ' + sanitize(rr.soNumber || '-') + ' · ' + fD(x.date) + '</span></div>';
+        } else {
+          var so = x.so;
+          html += '<div style="min-width:0"><a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="color:var(--accent);font-weight:600">📋 ' + sanitize(so.soNumber || '-') + '</a>' +
+            (so.customerPO ? '<span style="font-size:11px;color:var(--text2)"> · PO ' + sanitize(so.customerPO) + '</span>' : '') +
+            '<span style="font-size:11px;color:var(--text2)"> · ' + fD(x.date) + '</span></div>';
+        }
+        html += '<div style="font-weight:600;white-space:nowrap">' + _poTrackerDealerMoney(x.amount) + '</div>';
+        html += '</div>';
+      });
+      html += '</div></td></tr>';
+    }
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function rPOTrackerDealer(el) {
   document.getElementById('pgT').textContent = '🏪 สินค้าตาม Dealer';
   if (S.dealerName) {
@@ -2846,6 +2970,7 @@ function rPOTrackerDealer(el) {
   html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'table' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'table\';render()">📋 ตาราง</button>';
   html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'card' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'card\';render()">🗂️ การ์ด</button>';
   html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'po' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'po\';render()" title="ดูทีละ PO/SO ว่าใบไหนค้างส่ง/แบ่งส่งบางส่วนยังไม่ปิด/ปิดแล้ว">🧾 ตาม PO</button>';
+  html += '<button class="btn bsm ' + (poTrackerDealerViewMode === 'monthly' ? 'bp' : 'bo') + '" onclick="poTrackerDealerViewMode=\'monthly\';render()" title="ดูยอด PO และยอด Invoice แยกตามเดือน">📅 รายเดือน</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerCopySummary()" title="คัดลอกเป็นตาราง (Tab-separated) วางลง Excel ได้เลย">📋 คัดลอกสรุปของค้าง</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerExportXlsx()">📤 Export Excel (Dealer นี้)</button>';
   html += '<button class="btn bsm bo" onclick="poTrackerDealerExportEditTemplateXlsx()" title="Export แบบฟอร์มแก้ไขเฉพาะ Dealer นี้ ที่เอากลับมา Import ได้">📝 Export แบบฟอร์มแก้ไข (Dealer นี้)</button>';
@@ -2854,6 +2979,12 @@ function rPOTrackerDealer(el) {
 
   if (poTrackerDealerViewMode === 'po') {
     html += _poTrackerDealerPOViewHtml(built.dealerSOs, poTrackerDealerSearch, poTrackerDealerPOStatusFlt);
+    el.innerHTML = html;
+    return;
+  }
+
+  if (poTrackerDealerViewMode === 'monthly') {
+    html += _poTrackerDealerMonthlyHtml(poTrackerDealerPageFlt, built.dealerSOs);
     el.innerHTML = html;
     return;
   }
