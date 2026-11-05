@@ -78,7 +78,8 @@ function rUnifiedTasks(el) {
   var stats = getTaskStats(allTasks);
   
   var h = '';
-  
+  h += '<div class="tasks-page-v2">';
+
   h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">';
   h += '<h2 style="font-size:1rem;margin:0">📋 จัดการงาน</h2>';
   h += '<span>';
@@ -86,6 +87,8 @@ function rUnifiedTasks(el) {
   h += '<button class="btn bp" onclick="showTaskM()">➕ เพิ่มงาน</button>';
   h += '</span>';
   h += '</div>';
+
+  h += renderTaskSummaryRing(stats, allTasks);
 
   h += '<div class="fr" style="margin-bottom:8px;gap:6px">';
   h += '<input type="text" id="qaTaskInput" class="fm-input" placeholder="⚡ พิมพ์ชื่องานแล้วกด Enter เพื่อสร้างทันที..." onkeydown="if(event.key===\'Enter\'){quickAddTask();}" style="flex:1">';
@@ -107,14 +110,7 @@ function rUnifiedTasks(el) {
   h += '</div>';
   
   h += renderTaskFilterBar(dealers, categories, stats);
-  
-  h += '<div class="sr" style="margin-bottom:12px">';
-  h += '<div class="sc"><div class="sn c1">' + stats.total + '</div><div class="sl">ทั้งหมด</div></div>';
-  h += '<div class="sc"><div class="sn c2">' + stats.active + '</div><div class="sl">กำลังทำ</div></div>';
-  h += '<div class="sc"><div class="sn c3">' + stats.overdue + '</div><div class="sl">เลยกำหนด</div></div>';
-  h += '<div class="sc"><div class="sn c5">' + stats.completed + '</div><div class="sl">เสร็จแล้ว</div></div>';
-  h += '</div>';
-  
+
   if (tasksView === 'list') {
     h += renderTaskListView(groupedTasks, filteredTasks.length);
   } else if (tasksView === 'kanban') {
@@ -122,8 +118,45 @@ function rUnifiedTasks(el) {
   } else if (tasksView === 'timeline') {
     h += renderTimelineView(filteredTasks);
   }
-  
+
+  h += '</div>';
+
   el.innerHTML = h;
+}
+
+// การ์ดสรุปความคืบหน้าแบบ progress ring ด้านบนหน้า Tasks — แทนที่แถบสถิติ 4 กล่องเดิม (sr/sc) ที่กินที่
+// เยอะและอ่านยากกว่า โชว์ "เสร็จกี่งานจากทั้งหมด", งานที่เหลือวันนี้ และงานถัดไปที่ใกล้ครบกำหนดที่สุด
+function renderTaskSummaryRing(stats, allTasks) {
+  var total = stats.total;
+  var completed = stats.completed;
+  var pct = total ? Math.round(completed / total * 100) : 0;
+  var remaining = total - completed;
+
+  var upcoming = allTasks.filter(function(t) { return t.status === 'active' && t.dueDate; })
+    .sort(function(a, b) { return a.dueDate.localeCompare(b.dueDate); });
+
+  var nextLabel = '';
+  if (upcoming.length) {
+    var nt = upcoming[0];
+    var dl = dTo(nt.dueDate);
+    var title = sanitize(nt.title || '').substr(0, 22);
+    if (dl < 0) nextLabel = 'เลยกำหนด "' + title + '"';
+    else if (dl === 0) nextLabel = 'ถัดไปวันนี้ "' + title + '"';
+    else nextLabel = 'ถัดไป ' + fDShort(nt.dueDate) + ' "' + title + '"';
+  }
+
+  var dash = (pct / 100 * 100.5).toFixed(1) + ' 100.5';
+
+  return '<div class="task-summary-card">' +
+    '<div class="task-summary-ring"><svg width="56" height="56" viewBox="0 0 56 56" style="transform:rotate(-90deg)">' +
+    '<circle cx="28" cy="28" r="24" fill="none" stroke="var(--border)" stroke-width="6"></circle>' +
+    '<circle cx="28" cy="28" r="24" fill="none" stroke="var(--accent)" stroke-width="6" stroke-dasharray="' + dash + '" stroke-linecap="round"></circle>' +
+    '</svg><span>' + pct + '%</span></div>' +
+    '<div class="task-summary-text">' +
+    '<div class="task-summary-main">' + completed + ' / ' + total + ' เสร็จแล้ว</div>' +
+    '<div class="task-summary-sub">เหลืออีก ' + remaining + ' งาน' + (stats.overdue ? ' · เลยกำหนด ' + stats.overdue : '') + (nextLabel ? ' · ' + nextLabel : '') + '</div>' +
+    '</div>' +
+    '</div>';
 }
 
 // ================================================================
@@ -352,6 +385,7 @@ function renderTaskListView(groupedTasks, totalCount) {
   }
 
   if (taskSelectMode) h += _taskSelBarHtml();
+  else h += '<div class="task-add-row" onclick="showTaskM()">➕ เพิ่มงาน</div>';
 
   return h;
 }
@@ -595,23 +629,39 @@ function renderTaskCard(t) {
   var expanded = !!_taskCardExpanded[t.id];
   var expandToggleHtml = '<span class="task-expand-toggle" onclick="toggleTaskCardExpand(\'' + t.id + '\',event)" title="' + (expanded ? 'ย่อการ์ด' : 'ขยายการ์ด') + '">' + (expanded ? '▴' : '▾') + '</span>';
 
+  // แถวรอง (ย่อ) ใต้ชื่องาน — วันครบกำหนด (กดเพื่อเลื่อนวันได้เหมือนเดิม) + หมวดหมู่ รวมบรรทัดเดียว
+  // แทนป้ายวันที่แบบลอย absolute มุมขวาบนของเดิม ให้ดูเรียบและอ่านง่ายขึ้นแบบ "After" ในภาพตัวอย่าง
+  var subtitleBits = [];
+  if (isCompleted) {
+    subtitleBits.push('<span class="task-subtitle-date">เสร็จแล้ว</span>');
+  } else if (t.dueDate) {
+    subtitleBits.push('<span class="task-subtitle-date tier-' + tier + '" onclick="event.stopPropagation();openTaskDateShift(\'' + t.id + '\',event)">' + (dayLabel || fDShort(t.dueDate)) + '</span>');
+  }
+  if (t.category) subtitleBits.push('<span class="task-subtitle-cat">' + sanitize(t.category) + '</span>');
+  var subtitleHtml = subtitleBits.length ? '<div class="task-subtitle">' + subtitleBits.join(' <span class="task-subtitle-dot">·</span> ') + '</div>' : '';
+
+  var dotColor = isCompleted ? '' : (tier === 'red' ? '#ef4444' : (tier === 'amber' ? '#f59e0b' : ''));
+  var priorityDotHtml = dotColor ? '<span class="task-priority-dot" style="background:' + dotColor + '"></span>' : '';
+
   return `
   <div class="${cardClass}" data-task-id="${t.id}">
-    ${dateBadgeHtml}
+    ${expanded ? dateBadgeHtml : ''}
     <div class="task-card-body" onclick="go('taskDetail',{taskId:'${t.id}'})">
       ${dateShiftBarHtml}
-      <div class="task-card-main-row${t.dueDate && _taskDateShiftId !== t.id ? ' has-date-badge' : ''}">
+      <div class="task-card-main-row${expanded && t.dueDate && _taskDateShiftId !== t.id ? ' has-date-badge' : ''}">
         ${taskSelectMode ? `<input type="checkbox" id="taskChk_${t.id}" class="task-complete-chk" ${taskSelected[t.id] ? 'checked' : ''}
           onclick="event.stopPropagation();toggleTaskSelect('${t.id}')" title="เลือกงานนี้">` : `<input type="checkbox" class="task-complete-chk" ${checkedAttr}
           onclick="event.stopPropagation();toggleTaskComplete('${t.id}', this.checked)">`}
         ${expanded ? ringHtml : ''}
         <div style="flex:1;min-width:0">
           <div class="task-title">${sanitize(t.title)}</div>
+          ${!expanded && _taskDateShiftId !== t.id ? subtitleHtml : ''}
           ${expanded ? `<div class="task-card-meta">
             ${t.category ? '<span class="task-category">📂 ' + sanitize(t.category) + '</span>' : ''}
             ${fuHtml}
           </div>` : ''}
         </div>
+        ${!expanded ? priorityDotHtml : ''}
         ${expandToggleHtml}
       </div>
       ${expanded ? stepNameHtml : ''}
