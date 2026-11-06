@@ -841,15 +841,16 @@ function rPOTracker(el) {
     return;
   }
 
-  filtered.forEach(function(r) {
+  filtered.forEach(function(r, idx) {
     var s = r.so;
     var cardClick = poTrackerSelectMode ? "togglePOTrackerSelect('" + s.id + "')" : "go('soDetail',{soId:'" + s.id + "'})";
     html += '<div class="card" style="position:relative;margin-bottom:10px;padding:14px;cursor:pointer;border:1px solid ' + (poTrackerSelected[s.id] ? 'var(--accent)' : 'var(--border)') + '" onclick="' + cardClick + '">';
     if (poTrackerSelectMode) html += '<input type="checkbox" id="poTrkChk_' + s.id + '" ' + (poTrackerSelected[s.id] ? 'checked' : '') + ' onclick="event.stopPropagation();togglePOTrackerSelect(\'' + s.id + '\')" style="position:absolute;top:12px;right:12px;width:18px;height:18px">';
     html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap">';
     html += '<div>';
-    html += '<div style="font-weight:600;font-size:14px">' + sanitize(s.soNumber || '-') + (s.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:12px">· PO ' + sanitize(s.customerPO) + '</span>' : '') + _soClosedBadgeHtml(s) + '</div>';
+    html += '<div style="font-weight:600;font-size:14px"><span style="color:var(--text2);font-weight:400">#' + (idx + 1) + '</span> ' + sanitize(s.soNumber || '-') + (s.customerPO ? ' <span style="font-weight:400;color:var(--text2);font-size:12px">· PO ' + sanitize(s.customerPO) + '</span>' : '') + _soClosedBadgeHtml(s) + '</div>';
     html += '<div style="font-size:12px;color:var(--text2)">🏪 ' + sanitize(s.dealerName || '-') + '</div>';
+    html += '<div style="font-size:11px;color:var(--text2)">📅 สร้าง ' + fD(s.createdAt) + (s.customerPODate ? ' · 📄 PO ลูกค้า ' + fD(s.customerPODate) : '') + '</div>';
     html += _poTrackerTypeBadgeHtml(s);
     html += '<div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">';
     if (s.dealerId) html += '<a href="#" onclick="go(\'dealerDetail\',{dealerId:\'' + s.dealerId + '\'});return false" style="font-size:11px;color:var(--accent)">🏪 Dealer</a>';
@@ -917,10 +918,10 @@ function _poTrackerSelectBarHtml() {
 function _poTrackerMainTableHtml(filtered) {
   var html = '<div style="overflow-x:auto">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:11.5px">';
-  html += '<tr>' + ['SO', 'Dealer', 'สถานะ', 'พร้อมส่ง', 'เตือน', 'มูลค่า'].map(function(h) {
+  html += '<tr>' + ['ลำดับ', 'SO', 'Dealer', 'วันที่สร้าง', 'วันที่ PO ลูกค้า', 'สถานะ', 'พร้อมส่ง', 'เตือน', 'มูลค่า'].map(function(h) {
     return '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + h + '</th>';
   }).join('') + '</tr>';
-  filtered.forEach(function(r) {
+  filtered.forEach(function(r, idx) {
     var s = r.so;
     var warn = [];
     if (r.prpoOverdue) warn.push('🛒 PR/PO เลยกำหนด ' + r.prpoOverdue);
@@ -928,8 +929,11 @@ function _poTrackerMainTableHtml(filtered) {
     if (r.reserveUrgent) warn.push('🔴 จองคลังใกล้หมดเขต ' + r.reserveUrgent);
     if (r.backdatedQty) warn.push('⚠️ รอสต็อกจริง ' + r.backdatedQty);
     html += '<tr style="cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text2)">' + (idx + 1) + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sanitize(s.soNumber || '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + sanitize(s.dealerName || '-') + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + fD(s.createdAt) + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + fD(s.customerPODate) + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (s.status === 'closed' ? _soClosedBadgeHtml(s) : (SO_STATUS[s.status] ? SO_STATUS[s.status].icon + ' ' + SO_STATUS[s.status].label : '-')) + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (r.readiness.total ? r.readiness.readyCount + '/' + r.readiness.total : '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap;color:' + (warn.length ? '#ef4444' : 'var(--text2)') + ';font-weight:' + (warn.length ? '700' : '400') + '">' + (warn.length ? sanitize(warn.join(' · ')) : '-') + '</td>';
