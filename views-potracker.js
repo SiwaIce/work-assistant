@@ -129,6 +129,20 @@ function _poTrackerSOTotal(s) {
   return (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
 }
 
+// ตัวเรียงลำดับกลาง ใช้ร่วมกันทั้งมุมมองการ์ด/ตาราง และแท็บสรุปรายการสินค้าตอนเลือก Dealer —
+// เดิมแท็บสรุปไม่ได้เรียกฟังก์ชันนี้เลย ทำให้เลือก "ใหม่สุด"/"เก่าสุด" ฯลฯ จากตัวกรองด้านบนแล้วไม่มีผลกับแท็บสรุป
+function _poTrackerSortRows(rowsArr) {
+  rowsArr.sort(function(a, b) {
+    if (poTrackerSort === 'oldest') return (a.so.createdAt || '').localeCompare(b.so.createdAt || '');
+    if (poTrackerSort === 'urgent') return (a.so.customerPODate || a.so.createdAt || '').localeCompare(b.so.customerPODate || b.so.createdAt || '');
+    if (poTrackerSort === 'amount_desc') return b.total - a.total;
+    if (poTrackerSort === 'amount_asc') return a.total - b.total;
+    if (poTrackerSort === 'dealer') return (a.so.dealerName || '').localeCompare(b.so.dealerName || '');
+    return (b.so.createdAt || '').localeCompare(a.so.createdAt || ''); // newest (ค่าเริ่มต้น)
+  });
+  return rowsArr;
+}
+
 function _poTrackerBuildRow(s) {
   var readiness = soComputeReadiness(s);
   var credit = creditRequestOpenForSO(s.id);
@@ -799,7 +813,7 @@ function rPOTracker(el) {
     html += '<button class="btn bsm ' + (poTrackerMainTab === 'cards' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'cards\';render()">🗂️ PO/SO Cards</button>';
     html += '</div>';
     if (poTrackerMainTab === 'summary') {
-      var dealerRows = rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt && _poTrackerRowMatchesTopFilters(r); });
+      var dealerRows = _poTrackerSortRows(rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt && _poTrackerRowMatchesTopFilters(r); }));
       html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
       el.innerHTML = html;
       return;
@@ -817,14 +831,7 @@ function rPOTracker(el) {
     return true;
   });
 
-  filtered.sort(function(a, b) {
-    if (poTrackerSort === 'oldest') return (a.so.createdAt || '').localeCompare(b.so.createdAt || '');
-    if (poTrackerSort === 'urgent') return (a.so.customerPODate || a.so.createdAt || '').localeCompare(b.so.customerPODate || b.so.createdAt || '');
-    if (poTrackerSort === 'amount_desc') return b.total - a.total;
-    if (poTrackerSort === 'amount_asc') return a.total - b.total;
-    if (poTrackerSort === 'dealer') return (a.so.dealerName || '').localeCompare(b.so.dealerName || '');
-    return (b.so.createdAt || '').localeCompare(a.so.createdAt || ''); // newest (ค่าเริ่มต้น)
-  });
+  _poTrackerSortRows(filtered);
 
   _poTrackerVisibleIds = filtered.map(function(r) { return r.so.id; });
 
