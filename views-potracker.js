@@ -30,6 +30,9 @@ var POTRACKER_SUMMARY_COLLAPSED_LS_KEY = 'v7_poTracker_summaryCollapsedSO';
 var poTrackerSummaryCollapsedSO = {}; // soId -> พับ/กางอยู่ (เฉพาะโหมดดูตาม SO) ไม่มี key = กางอยู่ (ค่าเริ่มต้น) — จำข้าม session ด้วย localStorage
 try { poTrackerSummaryCollapsedSO = JSON.parse(localStorage.getItem(POTRACKER_SUMMARY_COLLAPSED_LS_KEY) || '{}') || {}; } catch (e) { poTrackerSummaryCollapsedSO = {}; }
 var poTrackerSummaryMinWaitDays = ''; // '' = ไม่กรอง, ไม่งั้นแสดงเฉพาะ SO ที่รอ >= ค่านี้ (วัน) ในแผงสรุปรายการสินค้า
+var poTrackerSummaryExcelExpanded = {}; // key "sku||bucket" -> กางดู SO ย่อยอยู่ไหม (โหมด "ตาราง")
+var poTrackerSummaryExcelSelected = {}; // key "sku||bucket" -> ติ๊กเลือกไว้คัดลอกเฉพาะแถวนี้ (โหมด "ตาราง")
+var poTrackerExcelRowsCache = []; // รายการแถว (สินค้า+สถานะ) ที่กำลังแสดงในโหมด "ตาราง" ขณะ render ล่าสุด — ใช้ตอนกด copy
 var poTrackerSelectMode = false; // โหมดเลือกหลายใบ — ใช้สำหรับปุ่ม "📦 สรุปของพร้อมส่งให้ลูกค้า" (เหมือนหน้า Sales Orders)
 var poTrackerSelected = {};
 var _poTrackerVisibleIds = [];
@@ -362,6 +365,7 @@ function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
   html += 'จัดกลุ่มตาม:';
   html += ' <button class="btn bsm ' + (poTrackerSummaryViewMode === 'product' ? 'bp' : 'bo') + '" onclick="poTrackerSetSummaryViewMode(\'product\')">สินค้า</button>';
   html += ' <button class="btn bsm ' + (poTrackerSummaryViewMode === 'so' ? 'bp' : 'bo') + '" onclick="poTrackerSetSummaryViewMode(\'so\')">SO</button>';
+  html += ' <button class="btn bsm ' + (poTrackerSummaryViewMode === 'excel' ? 'bp' : 'bo') + '" onclick="poTrackerSetSummaryViewMode(\'excel\')" title="ตารางเรียบ ๆ แบบ Excel: สินค้า/จำนวน/สถานะ กางดู SO ย่อยได้ คัดลอกวาง Excel ได้ตรง ๆ">📋 ตาราง</button>';
   html += '</div></div>';
 
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">';
@@ -390,6 +394,8 @@ function _poTrackerCompanySummaryHtml(dealerName, dealerRows) {
 
   html += (poTrackerSummaryViewMode === 'so')
     ? _poTrackerSummaryBySOHtml(soGroups, selectedBuckets)
+    : (poTrackerSummaryViewMode === 'excel')
+    ? _poTrackerSummaryExcelHtml(soGroups, selectedBuckets)
     : _poTrackerSummaryByProductHtml(soGroups, selectedBuckets);
 
   html += '</div>';
@@ -444,6 +450,127 @@ function _poTrackerSummaryByProductHtml(soGroups, selectedBuckets) {
     html += '</div>';
   });
   return html;
+}
+
+// โหมด "จัดกลุ่มตาม: ตาราง" — เวอร์ชัน Excel-like ดูง่ายที่สุด: หัวข้อสินค้า (ชื่อ+SKU) ขึ้นครั้งเดียว แตกเป็นบรรทัดย่อยทีละ
+// "สถานะ" ด้านล่าง (สินค้าตัวเดียวแต่มาจากหลาย SO คนละสถานะ จะไม่ถูกรวมปนกัน แยกคนละบรรทัดสถานะเสมอ) แต่ละบรรทัดสถานะกดกาง
+// ดู SO ที่ประกอบกันได้อีกที ติ๊กเลือกเฉพาะบางแถวแล้วคัดลอกเป็น TSV วางลง Excel ได้ตรง ๆ (ดีไซน์ตาม mockup ที่ผู้ใช้ยืนยันแล้ว)
+function _poTrackerSummaryExcelHtml(soGroups, selectedBuckets) {
+  var clusterMap = {}, clusterOrder = [];
+  soGroups.forEach(function(sg) {
+    var key = sg.sku || sg.name;
+    if (!clusterMap[key]) { clusterMap[key] = { name: sg.name, sku: sg.sku, rowsByBucket: {}, rowOrder: [] }; clusterOrder.push(key); }
+    var c = clusterMap[key];
+    sg.parts.forEach(function(p) {
+      if (!c.rowsByBucket[p.bucket]) { c.rowsByBucket[p.bucket] = { bucket: p.bucket, qty: 0, lines: [] }; c.rowOrder.push(p.bucket); }
+      c.rowsByBucket[p.bucket].qty += p.qty;
+      c.rowsByBucket[p.bucket].lines.push({ so: sg.so, qty: p.qty });
+    });
+  });
+  var clusters = clusterOrder.map(function(k) { return clusterMap[k]; });
+
+  var shown = clusters.filter(function(c) {
+    return c.rowOrder.some(function(bk) { return selectedBuckets.indexOf(bk) !== -1; });
+  });
+  if (!shown.length) return '<div style="font-size:12px;color:var(--text2)">ไม่มีรายการสินค้าในสถานะที่เลือก</div>';
+
+  shown.sort(function(a, b) { return a.name.localeCompare(b.name, 'th'); });
+  var bucketOrder = {};
+  POTRACKER_ITEM_BUCKETS.forEach(function(b, i) { bucketOrder[b.key] = i; });
+  shown.forEach(function(c) {
+    c.rowOrder.sort(function(a, b) { return bucketOrder[a] - bucketOrder[b]; });
+    c.rowOrder.forEach(function(bk) { c.rowsByBucket[bk].lines.sort(function(x, y) { return _poTrackerSoWaitDays(y.so) - _poTrackerSoWaitDays(x.so); }); });
+  });
+
+  poTrackerExcelRowsCache = [];
+  shown.forEach(function(c) {
+    c.rowOrder.forEach(function(bk) {
+      var r = c.rowsByBucket[bk];
+      poTrackerExcelRowsCache.push({ key: (c.sku || c.name) + '||' + bk, name: c.name, sku: c.sku, bucket: bk, qty: r.qty, lines: r.lines });
+    });
+  });
+  var selCount = poTrackerExcelRowsCache.filter(function(r) { return poTrackerSummaryExcelSelected[r.key]; }).length;
+
+  var html = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">';
+  html += '<label style="font-size:11px;color:var(--text2);display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" onchange="poTrackerToggleExcelExpandAll(this.checked)"> กางดูทุกแถว</label>';
+  html += '<div style="display:flex;gap:6px">';
+  html += '<button class="btn bsm bo" ' + (selCount ? '' : 'disabled') + ' onclick="poTrackerCopyExcelTable(true)">📋 Copy ที่เลือก (' + selCount + ')</button>';
+  html += '<button class="btn bsm bp" onclick="poTrackerCopyExcelTable(false)">📋 Copy ตารางนี้ทั้งหมด</button>';
+  html += '</div></div>';
+
+  html += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+  html += '<thead><tr style="text-align:left;color:var(--text2);border-bottom:2px solid var(--border)">' +
+    '<th style="padding:6px 8px;width:22px"></th><th style="padding:6px 8px">สินค้า</th>' +
+    '<th style="padding:6px 8px;text-align:right">จำนวน</th><th style="padding:6px 8px">สถานะ</th></tr></thead><tbody>';
+
+  var totalQty = 0;
+  shown.forEach(function(c) {
+    var cTotal = c.rowOrder.reduce(function(s, bk) { return s + c.rowsByBucket[bk].qty; }, 0);
+    totalQty += cTotal;
+    html += '<tr style="background:var(--bg2)"><td></td><td colspan="3" style="padding:7px 8px;font-weight:700">' + sanitize(c.name) +
+      (c.sku ? ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10.5px">' + sanitize(c.sku) + '</span>' : '') +
+      ' <span style="font-weight:400;color:var(--text3,var(--text2));font-size:10.5px">· รวม ' + cTotal + ' ชิ้น · ' + c.rowOrder.length + ' สถานะ</span></td></tr>';
+
+    c.rowOrder.forEach(function(bk) {
+      var r = c.rowsByBucket[bk];
+      var b = _poTrackerBucketInfo(bk);
+      var key = (c.sku || c.name) + '||' + bk;
+      var op = selectedBuckets.indexOf(bk) !== -1 ? '1' : '.4';
+      var isOpen = !!poTrackerSummaryExcelExpanded[key];
+      var checked = !!poTrackerSummaryExcelSelected[key];
+      html += '<tr data-potrk-bk="' + bk + '" style="opacity:' + op + ';border-bottom:1px solid var(--border-light,var(--border))">';
+      html += '<td style="padding:5px 8px"><input type="checkbox" ' + (checked ? 'checked' : '') + ' onchange="poTrackerToggleExcelSelect(\'' + key + '\')"></td>';
+      html += '<td style="padding:5px 8px 5px 22px;cursor:pointer" onclick="poTrackerToggleExcelExpand(\'' + key + '\')">' +
+        '<span style="display:inline-block;width:12px;color:var(--text3,var(--text2));transform:rotate(' + (isOpen ? '90' : '0') + 'deg)">▶</span> ' +
+        (r.lines.length > 1 ? r.lines.length + ' SO' : 'SO ' + sanitize(r.lines[0].so.soNumber || r.lines[0].so.customerPO || '-')) + '</td>';
+      html += '<td style="padding:5px 8px;text-align:right;font-weight:700">' + r.qty + '</td>';
+      html += '<td style="padding:5px 8px"><span style="font-size:11px;font-weight:600;color:' + b.color + '">' + b.icon + ' ' + b.label + '</span></td>';
+      html += '</tr>';
+
+      if (isOpen) {
+        r.lines.forEach(function(ln) {
+          html += '<tr style="background:var(--bg2)"><td></td><td colspan="3" style="padding:4px 8px 4px 34px">' +
+            _poTrackerSoLinksHtml(ln.so) + ' <span style="color:var(--text3,var(--text2))">×' + ln.qty + '</span> ' + _poTrackerWaitBadgeHtml(ln.so) + '</td></tr>';
+        });
+      }
+    });
+  });
+
+  html += '</tbody><tfoot><tr style="border-top:2px solid var(--border);font-weight:700">' +
+    '<td></td><td style="padding:7px 8px">รวม (' + shown.length + ' สินค้า)</td>' +
+    '<td style="padding:7px 8px;text-align:right">' + totalQty + '</td><td></td></tr></tfoot>';
+  html += '</table></div>';
+  return html;
+}
+
+// กาง/ยุบ SO ย่อยของ 1 แถวสินค้า+สถานะ ในโหมด "ตาราง"
+function poTrackerToggleExcelExpand(key) {
+  poTrackerSummaryExcelExpanded[key] = !poTrackerSummaryExcelExpanded[key];
+  render();
+}
+// ปุ่ม "กางดูทุกแถว" — กาง/ยุบทุกแถวสินค้า+สถานะที่กำลังแสดงอยู่พร้อมกัน
+function poTrackerToggleExcelExpandAll(open) {
+  poTrackerExcelRowsCache.forEach(function(r) { poTrackerSummaryExcelExpanded[r.key] = open; });
+  render();
+}
+// ติ๊ก/ถอดติ๊กแถวสินค้า+สถานะ เพื่อเลือกเฉพาะบางแถวก่อนกด "Copy ที่เลือก"
+function poTrackerToggleExcelSelect(key) {
+  poTrackerSummaryExcelSelected[key] = !poTrackerSummaryExcelSelected[key];
+  render();
+}
+// คัดลอกตารางโหมด "ตาราง" เป็น TSV (onlySelected=true คัดลอกเฉพาะแถวที่ติ๊กไว้) — วางลง Excel/Sheets ได้ตรง ๆ
+function poTrackerCopyExcelTable(onlySelected) {
+  var rows = poTrackerExcelRowsCache.filter(function(r) { return !onlySelected || poTrackerSummaryExcelSelected[r.key]; });
+  if (!rows.length) { toast(onlySelected ? 'ยังไม่ได้เลือกแถว' : 'ไม่มีรายการ'); return; }
+  var clean = function(v) { return String(v == null ? '' : v).replace(/[\t\n\r]+/g, ' ').trim(); };
+  var lines = [['สินค้า', 'SKU', 'จำนวน', 'สถานะ'].join('\t')];
+  rows.forEach(function(r) {
+    var b = _poTrackerBucketInfo(r.bucket);
+    lines.push([clean(r.name), clean(r.sku), r.qty, b.label].join('\t'));
+  });
+  var totalQty = rows.reduce(function(s, r) { return s + r.qty; }, 0);
+  lines.push(['รวม', '', totalQty, ''].join('\t'));
+  copyText(lines.join('\n'), onlySelected ? ('📋 คัดลอก ' + rows.length + ' รายการที่เลือกแล้ว') : '📋 คัดลอกตารางสรุปสินค้าแล้ว (วางลง Excel ได้เลย)');
 }
 
 // โหมด "จัดกลุ่มตาม: SO" — หัวข้อละ 1 SO (เลข SO/PO ลูกค้า/Project ID ถ้ามี + จำนวนรายการแยกตามสถานะ + ยอดรวม) พับ/กางได้ทีละใบหรือทั้งหมด
