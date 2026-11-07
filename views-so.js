@@ -464,6 +464,7 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
   if (!s) return;
   var shipments = _soMigrateLegacyShipment(s).slice();
   var shippedItems = [];
+  var serialsBySku = {};
   roundItems.forEach(function(ri) {
     var qty1021 = Math.max(0, Math.round(Number(ri.qty1021) || 0));
     var qty0001 = Math.max(0, Math.round(Number(ri.qty0001) || 0));
@@ -476,7 +477,13 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
     if (qty0001 > 0 && typeof stockDeliverSOItemFrom0001 === 'function') delivered += stockDeliverSOItemFrom0001(ri.sku, productName, s, qty0001);
     if (qtyShortage > 0 && typeof stockDeliverSOItemBackdated === 'function') delivered += stockDeliverSOItemBackdated(ri.sku, productName, s, qtyShortage);
     // snapshot ราคาต่อหน่วย ณ ตอนบันทึกรอบนี้ไว้ด้วย กันราคาที่ของรอบนี้ถูกตีใหม่ผิดๆ ถ้ามีการแก้ราคาใน SO ทีหลัง (ดู soComputeTotal/_soShipRoundItemsWithPrice)
-    if (delivered > 0) shippedItems.push({ sku: ri.sku, model: productName, qty: delivered, unitPrice: it ? (Number(it.unitPrice) || 0) : 0 });
+    if (delivered > 0) {
+      shippedItems.push({ sku: ri.sku, model: productName, qty: delivered, unitPrice: it ? (Number(it.unitPrice) || 0) : 0 });
+      // Serial ที่กรอกตอนบันทึกส่งมอบ (ไม่บังคับ) — ต่อท้าย it.serials ของ SO เลย กันต้องไปกดใส่ซ้ำที่ Invoice ทีหลัง
+      // ต่อท้ายได้เพราะรอบนี้เป็นรอบล่าสุดเสมอ (push เข้า shipments[] ท้ายสุดด้านล่าง) ตำแหน่งจึงตรงกับ soSkuShipmentTimeline
+      var sns = (ri.serials || []).filter(function(sn) { return sn; });
+      if (sns.length) serialsBySku[ri.sku] = sns;
+    }
   });
   if (!shippedItems.length) { toast('⚠️ ไม่มีรายการที่พร้อมส่งให้บันทึก'); return; }
 
@@ -487,6 +494,17 @@ function soRecordShipmentRound(soId, roundItems, doNumber, invoiceNumber, invoic
   });
 
   var update = { shipments: shipments, doNumber: doNumber || s.doNumber || '', invoiceNumber: invoiceNumber || s.invoiceNumber || '', invoiceDate: invoiceDate || s.invoiceDate || '' };
+  if (Object.keys(serialsBySku).length) {
+    update.items = (s.items || []).map(function(it) {
+      if (!serialsBySku[it.sku]) return it;
+      var clone = JSON.parse(JSON.stringify(it));
+      var existing = (typeof _soItemSerials === 'function') ? _soItemSerials(it) : (it.serials || []);
+      clone.serials = existing.concat(serialsBySku[it.sku]);
+      delete clone.serialsReceived;
+      delete clone.serialsShipped;
+      return clone;
+    });
+  }
   var progress = soComputeShipmentProgress(Object.assign({}, s, update));
   var order = ['po_received', 'so_open', 'partial_shipped', 'shipped', 'invoiced', 'closed'];
   var curIdx = order.indexOf(s.status);
@@ -551,6 +569,13 @@ function showSORecordShipmentModal(soId) {
       body += '<input type="number" class="inp" style="width:80px" id="soShip_qShort_' + idx + '" data-sku="' + sanitize(it.sku) + '" value="0" min="0" max="' + shortfall + '" oninput="_soShipUpdateTotals(\'' + soId + '\')"></div>';
       body += '<div class="hint" style="font-size:10px;margin-top:2px">ใช้เมื่อส่งของให้ลูกค้าไปแล้วจริงแต่ยังไม่ได้เพิ่มสต็อกในระบบ — บันทึกจำนวนนี้แล้วยอด "ขาดอีก" ที่ต้องสั่ง PR/PO จะลดลงตามจำนวนที่กรอก</div>';
     }
+    body += '<div style="margin-top:4px"><label class="lbl" style="font-size:10px">Serial ของรอบนี้ (ถ้ามี ไม่บังคับ — ใส่ตอนนี้จะได้ไม่ต้องไปกดใส่ที่ Invoice อีกที)</label>';
+    body += '<div id="soShipSnWrap_' + idx + '" data-sku="' + sanitize(it.sku) + '" style="min-height:18px;margin-bottom:4px"></div>';
+    body += '<div style="display:flex;gap:4px">';
+    body += '<input class="inp" id="soShipSnInput_' + idx + '" style="flex:1;font-family:monospace;font-size:11px" placeholder="กรอก Serial (วางได้หลายตัว เว้นวรรค/คอมมาคั่น) แล้วกด Enter"';
+    body += ' onkeydown="if(event.key===\'Enter\'){_addSOShipSerial(' + idx + ');event.preventDefault();}">';
+    body += '<button type="button" class="btn bo bsm" onclick="_addSOShipSerial(' + idx + ')">+ เพิ่ม</button>';
+    body += '</div></div>';
     body += '</div>';
     if (qty1021 > 0 || qty0001 > 0) anyReady = true;
   });
@@ -600,6 +625,32 @@ function _soShipClearAll(soId) {
   });
   _soShipUpdateTotals(soId);
 }
+// เพิ่ม Serial ของรายการหนึ่งในรอบส่งมอบนี้ (ใส่ได้เลยตอนบันทึกส่งมอบ ไม่ต้องไปกดใส่ที่ Invoice ทีหลัง) — ใช้ _splitSerialTokens ตัวเดียวกับทุกช่องกรอก Serial อื่นในแอป
+function _addSOShipSerial(idx) {
+  var inp = document.getElementById('soShipSnInput_' + idx);
+  var wrap = document.getElementById('soShipSnWrap_' + idx);
+  if (!inp || !wrap) return;
+  var tokens = _splitSerialTokens(inp.value);
+  if (!tokens.length) return;
+  var existing = _collectSOShipSerials(idx);
+  tokens.forEach(function(val) {
+    if (existing.indexOf(val) !== -1) return;
+    var span = document.createElement('span');
+    span.innerHTML = _soSerialSpan(val);
+    wrap.appendChild(span.firstChild);
+    existing.push(val);
+  });
+  inp.value = '';
+  inp.focus();
+}
+function _collectSOShipSerials(idx) {
+  var wrap = document.getElementById('soShipSnWrap_' + idx);
+  if (!wrap) return [];
+  var out = [];
+  wrap.querySelectorAll('[data-serial]').forEach(function(el) { out.push(el.getAttribute('data-serial')); });
+  return out;
+}
+
 // สรุปจำนวนรวมที่กำลังจะบันทึกรอบนี้ + ปิดปุ่มบันทึกถ้ายังไม่ได้กรอกอะไรเลย กันกดพลาด
 function _soShipUpdateTotals(soId) {
   var bySku = {}, totalQty = 0;
@@ -654,6 +705,16 @@ function _saveSORecordShipment(soId) {
     var sku = input.getAttribute('data-sku');
     bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0, qtyShortage: 0 };
     bySku[sku].qtyShortage = input.value;
+  });
+  document.querySelectorAll('[id^="soShipSnWrap_"]').forEach(function(wrap) {
+    var sku = wrap.getAttribute('data-sku');
+    if (!sku) return;
+    var sns = [];
+    wrap.querySelectorAll('[data-serial]').forEach(function(el) { sns.push(el.getAttribute('data-serial')); });
+    if (sns.length) {
+      bySku[sku] = bySku[sku] || { sku: sku, qty1021: 0, qty0001: 0, qtyShortage: 0 };
+      bySku[sku].serials = sns;
+    }
   });
   var roundItems = Object.keys(bySku).map(function(sku) { return bySku[sku]; });
   var doNumber = (document.getElementById('soShip_do') || {}).value || '';
