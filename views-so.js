@@ -1423,7 +1423,7 @@ function rSODetail(el) {
   html += _soStatusBadge(s.status);
   if (s.pendingSoNumber) html += '<span style="font-size:10px;padding:2px 8px;border-radius:10px;border:1px solid #f59e0b55;background:#f59e0b22;color:#f59e0b;white-space:nowrap">🕗 รอเลข SO จาก Sales Support</span>';
   html += '</div>';
-  if (!_gvHidden('so_dealerInfo')) html += '<div style="font-size:13px;color:var(--text2)">🏪 ' + sanitize(dealer ? dealer.name : (s.dealerName||'-')) + '</div>';
+  if (!_gvHidden('so_dealerInfo')) html += '<div style="font-size:13px;color:var(--text2)">🏪 ' + sanitize(dealer ? dealer.name : (s.dealerName||'-')) + (dealer && dealer.sisCode ? ' <span style="color:var(--text2)">· SIS: </span>' + qcopyHtml(dealer.sisCode) : '') + '</div>';
   html += '</div>';
   html += '<div style="display:flex;gap:6px;flex-wrap:wrap">';
   html += '<button class="btn bo bsm" onclick="showSOEditModal(\'' + s.id + '\')">✏️ แก้ไข</button>';
