@@ -3688,12 +3688,19 @@ function _copySlipBtnHtml(unitId, jobNo) {
   return '<div style="margin:8px 0"><button class="btn btn-ghost btn-sm" onclick="copySlipRentals(\'' + _scEsq(unitId) + '\',\'' + _scEsq(jobNo || '') + '\')">' +
     '📋 Copy เลขเครื่องเช่าทั้งใบ (' + n + ' เครื่อง)</button></div>';
 }
+// เติม "00" หน้าเลขเครื่องเช่าตอนคัดลอก (ของจริงในระบบคลังมี 8 หลัก) — เติมเฉพาะตอนก๊อปไปวาง ไม่แตะเลขที่
+// โชว์บนจอ (การ์ด/ตาราง/ป้ายต่างๆ ยังแสดงเลขดิบตามที่กรอกไว้เหมือนเดิม)
+function _rentalCopyFmt(rentalDbNo) {
+  var n = String(rentalDbNo || '').trim();
+  return n ? ('00' + n) : '';
+}
 // ก๊อปเลขเครื่องเช่าของเครื่องเดียว — คนละอันกับ copySlipRentals/copySlipKeyRentals ด้านบนที่ก๊อปทั้งใบ
 // ทีเดียวหลายเครื่อง บางทีอยากได้แค่เครื่องเดียวจากการ์ด/แถวในตารางที่กำลังดูอยู่ ไม่ต้องเปิดใบก่อน
 function copyOneRental(rentalDbNo) {
   if (!rentalDbNo) return;
+  var text = _rentalCopyFmt(rentalDbNo);
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(rentalDbNo).then(function() { toastMock('📋 คัดลอก ' + rentalDbNo + ' แล้ว'); })
+    navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอก ' + text + ' แล้ว'); })
       .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
   } else {
     alert('เบราว์เซอร์นี้ไม่รองรับการคัดลอกอัตโนมัติ');
@@ -3707,7 +3714,7 @@ function _rentCopyBtn(rentalDbNo) {
 function copySlipRentals(unitId, jobNo) {
   var nums = _slipRentalNumbers(unitId, jobNo);
   if (!nums.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
-  var text = nums.join('\n');
+  var text = nums.map(_rentalCopyFmt).join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + nums.length + ' เครื่อง)'); })
       .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
@@ -3729,7 +3736,7 @@ function _slipKeyRentalNumbers(key) {
 function copySlipKeyRentals(key) {
   var nums = _slipKeyRentalNumbers(key);
   if (!nums.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
-  var text = nums.join('\n');
+  var text = nums.map(_rentalCopyFmt).join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + nums.length + ' เครื่อง)'); })
       .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
@@ -3747,7 +3754,7 @@ function copyBkSlipRentals(key) {
   var uniq = nums.filter(function(v, i) { return nums.indexOf(v) === i; });
   uniq.sort(function(a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
   if (!uniq.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
-  var text = uniq.join('\n');
+  var text = uniq.map(_rentalCopyFmt).join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + uniq.length + ' เครื่อง)'); })
       .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
@@ -3763,7 +3770,7 @@ function copyBkSlipRentals(key) {
 function _returnTsvFromUnits(units) {
   var rows = [['ลำดับ', 'SiS-Part', 'SN', 'ชื่อสินค้า', 'เลขเครื่องเช่า'].join('\t')];
   units.forEach(function(u, i) {
-    rows.push([i + 1, u.sku || '', u.serialNumber || '', (u.model || u.name || '-'), u.rentalDbNo || ''].join('\t'));
+    rows.push([i + 1, u.sku || '', u.serialNumber || '', (u.model || u.name || '-'), _rentalCopyFmt(u.rentalDbNo)].join('\t'));
   });
   return rows.join('\n');
 }
@@ -5097,7 +5104,7 @@ function copyLendPickedRentals() {
   var uniq = nums.filter(function(v, i) { return nums.indexOf(v) === i; });
   uniq.sort(function(a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
   if (!uniq.length) { alert('ไม่มีเลขเครื่องเช่าให้คัดลอก'); return; }
-  var text = uniq.join('\n');
+  var text = uniq.map(_rentalCopyFmt).join('\n');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function() { toastMock('📋 คัดลอกเลขเครื่องเช่าแล้ว (' + uniq.length + ' เครื่อง)'); })
       .catch(function() { alert('คัดลอกไม่สำเร็จ — เบราว์เซอร์อาจไม่อนุญาต'); });
