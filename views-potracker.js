@@ -38,6 +38,7 @@ var poTrackerSelected = {};
 var _poTrackerVisibleIds = [];
 var poTrackerViewMode = 'cards'; // cards | table — สลับมุมมองรายการหลัก (แบบเดียวกับหน้า "สินค้าตาม Dealer")
 var poTrackerReserveUrgentFlt = ''; // '' | 'yes' — กรองเฉพาะ SO ที่มีรายการจองคลัง 1021/8D01 ใกล้/เลยกำหนด (คลิกจากแถบงานด่วน)
+var poTrackerShowFunnel = false; // พับ/กางแผงสรุป "รายการสินค้าตามสถานะ" แบบ funnel (ใหม่ — ค่าเริ่มต้นพับไว้กันหน้ารก)
 
 // 5 สถานะสรุปต่อรายการสินค้า (ใช้ในแผงสรุปตามบริษัท และหน้าแยก Dealer) — เรียงตามลำดับที่ควรแสดง
 var POTRACKER_ITEM_BUCKETS = [
@@ -762,6 +763,106 @@ function _poTrackerUrgentCounts(rows) {
   };
 }
 
+// นับรายการสินค้า (ไม่ใช่ใบ SO) เข้า 6 bucket เดียวกับ POTRACKER_ITEM_BUCKETS ทั่วทั้ง rows ที่ส่งเข้ามา
+// ใช้ร่วมกันทั้งแถบ KPI และแผงสรุปตามสถานะด้านล่าง เพื่อให้ตัวเลขตรงกันเสมอ ไม่คำนวณซ้ำคนละที่คนละแบบ
+function _poTrackerItemBucketCounts(rows) {
+  var counts = {};
+  POTRACKER_ITEM_BUCKETS.forEach(function(b) { counts[b.key] = 0; });
+  var pendingAmount = 0, totalItems = 0;
+  rows.forEach(function(r) {
+    var hasPending = false;
+    (r.so.items || []).forEach(function(it) {
+      var bk = _poTrackerItemBucket(it, r.so);
+      counts[bk] = (counts[bk] || 0) + 1;
+      totalItems++;
+      if (bk !== 'shipped') hasPending = true;
+    });
+    if (hasPending) pendingAmount += r.total;
+  });
+  return { counts: counts, totalItems: totalItems, pendingAmount: pendingAmount };
+}
+
+// แถบ KPI สรุปภาพรวม — ใหม่ (เพิ่มต่อจากแถวตัวเลข "ทั้งหมด/เสร็จแล้ว/ยังไม่เสร็จ" เดิม ไม่ได้แทนที่)
+// ใช้ตัวเลขชุดเดียวกับที่หน้านี้คำนวณอยู่แล้ว (rows, _poTrackerItemBucketCounts) ไม่ได้ดึงข้อมูลเพิ่ม
+function _poTrackerKpiRowHtml(rows) {
+  var agg = _poTrackerItemBucketCounts(rows);
+  var tiles = [
+    ['SO ทั้งหมด', rows.length, 'var(--text)'],
+    ['รายการ "ยังไม่ส่ง"', agg.counts.not_sent || 0, '#94a3b8'],
+    ['รายการ "รอของเข้า"', agg.counts.pending_restock || 0, '#d97706'],
+    ['รายการ "พร้อมส่ง"', agg.counts.ready || 0, '#3b82f6'],
+    ['มูลค่ารอส่งรวม', '฿' + nmI(agg.pendingAmount), '#8b5cf6']
+  ];
+  var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:10px">';
+  tiles.forEach(function(t) {
+    html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:9px 11px">' +
+      '<div style="font-size:10px;color:var(--text2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px">' + t[0] + '</div>' +
+      '<div style="font-size:17px;font-weight:700;color:' + t[2] + '">' + t[1] + '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// แผงสรุป "รายการสินค้า" ตามสถานะ แบบ funnel — ใหม่ พับ/กางได้ (poTrackerShowFunnel, ค่าเริ่มต้นพับไว้กันหน้ารก)
+// นับหน่วยเป็นบรรทัดสินค้า (เหมือนชิปในแผงสรุปรายการสินค้าของ Dealer) ไม่ใช่นับเป็นใบ SO เพราะ 1 ใบมีได้หลายสถานะพร้อมกัน
+function _poTrackerFunnelPanelHtml(rows) {
+  var agg = _poTrackerItemBucketCounts(rows);
+  var html = '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--bg2)">';
+  html += '<div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="poTrackerShowFunnel=!poTrackerShowFunnel;render()">';
+  html += '<strong style="font-size:12.5px">📊 ภาพรวมรายการสินค้าตามสถานะ</strong>';
+  html += '<span style="margin-left:auto;font-size:11px;color:var(--text2)">' + (poTrackerShowFunnel ? '▲ ซ่อน' : '▼ แสดง (' + agg.totalItems + ' รายการ)') + '</span>';
+  html += '</div>';
+  if (poTrackerShowFunnel) {
+    var max = 1;
+    POTRACKER_ITEM_BUCKETS.forEach(function(b) { if ((agg.counts[b.key] || 0) > max) max = agg.counts[b.key]; });
+    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px">';
+    POTRACKER_ITEM_BUCKETS.forEach(function(b) {
+      var n = agg.counts[b.key] || 0;
+      html += '<div style="display:grid;grid-template-columns:90px 1fr 34px;gap:8px;align-items:center;font-size:11px">' +
+        '<span style="color:var(--text2);font-weight:600;white-space:nowrap">' + b.icon + ' ' + b.label + '</span>' +
+        '<div style="height:12px;background:var(--bg3,var(--bg));border-radius:4px;overflow:hidden"><div style="height:100%;width:' + (n / max * 100).toFixed(0) + '%;background:' + b.color + '"></div></div>' +
+        '<span style="text-align:right;font-weight:700">' + n + '</span></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// Quick View — ใหม่ โชว์รายการสินค้า (ชื่อ/จำนวน/สถานะ) ของ SO ใบเดียวแบบเร็ว ไม่ต้องเข้าไปหน้า SO เต็ม
+// ใช้ modal กลางของแอป (openM/closeM ใน app.js) ไม่ได้สร้างระบบ popup ใหม่ ปุ่ม "เปิดหน้า SO เต็ม" ยังอยู่ด้านล่างเสมอ
+function _poTrackerQuickViewItemsHtml(so) {
+  var items = so.items || [];
+  if (!items.length) return '<div style="padding:10px 4px;color:var(--text2);font-size:12px">ไม่มีรายการสินค้า</div>';
+  var html = '<div style="display:flex;gap:8px;padding:0 4px 6px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.02em">' +
+    '<span style="flex:1 1 auto">สินค้า</span><span style="flex:0 0 36px;text-align:right">จำนวน</span><span style="flex:0 0 102px;text-align:right">สถานะ</span></div>';
+  items.forEach(function(it) {
+    var b = _poTrackerBucketInfo(_poTrackerItemBucket(it, so));
+    var name = it.model || it.sku || '-';
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid var(--border-light,var(--border))">' +
+      '<span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px" title="' + sanitize(name) + '">' + sanitize(name) + '</span>' +
+      '<span style="flex:0 0 36px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">' + (Number(it.qty) || 0) + '</span>' +
+      '<span style="flex:0 0 102px;display:flex;justify-content:flex-end;min-width:0">' +
+      '<span style="font-size:11px;font-weight:700;color:' + b.color + ';background:' + b.color + '1f;border-radius:6px;padding:2px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%" title="' + b.label + '">' + b.icon + ' ' + b.label + '</span></span></div>';
+  });
+  return html;
+}
+function _poTrackerQuickViewHtml(so) {
+  var html = '<div style="font-size:12px;color:var(--text2);margin-bottom:8px">' + sanitize(so.dealerName || '-') + (so.customerPO ? ' · PO ' + sanitize(so.customerPO) : '') + '</div>';
+  html += _poTrackerQuickViewItemsHtml(so);
+  html += '<div style="margin-top:12px;display:flex;gap:8px">';
+  html += '<button class="btn bo" style="flex:1;justify-content:center" onclick="closeM();copySOSummaryForSalesSupport(\'' + so.id + '\')">📋 Copy สรุป</button>';
+  html += '<button class="btn bp" style="flex:1;justify-content:center" onclick="closeM();go(\'soDetail\',{soId:\'' + so.id + '\'})">เปิดหน้า SO เต็ม →</button>';
+  html += '</div>';
+  return html;
+}
+function poTrackerShowQuickView(soId, ev) {
+  if (ev) ev.stopPropagation();
+  var so = ST.getOne('salesOrders', soId);
+  if (!so) return;
+  openM('👁️ ' + sanitize(so.soNumber || so.customerPO || soId), _poTrackerQuickViewHtml(so));
+}
+
 // toggle filter จากแถบงานด่วน — กดซ้ำอันที่ active อยู่แล้วเพื่อล้างกลับ (เหมือนปุ่ม filter ทั่วไปในแอป)
 function poTrackerToggleUrgentFlt(which) {
   if (which === 'prpo') poTrackerPrpoFlt = (poTrackerPrpoFlt === 'overdue') ? '' : 'overdue';
@@ -815,6 +916,10 @@ function rPOTracker(el) {
   html += '<div><div style="font-size:22px;font-weight:600;color:#22c55e">' + doneCount + '</div><div style="font-size:11px;color:var(--text2)">เสร็จแล้ว</div></div>';
   html += '<div><div style="font-size:22px;font-weight:600;color:#f59e0b">' + notDoneCount + '</div><div style="font-size:11px;color:var(--text2)">ยังไม่เสร็จ</div></div>';
   html += '</div>';
+
+  // แถบ KPI + แผงสรุปตามสถานะ — ใหม่ ต่อจากตัวเลขสรุปเดิมด้านบน ไม่ได้แทนที่อะไร
+  html += _poTrackerKpiRowHtml(rows);
+  html += _poTrackerFunnelPanelHtml(rows);
 
   // แถบสรุป "งานด่วน" — เดิมต้องไล่อ่าน badge ทีละการ์ดถึงจะรู้ว่ามีกี่ใบที่ร้อน ตอนนี้เห็นตัวเลขรวมทันที
   // กดแล้ว toggle filter ตรงไปที่กลุ่มนั้นเลย (ไม่โชว์แถบนี้เลยถ้าไม่มีงานด่วนอะไรค้าง)
@@ -1022,6 +1127,7 @@ function rPOTracker(el) {
     html += '<div onclick="event.stopPropagation()" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">';
     html += '<button class="btn bsm bo" onclick="copySOSummaryForSalesSupport(\'' + s.id + '\')">📋 Copy สรุป</button>';
     html += '<button class="btn bsm bo" onclick="poTrackerToggleItems(\'' + s.id + '\',event)">' + (poTrackerExpandedItems[s.id] ? '▲ ซ่อนรายการสินค้า' : '▼ รายการสินค้า') + '</button>';
+    html += '<button class="btn bsm bo" onclick="poTrackerShowQuickView(\'' + s.id + '\',event)" title="ดูสินค้า/จำนวน/สถานะแบบเร็ว ไม่ต้องเข้าไปหน้าเต็ม">👁️ Quick View</button>';
     html += '</div>';
     if (poTrackerExpandedItems[s.id]) html += '<div onclick="event.stopPropagation()" style="margin-top:8px">' + _poTrackerCardSummaryHtml(s) + '</div>';
 
@@ -1049,12 +1155,30 @@ function _poTrackerSelectBarHtml() {
 }
 
 // มุมมองตาราง — ทางเลือกแทนการ์ด เวลาต้องไล่ดู PO/SO เยอะๆ ทีเดียว (แบบเดียวกับหน้า "สินค้าตาม Dealer")
+// หัวตารางที่เรียงลำดับได้ด้วยการคลิก — ใหม่ ใช้ state poTrackerSort เดิมตัวเดียวกับ select เรียงลำดับในแถบ
+// ตัวกรอง (ไม่ได้สร้างระบบเรียงใหม่) แค่เพิ่มทางลัดคลิกหัวคอลัมน์แทนการเปิด dropdown ทุกครั้ง
+function _poTrackerSortableTh(label, sortKey, oppositeKey) {
+  var active = poTrackerSort === sortKey || (oppositeKey && poTrackerSort === oppositeKey);
+  var arrow = poTrackerSort === sortKey ? ' ▼' : (poTrackerSort === oppositeKey ? ' ▲' : '');
+  var nextKey = (poTrackerSort === sortKey && oppositeKey) ? oppositeKey : sortKey;
+  return '<th style="text-align:left;color:' + (active ? 'var(--accent)' : 'var(--text2)') + ';font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none" ' +
+    'title="คลิกเพื่อเรียงลำดับ" onclick="poTrackerSort=\'' + nextKey + '\';render()">' + sanitize(label) + arrow + '</th>';
+}
 function _poTrackerMainTableHtml(filtered) {
   var html = '<div style="overflow-x:auto">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:11.5px">';
-  html += '<tr>' + ['ลำดับ', 'SO', 'Dealer', 'วันที่สร้าง', 'วันที่ PO ลูกค้า', 'สถานะ', 'พร้อมส่ง', 'เตือน', 'มูลค่า'].map(function(h) {
-    return '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + h + '</th>';
-  }).join('') + '</tr>';
+  html += '<tr>';
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">ลำดับ</th>';
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">SO</th>';
+  html += _poTrackerSortableTh('Dealer', 'dealer');
+  html += _poTrackerSortableTh('วันที่สร้าง', 'newest', 'oldest');
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">วันที่ PO ลูกค้า</th>';
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">สถานะ</th>';
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">พร้อมส่ง</th>';
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">เตือน</th>';
+  html += _poTrackerSortableTh('มูลค่า', 'amount_desc', 'amount_asc');
+  html += '<th style="text-align:left;color:var(--text2);font-weight:600;padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">ดู</th>';
+  html += '</tr>';
   filtered.forEach(function(r, idx) {
     var s = r.so;
     var warn = [];
@@ -1072,6 +1196,7 @@ function _poTrackerMainTableHtml(filtered) {
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">' + (r.readiness.total ? r.readiness.readyCount + '/' + r.readiness.total : '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap;color:' + (warn.length ? '#ef4444' : 'var(--text2)') + ';font-weight:' + (warn.length ? '700' : '400') + '">' + (warn.length ? sanitize(warn.join(' · ')) : '-') + '</td>';
     html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap">฿' + nmI(r.total) + '</td>';
+    html += '<td style="padding:7px 8px;border-bottom:1px solid var(--border);white-space:nowrap" onclick="event.stopPropagation()"><button class="btn bsm bo" onclick="poTrackerShowQuickView(\'' + s.id + '\',event)" title="Quick View">👁️</button></td>';
     html += '</tr>';
   });
   html += '</table></div>';
