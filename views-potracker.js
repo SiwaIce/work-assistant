@@ -960,10 +960,15 @@ function rPOTracker(el) {
     html += '<option value="' + o[0] + '"' + (poTrackerSort === o[0] ? ' selected' : '') + (o[2] ? ' title="' + sanitize(o[2]) + '"' : '') + '>' + o[1] + '</option>';
   });
   html += '</select>';
-  html += '<div class="viewtoggle" style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
-  html += '<button class="btn bsm ' + (poTrackerViewMode === 'cards' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'cards\';render()">🗂️ การ์ด</button>';
-  html += '<button class="btn bsm ' + (poTrackerViewMode === 'table' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'table\';render()">📋 ตาราง</button>';
-  html += '</div>';
+  // ซ่อนตัวสลับนี้ตอนกำลังดูแท็บ "สรุปรายการสินค้า" ของ Dealer เดียว (เลือก Dealer แล้ว mainTab เป็น summary)
+  // เพราะแท็บนั้นมีปุ่ม การ์ด/ตาราง ของตัวเองอยู่ในแผงแล้ว (poTrackerSummaryViewMode) — ตัวสลับนี้ไม่มีผลกับแท็บนั้นเลย
+  // เดิมโชว์ค้างไว้ตลอด กดแล้วไม่เห็นอะไรเปลี่ยนเพราะดันไปเปลี่ยน state คนละตัวกับที่แท็บ summary ใช้แสดงผล
+  if (!(poTrackerDealerFlt && poTrackerMainTab === 'summary')) {
+    html += '<div class="viewtoggle" style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
+    html += '<button class="btn bsm ' + (poTrackerViewMode === 'cards' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'cards\';render()">🗂️ การ์ด</button>';
+    html += '<button class="btn bsm ' + (poTrackerViewMode === 'table' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'table\';render()">📋 ตาราง</button>';
+    html += '</div>';
+  }
   html += '<button class="btn bo" style="margin-left:auto" onclick="poTrackerMoreFlt=!poTrackerMoreFlt;render()">' + (poTrackerMoreFlt ? '▲ ซ่อนตัวกรอง' : '▼ ตัวกรองเพิ่มเติม') + '</button>';
   html += '</div>';
 
