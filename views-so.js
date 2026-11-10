@@ -2264,12 +2264,17 @@ function _soRunrateSearchCore(inputId, menuId, idInputId, dealerId, pickFnName) 
     var cur = ST.getOne('runrate', idEl.value);
     if (!cur || pidNorm(cur.projectId).toLowerCase() !== typed.toLowerCase()) idEl.value = '';
   }
-  if (!typed) { menu.innerHTML = ''; return; }
+  // ยังไม่ได้เลือก Dealer และยังไม่ได้พิมพ์อะไร — ยังไม่มีขอบเขตให้กรอง ไม่โชว์อะไรดีกว่าโชว์ถังของ Dealer อื่นมั่วๆ
+  if (!typed && !dealerId) { menu.innerHTML = ''; return; }
+  // โฟกัสเข้าช่องแบบยังไม่พิมพ์ (typed ว่าง) — โชว์ถัง Run rate ทั้งหมดของ Dealer นี้ไปเลย เหมือนช่อง Project ID
+  // ของโครงการ (ดู _soProjectIdSearchCore) แทนที่จะไม่โชว์อะไรจนกว่าจะพิมพ์ ผู้ใช้จะได้เห็นว่ากรองตาม Dealer จริง
   var matches = ST.getAll('runrate').filter(function(r) {
-    return (!dealerId || r.dealerId === dealerId) && (r.projectId || '').toLowerCase().indexOf(typed.toLowerCase()) !== -1;
-  }).slice(0, 8);
+    return (!dealerId || r.dealerId === dealerId) && (!typed || (r.projectId || '').toLowerCase().indexOf(typed.toLowerCase()) !== -1);
+  }).sort(function(a, b) { return (a.projectId || '') > (b.projectId || '') ? 1 : -1; }).slice(0, 8);
   if (!matches.length) {
-    menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">ไม่พบถังเดิมที่ตรงกับเลขนี้ — เลขใหม่จะสร้างถัง Run rate ให้อัตโนมัติตอนบันทึก</div></div>';
+    menu.innerHTML = '<div class="ac-menu"><div class="ac-empty">' + (typed
+      ? 'ไม่พบถังเดิมที่ตรงกับเลขนี้ — เลขใหม่จะสร้างถัง Run rate ให้อัตโนมัติตอนบันทึก'
+      : 'Dealer นี้ยังไม่มีถัง Run rate — พิมพ์เลขใหม่เพื่อสร้างถังแรกให้ตอนบันทึก') + '</div></div>';
     return;
   }
   menu.innerHTML = '<div class="ac-menu">' + matches.map(function(r) {
