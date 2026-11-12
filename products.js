@@ -1180,10 +1180,16 @@ function _prodParseSingleSheet(worksheet) {
 
   var existingProducts = getAllProducts();
   var existingMap = {};
+  // สินค้าอุปกรณ์เสริมทั่วไป (สายชาร์จ/ใบพัด ฯลฯ) มักไม่มี SKU/EAN และหลายตัวตั้งชื่อซ้ำกันได้ — ถ้าจับคู่ด้วย
+  // ชื่ออย่างเดียวแบบเดิม (ตัวหลังทับตัวก่อนใน map) ทุกแถวที่ชื่อซ้ำกันจะไปจับคู่กับสินค้าตัวเดียวกันหมด ทำให้
+  // diff เทียบราคาผิดตัว บั๊กที่ทำให้ "แก้ราคาแล้ว import กลับมาเห็นว่าไม่เปลี่ยน" เพราะดันไปเทียบกับสินค้า
+  // อีกตัวที่ชื่อเหมือนกันแต่ราคาคนละราคา — ชื่อที่ซ้ำกันมากกว่า 1 ตัวจึงไม่ใช้จับคู่อัตโนมัติด้วยชื่อเลย
+  var nameCounts = {};
+  existingProducts.forEach(function(p) { if (p && p.name) nameCounts[p.name] = (nameCounts[p.name] || 0) + 1; });
   existingProducts.forEach(function(p) {
     if (p && p.sku) existingMap['sku_' + p.sku] = p;
     if (p && p.ean) existingMap['ean_' + p.ean] = p;
-    if (p && p.name) existingMap['name_' + p.name] = p;
+    if (p && p.name && nameCounts[p.name] === 1) existingMap['name_' + p.name] = p;
   });
 
   var out = [];
@@ -1204,9 +1210,11 @@ function _prodParseSingleSheet(worksheet) {
     if (priceB === 0 && rrpExVat > 0) priceB = rrpExVat;
 
     var existing = null;
+    var ambiguous = false;
     if (sku && existingMap['sku_' + sku]) existing = existingMap['sku_' + sku];
     else if (ean && existingMap['ean_' + ean]) existing = existingMap['ean_' + ean];
     else if (existingMap['name_' + name]) existing = existingMap['name_' + name];
+    else if (!sku && !ean && nameCounts[name] > 1) ambiguous = true; // ชื่อซ้ำ ไม่มี SKU/EAN ให้แยก — จับคู่ไม่ได้แน่ชัด
 
     var category = 'other';
     var nameLower = name.toLowerCase();
@@ -1239,9 +1247,11 @@ function _prodParseSingleSheet(worksheet) {
         if (changed) diff.push({ label: f.l, old: f.isNum ? fmtMoney(f.ov) : f.ov, newVal: f.isNum ? fmtMoney(f.nv) : f.nv });
       });
       state = diff.length ? 'changed' : 'same';
+    } else if (ambiguous) {
+      state = 'ambiguous';
     }
 
-    out.push({ parsed: parsed, existing: existing, state: state, diff: diff });
+    out.push({ parsed: parsed, existing: existing, state: state, diff: diff, ambiguous: ambiguous });
   }
   return out;
 }
@@ -1367,10 +1377,14 @@ function _prodParseDemoSheet(worksheet) {
 
   var existingProducts = getAllProducts();
   var existingMap = {};
+  // เหตุผลเดียวกับ _prodParseSingleSheet — ชื่อซ้ำกันได้ (ไม่มี SKU/EAN) ห้ามจับคู่ด้วยชื่ออย่างเดียวถ้าซ้ำ
+  // ไม่งั้น diff ราคาจะไปเทียบกับสินค้าคนละตัว ทำให้ดูเหมือน "ราคาไม่เปลี่ยน" ทั้งที่จับคู่ผิดตัว
+  var nameCounts = {};
+  existingProducts.forEach(function(p) { if (p && p.name) nameCounts[p.name] = (nameCounts[p.name] || 0) + 1; });
   existingProducts.forEach(function(p) {
     if (p && p.sku) existingMap['sku_' + p.sku] = p;
     if (p && p.ean) existingMap['ean_' + p.ean] = p;
-    if (p && p.name) existingMap['name_' + p.name] = p;
+    if (p && p.name && nameCounts[p.name] === 1) existingMap['name_' + p.name] = p;
   });
 
   var out = [];
@@ -1384,9 +1398,11 @@ function _prodParseDemoSheet(worksheet) {
     var price = parseFloat(row[colIndex.price]) || 0;
 
     var existing = null;
+    var ambiguous = false;
     if (sku && existingMap['sku_' + sku]) existing = existingMap['sku_' + sku];
     else if (ean && existingMap['ean_' + ean]) existing = existingMap['ean_' + ean];
     else if (existingMap['name_' + name]) existing = existingMap['name_' + name];
+    else if (!sku && !ean && nameCounts[name] > 1) ambiguous = true;
 
     var category = (existing && isDemoProduct(existing)) ? existing.category : 'demo';
     var parsed = { sku: sku, ean: ean, name: name, rrpInVat: 0, rrpExVat: 0, priceS: 0, priceA: 0, priceB: price, priceOther: 0, category: category, cost: null, shortName: null, isDemo: true };
@@ -1398,9 +1414,11 @@ function _prodParseDemoSheet(worksheet) {
       if ((existing.name || '') !== name) diff.push({ label: 'ชื่อสินค้า', old: existing.name || '', newVal: name });
       if (Math.abs(oldPrice - price) > 0.001) diff.push({ label: 'ราคา (Demo)', old: fmtMoney(oldPrice), newVal: fmtMoney(price) });
       state = diff.length ? 'changed' : 'same';
+    } else if (ambiguous) {
+      state = 'ambiguous';
     }
 
-    out.push({ parsed: parsed, existing: existing, state: state, diff: diff });
+    out.push({ parsed: parsed, existing: existing, state: state, diff: diff, ambiguous: ambiguous });
   }
   return out;
 }
@@ -1421,7 +1439,7 @@ var _PROD_IMPORT_DETAIL_FIELDS = [
 
 function showProductXlsxPreview(meta) {
   _prodImportPending = { meta: meta };
-  var counts = { new: 0, changed: 0, same: 0 };
+  var counts = { new: 0, changed: 0, same: 0, ambiguous: 0 };
   meta.forEach(function(m) { counts[m.state]++; });
 
   var h = '<div>';
@@ -1430,6 +1448,7 @@ function showProductXlsxPreview(meta) {
   if (counts['new']) h += '<span style="padding:5px 12px;border-radius:6px;background:#22c55e18;color:#22c55e;font-size:12px">➕ ใหม่ ' + counts['new'] + '</span>';
   if (counts.changed) h += '<span style="padding:5px 12px;border-radius:6px;background:#f59e0b18;color:#f59e0b;font-size:12px">✏️ เปลี่ยน ' + counts.changed + '</span>';
   if (counts.same) h += '<span style="padding:5px 12px;border-radius:6px;background:var(--bg2);color:var(--text2);font-size:12px">⏭ เดิม ' + counts.same + '</span>';
+  if (counts.ambiguous) h += '<span style="padding:5px 12px;border-radius:6px;background:#ef444418;color:#ef4444;font-size:12px" title="ชื่อซ้ำกับสินค้าอื่น และไม่มี SKU/EAN ให้แยก ระบบไม่กล้าเดาว่าเป็นตัวไหน">⚠️ ชื่อซ้ำ/จับคู่ไม่ได้ ' + counts.ambiguous + '</span>';
   h += '</div>';
 
   if (counts.changed || counts['new']) {
@@ -1454,6 +1473,7 @@ function showProductXlsxPreview(meta) {
     var badge, defAct;
     if (m.state === 'new')          { badge = '<span style="color:#22c55e;font-size:11px;font-weight:700">➕ ใหม่</span>';       defAct = 'apply'; }
     else if (m.state === 'changed') { badge = '<span style="color:#f59e0b;font-size:11px;font-weight:700">✏️ เปลี่ยน</span>';  defAct = 'apply'; }
+    else if (m.state === 'ambiguous') { badge = '<span style="color:#ef4444;font-size:11px;font-weight:700" title="มีสินค้าอื่นชื่อเดียวกัน และแถวนี้ไม่มี SKU/EAN ให้แยก — เติม SKU/EAN ในไฟล์แล้วนำเข้าใหม่ ไม่งั้นข้ามแถวนี้ไปก่อน">⚠️ ชื่อซ้ำ</span>'; defAct = 'skip'; }
     else                            { badge = '<span style="color:var(--text2);font-size:11px;font-weight:700">⏭ เดิม</span>'; defAct = 'skip'; }
     var diffBtn = m.state === 'changed'
       ? ' <button onclick="_prodToggleDiff(' + i + ')" id="prodDiffBtn_' + i + '" style="font-size:10px;padding:1px 5px;border:1px solid var(--border);border-radius:4px;background:var(--bg);cursor:pointer;color:var(--text2)" title="ดูการเปลี่ยนแปลง">🔍 ' + m.diff.length + '</button>'
