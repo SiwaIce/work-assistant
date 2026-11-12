@@ -410,11 +410,64 @@ function addProduct(productData) {
   return newProduct;
 }
 
+// ================================================================
+// PRICE HISTORY — เก็บราคาเก่าทุกครั้งที่ราคาจริงๆเปลี่ยน (ดูแผน plans/price-history-plan-2026-11-12.md)
+// เก็บเป็น snapshot เต็มชุด (ไม่ใช่ diff ทีละฟิลด์) ใหม่สุดอยู่หน้าสุด (unshift) จำกัด 30 รายการ/สินค้า
+// กันเอกสาร Firestore บวมเกินไป — ถ้าไม่มีอะไรเปลี่ยนจริง (ตัวเลขเท่าเดิม) จะไม่สร้าง entry ขยะ
+// ================================================================
+var PRICE_HISTORY_MAX = 30;
+var PRICE_HISTORY_FIELDS = ['rrpInVat', 'rrpExVat', 'S', 'A', 'B', 'Other', 'cost'];
+
+function _priceHistoryCurrentVals(p) {
+  var tp = p.typePrices || {};
+  return {
+    rrpInVat: Number(p.rrpInVat) || 0,
+    rrpExVat: Number(p.rrpExVat) || 0,
+    S: Number(tp.S) || 0,
+    A: Number(tp.A) || 0,
+    B: Number(tp.B) || 0,
+    Other: Number(tp.Other) || 0,
+    cost: Number(p.cost) || 0
+  };
+}
+
+// newVals: ค่าที่ "จะเป็น" หลัง apply การแก้ไขนี้ (เฉพาะฟิลด์ที่เกี่ยวข้อง ฟิลด์ที่ไม่ได้แก้จะเท่าค่าปัจจุบันอยู่แล้ว)
+// เรียกก่อน overwrite เสมอ — ถ้าเรียกหลัง overwrite ค่าเก่าจะหายไปแล้วเทียบไม่ได้
+function _snapshotPriceHistoryIfChanged(p, newVals) {
+  var old = _priceHistoryCurrentVals(p);
+  var changed = false;
+  for (var i = 0; i < PRICE_HISTORY_FIELDS.length; i++) {
+    var f = PRICE_HISTORY_FIELDS[i];
+    if (newVals[f] === undefined) continue;
+    if (Math.abs((Number(newVals[f]) || 0) - old[f]) > 0.001) { changed = true; break; }
+  }
+  if (!changed) return;
+  old.at = new Date().toISOString();
+  old.by = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER && (CURRENT_USER.displayName || CURRENT_USER.email)) || null;
+  if (!Array.isArray(p.priceHistory)) p.priceHistory = [];
+  p.priceHistory.unshift(old);
+  if (p.priceHistory.length > PRICE_HISTORY_MAX) p.priceHistory.length = PRICE_HISTORY_MAX;
+}
+
 function updateProduct(productId, updates) {
   var data = getProductsData();
   if (!data.models) return false;
   for (var i = 0; i < data.models.length; i++) {
     if (data.models[i].id === productId) {
+      // ต้องสแนปช็อตราคาเก่าไว้ "ก่อน" overwrite ด้านล่าง ไม่งั้นค่าเก่าจะหายไปแล้วเทียบไม่ได้
+      if (updates.hasOwnProperty('rrpInVat') || updates.hasOwnProperty('rrpExVat') || updates.hasOwnProperty('cost') ||
+          (updates.typePrices && typeof updates.typePrices === 'object')) {
+        var newTP = updates.typePrices || {};
+        _snapshotPriceHistoryIfChanged(data.models[i], {
+          rrpInVat: updates.rrpInVat,
+          rrpExVat: updates.rrpExVat,
+          S: newTP.S,
+          A: newTP.A,
+          B: newTP.B,
+          Other: newTP.Other,
+          cost: updates.cost
+        });
+      }
       for (var key in updates) {
         if (!updates.hasOwnProperty(key)) continue;
         if (key === 'typePrices' && typeof updates[key] === 'object') {
@@ -606,7 +659,7 @@ function showEditProductModal(productId) {
   html += '<div class="fr"><div class="fg"><label>SKU (SiS part)</label><input type="text" id="edit_sku" class="fm-input" value="' + sanitize(p.sku || '') + '"></div>';
   html += '<div class="fg"><label>EAN</label><input type="text" id="edit_ean" class="fm-input" value="' + sanitize(p.ean || '') + '"></div></div>';
   
-  html += '<div class="form-section">💰 ราคา</div>';
+  html += '<div class="form-section">💰 ราคา' + ((p.priceHistory || []).length ? ' <button style="font-size:11px;padding:1px 8px;border-radius:99px;border:none;background:var(--accent-light);color:var(--accent);cursor:pointer" onclick="showPriceHistoryM(\'' + p.id + '\')">🕓 ดูประวัติ (' + p.priceHistory.length + ')</button>' : '') + '</div>';
   html += '<div class="fr"><div class="fg"><label>RRP in Vat (฿)</label><input type="text" inputmode="decimal" id="edit_rrp_in" class="fm-input js-money" value="' + nmI(p.rrpInVat || 0) + '"></div>';
   html += '<div class="fg"><label>RRP Ex Vat (฿)</label><input type="text" inputmode="decimal" id="edit_rrp_ex" class="fm-input js-money" value="' + nmI(p.rrpExVat || 0) + '"></div></div>';
   html += '<div class="fr4">';
@@ -2513,6 +2566,50 @@ function loadMoreProductsCatalog() {
 // หน้ารายละเอียดสินค้าแบบเต็มหน้า (route: productDetail) — เดิมมีแต่ modal ซึ่งเปิดค้างไว้/ส่งลิงก์ให้คนอื่น
 // เปิดหน้าเดียวกันไม่ได้ และกดปุ่ม back ของเบราว์เซอร์ก็ไม่กลับมาที่สินค้าตัวเดิม ตัว modal ยังใช้ได้เหมือนเดิม
 // (มีจุดเรียกจากที่อื่นอยู่) แค่เพิ่มทางเลือกเปิดเป็นหน้าเต็ม
+// Modal แสดงไทม์ไลน์ประวัติราคา — ใช้ร่วมกันทั้งหน้ารายละเอียดสินค้า, Modal แก้ไข, และหน้า "ราคาตาม Level"
+// แต่ละ entry ใน p.priceHistory คือ "ค่าเก่าก่อนเปลี่ยนครั้งนั้น" — ค่าที่เปลี่ยนไปเป็นคือ entry ก่อนหน้า
+// (ใหม่กว่า) หรือค่าปัจจุบันของสินค้าถ้าเป็น entry ล่าสุด
+function showPriceHistoryM(productId) {
+  var p = getProductById(productId);
+  if (!p) return;
+  var hist = p.priceHistory || [];
+  var hideCost = _gvHidden('products_margin');
+  var labels = { rrpInVat: 'RRP in Vat', rrpExVat: 'RRP ex Vat', S: 'S', A: 'A', B: 'B', Other: 'Other', cost: 'ต้นทุน' };
+  var h = '<div style="max-width:560px">';
+  if (!hist.length) {
+    h += '<div style="text-align:center;padding:26px 10px;color:var(--text2)">ยังไม่มีการเปลี่ยนราคาที่บันทึกไว้</div>';
+  } else {
+    h += '<div style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow:auto">';
+    var cur = _priceHistoryCurrentVals(p);
+    hist.forEach(function(entry, idx) {
+      var next = idx === 0 ? cur : hist[idx - 1]; // ค่าที่ entry นี้ถูกเปลี่ยนไปเป็น
+      var rows = '';
+      PRICE_HISTORY_FIELDS.forEach(function(f) {
+        if (f === 'cost' && hideCost) return;
+        var oldV = Number(entry[f]) || 0, newV = Number(next[f]) || 0;
+        if (Math.abs(oldV - newV) < 0.001) return; // ฟิลด์นี้ไม่ได้เปลี่ยนในรอบนี้
+        var up = newV > oldV;
+        rows += '<div style="font-size:11px;background:var(--bg,var(--bg3));border:1px solid var(--border-light,var(--border));border-radius:6px;padding:5px 7px">' +
+          '<div style="color:var(--text3,var(--text2));font-size:10px;text-transform:uppercase;letter-spacing:.02em">' + labels[f] + '</div>' +
+          '<div style="font-weight:600;white-space:nowrap">' +
+          '<span style="text-decoration:line-through;color:var(--text3,var(--text2));font-weight:400">฿' + fmtMoney(oldV) + '</span> → ฿' + fmtMoney(newV) + ' ' +
+          '<span style="font-size:9px;padding:0 5px;border-radius:99px;background:' + (up ? 'rgba(239,68,68,.12)' : 'rgba(34,197,94,.12)') + ';color:' + (up ? '#ef4444' : '#22c55e') + '">' + (up ? '▲' : '▼') + '</span>' +
+          '</div></div>';
+      });
+      if (!rows) return; // เคส edge: ทุกฟิลด์ที่เปลี่ยนถูกซ่อนไว้ (เช่นเปลี่ยนแค่ cost แต่ไม่มีสิทธิ์ดู)
+      h += '<div style="border:1px solid var(--border);border-radius:8px;padding:9px 11px;background:var(--bg2)">' +
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3,var(--text2));margin-bottom:7px">' +
+        '<span>' + (entry.by ? '👤 ' + sanitize(entry.by) : '👤 ไม่ระบุ (ออฟไลน์)') + '</span>' +
+        '<span>' + fDT(entry.at) + '</span></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px">' + rows + '</div></div>';
+    });
+    h += '</div>';
+  }
+  h += '<div class="fm-actions" style="margin-top:12px"><button class="btn" onclick="closeM()">ปิด</button></div></div>';
+  openM('🕓 ประวัติราคา: ' + sanitize(p.name), h);
+  if (typeof setMWide === 'function') setMWide(600);
+}
+
 function rProductDetail(el) {
   var p = getProductById(S.productId);
   if (!p) { go('products'); return; }
@@ -2548,7 +2645,8 @@ function rProductDetail(el) {
   h += '</div>';
   h += '</div></div></div>';
 
-  h += '<div class="card"><h2>💰 ราคา</h2><div class="demo-info">';
+  var _histCount = (p.priceHistory || []).length;
+  h += '<div class="card"><h2>💰 ราคา' + (_histCount ? ' <button class="btn bsm bo" onclick="showPriceHistoryM(\'' + p.id + '\')">🕓 ประวัติราคา (' + _histCount + ')</button>' : '') + '</h2><div class="demo-info">';
   [['RRP in Vat', p.rrpInVat || 0], ['RRP Ex Vat', p.rrpExVat || 0],
    ['S (Type 1)', tp.S || 0], ['A (Type 2)', tp.A || 0], ['B (Type 3)', tp.B || p.price || 0], ['Other (Type 4)', tp.Other || 0]
   ].forEach(function(r) {
@@ -2896,7 +2994,8 @@ function renderPriceTable(products) {
     html += '<td><input type="text" inputmode="decimal" id="price_b_' + p.id + '" value="' + nmI(p.price || 0) + '" style="width:90px" class="fm-input js-money"></td>';
     html += '<td><input type="text" inputmode="decimal" id="price_o_' + p.id + '" value="' + nmI(p.typePrices?.Other || 0) + '" style="width:90px" class="fm-input js-money"></td>';
     html += '<td style="text-align:center"><input type="checkbox" id="eol_chk_' + p.id + '" ' + (p.eol ? 'checked' : '') + ' onchange="toggleEOLFromPrice(\'' + p.id + '\', this.checked)"></td>';
-    html += '<td><button class="btn bsm bp" onclick="saveSingleProductPrice(\'' + p.id + '\')">💾</button></td>';
+    html += '<td><button class="btn bsm bp" onclick="saveSingleProductPrice(\'' + p.id + '\')">💾</button>' +
+      ((p.priceHistory || []).length ? ' <button class="btn bsm bo" title="ดูประวัติราคา" onclick="showPriceHistoryM(\'' + p.id + '\')">🕓 ' + p.priceHistory.length + '</button>' : '') + '</td>';
     html += '</tr>';
   }
   tbody.innerHTML = html;
@@ -2955,6 +3054,8 @@ function saveAllProductPrices() {
     var priceO = parseNum(document.getElementById('price_o_' + p.id).value);
     var eolChk = document.getElementById('eol_chk_' + p.id);
     var eol = eolChk ? eolChk.checked : false;
+    // จุดเดียวในหน้านี้ที่เขียนราคาตรงเข้า data.models โดยไม่ผ่าน updateProduct() — ต้องสแนปช็อตเองก่อน overwrite
+    _snapshotPriceHistoryIfChanged(data.models[idx], { rrpInVat: rrpInVat, rrpExVat: rrpExVat, S: priceS, A: priceA, B: priceB, Other: priceO });
     data.models[idx].rrpInVat = rrpInVat;
     data.models[idx].rrpExVat = rrpExVat;
     data.models[idx].price = priceB;
