@@ -787,6 +787,11 @@ function _soSummaryItemStatusInfo(it, s) {
   var remQty = (readyInfo && readyInfo.bookedForThisSO > 0) ? Math.max(0, qty - readyInfo.bookedForThisSO - readyInfo.deliveredForThisSO) : qty;
   if (readyInfo && qty > 0 && readyInfo.deliveredForThisSO >= qty) {
     status = '✅ ส่งแล้ว';
+  } else if (readyInfo && qty > 0 && readyInfo.shortfall === 0) {
+    // สต็อกจริงพอส่งครบแล้ว (ไม่ขาด) ถือว่า "พร้อมส่ง" เสมอ ชนะสถานะ PR/PO/รอของเข้า/จองคลังที่ประกาศเองไว้ค้าง
+    // เหมือน _poTrackerItemBucket/_poTrackerItemRemark (views-potracker.js) — กันสรุปส่ง Sales Support ค้างโชว์ "รอ PR/PO" ทั้งที่ของเข้าสต็อกจริงแล้ว
+    status = '✅ พร้อมส่ง';
+    if (readyInfo.bookingExpiryDate) note = 'จองถึง ' + fD(readyInfo.bookingExpiryDate);
   } else if (it.sourceType === 'pr_po') {
     status = '🛒 รอ PR/PO ' + remQty + ' ชิ้น' + bookedNote;
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');

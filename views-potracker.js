@@ -61,12 +61,16 @@ function _poTrackerItemBucket(it, so) {
     // (partial lock) ส่วนที่เหลือยังต้องไปต่อตาม sourceType ที่ประกาศไว้ (เช่น pr_po) ไม่งั้น PO Tracker จะไม่เห็นว่า
     // ยังต้องเปิด PR/PO เพิ่มสำหรับส่วนที่เหลือ เพราะถูกจัดเป็น "จอง" เต็มๆไปแล้วทั้งที่จองจริงแค่บางส่วน
     if (info.bookedForThisSO > 0 && (info.bookedForThisSO + info.deliveredForThisSO) >= qty) return 'reserved';
+    // สต็อกจริงพอส่งครบแล้ว (ไม่ขาด — shortfall===0 จาก stockSOItemReadyInfo) ถือว่า "พร้อมส่ง" เสมอ แม้ sourceType
+    // จะยังค้างเป็น pr_po/restock/reserve_1021 ฯลฯ อยู่ก็ตาม (เช่น ของเข้าคลังจริงแล้วแต่ยังไม่ได้กดเปลี่ยนสถานะที่ตั้งเอง)
+    // ต้องเช็คก่อนเช็ค sourceType ด้านล่าง ไม่งั้น PO Tracker จะค้างโชว์ "รอ PR/PO" ทั้งที่ของเข้าสต็อกจริงแล้ว —
+    // คลังจริงคือ source of truth ชนะสถานะที่ประกาศเองเสมอ (เหมือนเช็ค bookedForThisSO ด้านบน)
+    if (qty > 0 && info.shortfall === 0) return 'ready';
   }
   if (it.sourceType === 'pr_po') return 'pending_prpo';
   if (it.sourceType === 'restock') return 'pending_restock';
   if (it.sourceType === 'reserve_1021' || it.sourceType === 'reserve_8d01') return 'reserved';
   if (it.sourceType === 'central_wh') return 'ready';
-  if (info && info.shortfall === 0) return 'ready';
   return 'not_sent';
 }
 
@@ -79,6 +83,10 @@ function _poTrackerItemRemark(it, so) {
   var info = (it.sku && typeof stockSOItemReadyInfo === 'function') ? stockSOItemReadyInfo(it.sku, qty, so) : null;
   var bookedNote = (info && info.bookedForThisSO > 0 && info.bookedForThisSO < qty) ? ' (จองคลังแล้ว ' + info.bookedForThisSO + '/' + qty + ' ชิ้น)' : '';
   var remQty = (info && info.bookedForThisSO > 0) ? Math.max(0, qty - info.bookedForThisSO - info.deliveredForThisSO) : qty;
+  if (info && qty > 0 && info.deliveredForThisSO >= qty) return '✅ ส่งแล้ว';
+  // สต็อกจริงพอส่งครบแล้ว (ไม่ขาด) ถือว่า "พร้อมส่ง" เสมอ ชนะสถานะ PR/PO/รอของเข้า/จองคลังที่ประกาศเองไว้ค้าง
+  // เหมือน _poTrackerItemBucket ด้านบน (ของเข้าคลังจริงแล้วไม่ควรขึ้น remark "รอ PR/PO" ค้างต่อ)
+  if (info && qty > 0 && info.shortfall === 0) return '✅ พร้อมส่ง';
   if (it.sourceType === 'pr_po') {
     var bits = ['🛒 PR/PO ' + remQty + ' ชิ้น' + bookedNote];
     var stLabel = (typeof _soPrpoStatusLabel === 'function') ? _soPrpoStatusLabel(it) : (it.prpoStatus || '');
@@ -94,12 +102,8 @@ function _poTrackerItemRemark(it, so) {
   if (it.sourceType === 'reserve_1021') return '📌 จองคลัง 1021 ' + remQty + ' ชิ้น' + bookedNote;
   if (it.sourceType === 'reserve_8d01') return '🧳 จองคลัง 8D01 ' + remQty + ' ชิ้น' + bookedNote;
   if (it.sourceType === 'central_wh') return '🏢 ส่งจากคลังกลาง';
-  // ยังไม่ระบุ sourceType — fallback ไปดูความพร้อมส่งจริงจากสต็อก
-  if (info) {
-    if (qty > 0 && info.deliveredForThisSO >= qty) return '✅ ส่งแล้ว';
-    if (info.ready) return '✅ พร้อมส่ง';
-    if (info.shortfall > 0) return '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';
-  }
+  // ยังไม่ระบุ sourceType (หรือระบุไว้แต่ของยังไม่พร้อมตามที่เช็คไปแล้วด้านบน) — fallback ไปดูความพร้อมส่งจริงจากสต็อก
+  if (info && info.shortfall > 0) return '⚠️ ขาดอีก ' + info.shortfall + ' ชิ้น';
   return '—';
 }
 
