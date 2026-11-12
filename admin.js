@@ -711,14 +711,18 @@ function _importProductsFromExcelAdmin_impl(event) {
     try {
       var data = new Uint8Array(e.target.result);
       var workbook = XLSX.read(data, { type: 'array' });
-      if (!workbook.SheetNames.includes('single')) {
+      // ใช้ _prodPickBestSheet แทนการอ่านชื่อชีต 'single'/'demo' ตรงๆ — กันไฟล์ที่มีชีตชื่อซ้ำกันแบบ "single (2)"
+      // (เช่น copy ชีตราคาจากไฟล์เก่ามารวมไว้ในไฟล์เดียวกัน) ทำให้อ่านชีตเก่าที่ไม่มีการแก้แทนชีตที่แก้จริง
+      var singlePick = _prodPickBestSheet(workbook, 'single', _prodParseSingleSheet);
+      if (!singlePick) {
         toast('❌ ไม่พบชีต "single" (ราคาสินค้า) ในไฟล์');
         return;
       }
-      var meta = _prodParseSingleSheet(workbook.Sheets['single']);
+      var meta = singlePick.meta;
       // ชีต 'demo' (ถ้ามี) — สินค้า Demo ราคาเดียว แยกจากสินค้าหลักในไฟล์ แต่รวมเข้า preview เดียวกัน
-      if (workbook.SheetNames.includes('demo')) {
-        meta = meta.concat(_prodParseDemoSheet(workbook.Sheets['demo']));
+      var demoPick = _prodPickBestSheet(workbook, 'demo', _prodParseDemoSheet);
+      if (demoPick) {
+        meta = meta.concat(demoPick.meta);
       }
       if (!meta.length) { toast('❌ ไม่พบข้อมูลสินค้าที่อ่านได้ในไฟล์'); return; }
       // ต้นทุนอยู่แยกชีต 'cost' (ถ้ามี) — ผสานเข้า meta ด้วย SKU/EAN ก่อนเปิด preview

@@ -1437,6 +1437,29 @@ var _PROD_IMPORT_DETAIL_FIELDS = [
   { k: 'cost', l: 'ต้นทุน (Cost)', num: true }
 ];
 
+// ไฟล์ที่ผู้ใช้รวมหลาย export เข้าด้วยกัน (เช่น copy ชีตราคาจากไฟล์เก่ามาไว้ในไฟล์เดียวกันกับไฟล์ใหม่) Excel จะตั้ง
+// ชื่อชีตที่ซ้ำกันให้อัตโนมัติเป็น "single (2)", "single (3)" ฯลฯ — ถ้าชีตที่มีการแก้ราคาจริงดันได้ชื่อต่อท้ายแบบนี้
+// (ไม่ใช่ "single" เป๊ะๆ) โค้ดเดิมจะอ่านแต่ชีตชื่อ "single" ตรงๆ (ชีตเก่าที่ไม่มีการแก้) เงียบๆ ทำให้ preview เห็นว่า
+// "ไม่มีอะไรเปลี่ยน" ทั้งที่มีชีตพี่น้องในไฟล์เดียวกันที่แก้ราคาไว้จริง (เจอจากไฟล์จริงของผู้ใช้ 2026-11-12 — มีทั้ง
+// "single" กับ "single (2)" ในไฟล์เดียวกัน ราคาต่างกัน 91/178 แถว แต่ระบบอ่านแต่ตัวเก่า) ถ้ามีชีตชื่อขึ้นต้นเหมือนกัน
+// มากกว่า 1 ชีต จะ parse ทุกชีตแล้วเลือกชีตที่ "เจอการเปลี่ยนแปลงราคาเทียบกับของเดิมมากที่สุด" แทนที่จะเดาจากชื่อชีตเฉยๆ
+function _prodPickBestSheet(workbook, baseName, parseFn) {
+  var re = new RegExp('^' + baseName + '(\\s*\\(\\d+\\))?$', 'i');
+  var candidates = workbook.SheetNames.filter(function(n) { return re.test(n); });
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return { name: candidates[0], meta: parseFn(workbook.Sheets[candidates[0]]) };
+  var best = null;
+  candidates.forEach(function(name) {
+    var meta = parseFn(workbook.Sheets[name]);
+    var changed = meta.filter(function(m) { return m.state === 'changed'; }).length;
+    if (!best || changed > best.changed) best = { name: name, meta: meta, changed: changed };
+  });
+  if (typeof toast === 'function') {
+    toast('⚠️ พบชีต "' + baseName + '" ซ้ำกัน ' + candidates.length + ' ชีต (' + candidates.join(', ') + ') — ใช้ชีต "' + best.name + '" เพราะเจอรายการราคาเปลี่ยนมากที่สุด (' + best.changed + ' รายการ)');
+  }
+  return { name: best.name, meta: best.meta };
+}
+
 function showProductXlsxPreview(meta) {
   _prodImportPending = { meta: meta };
   var counts = { new: 0, changed: 0, same: 0, ambiguous: 0 };
