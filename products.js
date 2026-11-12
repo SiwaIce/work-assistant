@@ -2032,6 +2032,16 @@ var _prodSheetDirty = false; // มีการแก้ในตาราง Sh
 var priceSearch = '';
 var priceCategoryFilter = 'all';
 
+// ✅ แบ่งหน้าการ์ด/แถว — เดิมวาด DOM ของสินค้าทุกตัวพร้อมกันทีเดียว (รวมรูปภาพในมุมมอง Catalog ที่มือถือใช้
+// เป็นค่าเริ่มต้น) พอรายการสินค้ามีหลักร้อย มือถือจะค้างนานกว่าจะวาดเสร็จ/โหลดรูปครบ (ผู้ใช้แจ้ง 2026-11-12)
+// แก้โดยวาดแค่หน้าแรกก่อน แล้วกด "โหลดเพิ่ม" ค่อยวาดเพิ่ม — ลดจำนวน DOM node/รูปที่ต้องสร้างตอนเปิดหน้าแรก
+var _prodTablePageSize = 60;
+var _prodCatalogPageSize = 30;
+var _prodTableShown = _prodTablePageSize;
+var _prodCatalogShown = _prodCatalogPageSize;
+var _prodTableFullList = [];
+var _prodCatalogFullList = [];
+
 // ติ๊กเลือกหลายรายการในตาราง "สินค้าทั้งหมด" เพื่อเปลี่ยนหมวดหมู่ทีเดียว — เก็บเป็น map id -> true
 // (ไม่ใช่ array) จะเช็ค/ลบทีละตัวเร็วกว่า และคงค่าไว้ข้ามการกรอง/ค้นหา จนกว่าจะกดยกเลิกเลือกหรือบันทึกสำเร็จ
 var _prodSelectedIds = {};
@@ -2442,15 +2452,26 @@ function _exportProductsMargin_impl() {
 }
 
 function renderProductsCatalog(products) {
+  _prodCatalogFullList = products;
+  _prodCatalogShown = Math.min(_prodCatalogPageSize, products.length) || _prodCatalogPageSize;
+  _renderProdCatalogCards();
+}
+
+// วาดจริงตาม _prodCatalogShown (เรียกซ้ำตอนกด "โหลดเพิ่ม") — รูปใช้ loading="lazy" ด้วย กันเบราว์เซอร์โหลด
+// รูปทุกใบพร้อมกันตอนเปิดหน้า (มือถือค้างนานเพราะรอรูปหลักร้อยใบ ผู้ใช้แจ้ง 2026-11-12)
+function _renderProdCatalogCards() {
   var grid = document.getElementById('productsCatalogGrid');
   if (!grid) return;
+  var oldBtn = document.getElementById('prodCatalogLoadMore');
+  if (oldBtn) oldBtn.remove();
+  var products = _prodCatalogFullList.slice(0, _prodCatalogShown);
   var html = '';
   for (var i = 0; i < products.length; i++) {
     var p = products[i];
     var catIcon = getCategoryIcon(p.category) || '📦';
     var imgContent;
     if (p.imageUrl) {
-      imgContent = '<img src="' + sanitize(p.imageUrl) + '" alt="' + sanitize(p.name) + '" style="width:100%;height:100%;object-fit:contain;padding:10px" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">' +
+      imgContent = '<img src="' + sanitize(p.imageUrl) + '" alt="' + sanitize(p.name) + '" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:contain;padding:10px" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">' +
                    '<div class="prod-card-nopic" style="display:none"><span style="font-size:28px">' + catIcon + '</span></div>';
     } else {
       imgContent = '<div class="prod-card-nopic"><span style="font-size:28px">' + catIcon + '</span></div>';
@@ -2470,7 +2491,23 @@ function renderProductsCatalog(products) {
     html += '</div>';
     html += '</div></div>';
   }
-  grid.innerHTML = html || _prodEmptyHtml();
+  if (!html) {
+    grid.innerHTML = _prodEmptyHtml();
+    return;
+  }
+  grid.innerHTML = html;
+  if (_prodCatalogShown < _prodCatalogFullList.length) {
+    grid.insertAdjacentHTML('afterend', '<div id="prodCatalogLoadMore" style="text-align:center;padding:14px"><button class="btn bo" onclick="loadMoreProductsCatalog()">⬇️ โหลดเพิ่ม (เหลือ ' +
+      (_prodCatalogFullList.length - _prodCatalogShown) + ' รายการ)</button></div>');
+  }
+}
+
+// กด "โหลดเพิ่ม" ในมุมมอง Catalog
+function loadMoreProductsCatalog() {
+  var old = document.getElementById('prodCatalogLoadMore');
+  if (old) old.remove();
+  _prodCatalogShown = Math.min(_prodCatalogShown + _prodCatalogPageSize, _prodCatalogFullList.length);
+  _renderProdCatalogCards();
 }
 
 // หน้ารายละเอียดสินค้าแบบเต็มหน้า (route: productDetail) — เดิมมีแต่ modal ซึ่งเปิดค้างไว้/ส่งลิงก์ให้คนอื่น
@@ -2631,6 +2668,16 @@ function isDemoProduct(product) {
 function renderProductsTable(products) {
   var tbody = document.getElementById('productsTableBody');
   if (!tbody) return;
+  _prodTableFullList = products;
+  _prodTableShown = Math.min(_prodTablePageSize, products.length) || _prodTablePageSize;
+  _renderProdTableRows();
+}
+
+// วาดจริงตาม _prodTableShown (เรียกซ้ำตอนกด "โหลดเพิ่ม" โดยไม่ต้องรีเซ็ตตัวกรอง/หน้าใหม่)
+function _renderProdTableRows() {
+  var tbody = document.getElementById('productsTableBody');
+  if (!tbody) return;
+  var products = _prodTableFullList.slice(0, _prodTableShown);
   _prodLastRenderedIds = products.map(function(p) { return p.id; });
   var html = '';
   for (var i = 0; i < products.length; i++) {
@@ -2666,9 +2713,23 @@ function renderProductsTable(products) {
       '<button class="btn bsm bd" onclick="deleteProductConfirm(\'' + p.id + '\')">🗑️</button></td>';
     html += '</tr>';
   }
-  tbody.innerHTML = html || '<tr><td colspan="14">' + _prodEmptyHtml() + '</td></tr>';
+  if (!html) {
+    tbody.innerHTML = '<tr><td colspan="14">' + _prodEmptyHtml() + '</td></tr>';
+  } else if (_prodTableShown < _prodTableFullList.length) {
+    html += '<tr><td colspan="14" style="text-align:center;padding:12px">' +
+      '<button class="btn bo" onclick="loadMoreProductsTable()">⬇️ โหลดเพิ่ม (เหลือ ' + (_prodTableFullList.length - _prodTableShown) + ' รายการ)</button></td></tr>';
+    tbody.innerHTML = html;
+  } else {
+    tbody.innerHTML = html;
+  }
   _updateProdSelectAllState();
   _renderProdBulkBar();
+}
+
+// กด "โหลดเพิ่ม" ในมุมมอง Table — เพิ่มจำนวนแถวที่วาด ไม่กระทบตัวกรอง/การเลือกที่ติ๊กไว้
+function loadMoreProductsTable() {
+  _prodTableShown = Math.min(_prodTableShown + _prodTablePageSize, _prodTableFullList.length);
+  _renderProdTableRows();
 }
 
 // ติ๊ก/ยกเลิกติ๊กสินค้าทีละรายการ
