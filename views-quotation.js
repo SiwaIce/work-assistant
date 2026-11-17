@@ -1633,7 +1633,7 @@ function renderQuoteTableHTML(list) {
   var h = '<div class="export-wrap" style="overflow-x:auto;border:1px solid var(--border);border-radius:12px"><table class="export-table" style="width:100%;font-size:12px;white-space:nowrap">';
   h += '<thead><tr>' +
     (quoteSelectMode ? '<th style="width:32px;text-align:center"><input type="checkbox" id="quoteSelAll" title="เลือกทั้งหมด" onclick="toggleQuoteSelectAll(this.checked)"></th>' : '') +
-    '<th>#</th><th>วันที่</th><th>เลขใบเสนอราคา</th><th>ชื่อโครงการ</th><th>PO</th><th>รายการสินค้า</th>' +
+    '<th>#</th><th>วันที่</th><th>เลขใบเสนอราคา</th><th>ชื่อโครงการ</th><th>Dealer</th><th>PO</th><th>รายการสินค้า</th>' +
     '<th style="text-align:right">มูลค่า</th><th>SO</th><th>Invoice</th><th>สถานะ</th></tr></thead><tbody>';
   list.forEach(function(q, i) {
     var statusColor = quoteStatusColors[q.status] || '#64748b';
@@ -1644,6 +1644,7 @@ function renderQuoteTableHTML(list) {
     h += '<td>' + (q.validFrom || '-') + '</td>';
     h += '<td style="color:var(--accent);font-weight:600;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')">' + qcopyHtml(q.quoteNo || '-') + (q.revisionNum ? ' <span class="tag" style="font-size:9px;background:var(--accent-light);color:var(--accent);border:1px solid var(--accent)">rev ' + q.revisionNum + '</span>' : '') + '</td>';
     h += '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;cursor:pointer" onclick="editQuotation(\'' + q.id + '\')" title="' + sanitize(q.projectName || '') + '">' + (q.projectName ? sanitize(q.projectName) : '<span style="color:var(--text2)">-</span>') + '</td>';
+    h += '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis" title="' + sanitize(q.dealerName || '') + '">' + (q.dealerName ? sanitize(q.dealerName) : '<span style="color:var(--text2)">-</span>') + '</td>';
     h += '<td>' + (q.poNo ? qcopyHtml(q.poNo) : '<span style="color:var(--text2)">-</span>') + '</td>';
     h += '<td style="color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + sanitize(_quoteItemsSummaryFull(q.items)) + '">' + _quoteItemsSummary(q.items) + '</td>';
     h += '<td style="text-align:right;color:#22c55e;font-weight:600">' + formatNumber(q.totalAmount) + '</td>';
@@ -1652,7 +1653,7 @@ function renderQuoteTableHTML(list) {
     h += '<td><span class="tag" style="background:' + statusColor + '20;color:' + statusColor + ';border:1px solid ' + statusColor + '40;font-size:11px">' + statusLabel + '</span></td>';
     h += '</tr>';
   });
-  h += '<tr style="font-weight:800;border-top:2px solid var(--accent)"><td colspan="' + (quoteSelectMode ? 7 : 6) + '">รวม ' + list.length + ' ใบเสนอราคา</td>';
+  h += '<tr style="font-weight:800;border-top:2px solid var(--accent)"><td colspan="' + (quoteSelectMode ? 8 : 7) + '">รวม ' + list.length + ' ใบเสนอราคา</td>';
   h += '<td style="text-align:right;color:#22c55e">' + formatNumber(Math.round(sumAmount)) + '</td><td colspan="3"></td></tr>';
   h += '</tbody></table></div>';
   return h;
