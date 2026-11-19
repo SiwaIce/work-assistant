@@ -346,31 +346,42 @@ function _csRenderFilterBar() {
 }
 
 // ---------------- ข้อมูลผ่าน filter ปัจจุบัน (ใช้ร่วมทั้ง render และ export Excel) ----------------
+// กรองที่ระดับ "แต่ละบรรทัด sku ต่อ 1 SO" ก่อน แล้วค่อยรวมเป็น item ต่อ PO — กันบรรทัด SO ที่ส่งแล้ว
+// หลุดติดมาด้วยตอน filter "ยังไม่ส่ง" (รายการ sku เดียวกันอาจมาจากหลาย SO ในพม่ PO เดียวกัน บาง SO ส่งแล้ว บาง SO ยังไม่ส่ง)
 function _csFilteredPOGroups(st) {
   var q = (csSearch || '').trim().toLowerCase();
   var out = [];
   st.poGroups.forEach(function(pg) {
-    var items = {}, order = [];
+    var raw = {}, rawOrder = [];
     pg.sos.forEach(function(s) {
       (s.items || []).forEach(function(it) {
         var key = it.sku || it.model;
-        if (!items[key]) { items[key] = { model: it.model, sku: it.sku, qty: 0, shipped: 0, unitPrice: it.unitPrice || 0, perSo: [] }; order.push(key); }
+        if (!raw[key]) { raw[key] = { model: it.model, sku: it.sku, unitPrice: it.unitPrice || 0, pairs: [] }; rawOrder.push(key); }
+        var lineQty = Number(it.qty) || 0;
         var shipped = _csShippedQtyForSku(s, it.sku);
-        items[key].qty += Number(it.qty) || 0;
-        items[key].shipped += shipped;
-        items[key].perSo.push({ so: s, shipped: shipped });
+        raw[key].pairs.push({ so: s, lineQty: lineQty, shipped: shipped });
       });
     });
-    var filteredOrder = order.filter(function(k) {
-      var it = items[k];
-      var remain = it.qty - it.shipped;
-      if (csDeliveryFlt === 'delivered' && remain > 0) return false;
-      if (csDeliveryFlt === 'pending' && remain <= 0) return false;
+
+    var items = {}, filteredOrder = [];
+    rawOrder.forEach(function(key) {
+      var r = raw[key];
+      var pairs = r.pairs.filter(function(p) {
+        var remain = p.lineQty - p.shipped;
+        if (csDeliveryFlt === 'delivered') return remain <= 0 && p.lineQty > 0;
+        if (csDeliveryFlt === 'pending') return remain > 0;
+        return true;
+      });
+      if (!pairs.length) return;
       if (q) {
-        var hay = [it.model, it.sku, pg.poNo, pg.projectId].concat(it.perSo.map(function(p) { return p.so.soNumber; })).filter(Boolean).join(' ').toLowerCase();
-        if (hay.indexOf(q) === -1) return false;
+        var soNums = pairs.map(function(p) { return p.so.soNumber; });
+        var hay = [r.model, r.sku, pg.poNo, pg.projectId].concat(soNums).filter(Boolean).join(' ').toLowerCase();
+        if (hay.indexOf(q) === -1) return;
       }
-      return true;
+      var qty = 0, shipped = 0;
+      var perSo = pairs.map(function(p) { qty += p.lineQty; shipped += p.shipped; return { so: p.so, shipped: p.shipped }; });
+      items[key] = { model: r.model, sku: r.sku, qty: qty, shipped: shipped, unitPrice: r.unitPrice, perSo: perSo };
+      filteredOrder.push(key);
     });
     if (!filteredOrder.length) return;
     var totalQty = 0, shippedQty = 0, poValue = 0;
@@ -399,6 +410,8 @@ function _csFilteredSOs(st) {
   }).slice().sort(function(a, b) { return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1; });
 }
 
+// กรองที่ระดับ "แต่ละบรรทัด sku ต่อ 1 SO" ก่อน แล้วค่อยรวมเป็น item/PO — ไม่งั้นบรรทัด SO ที่ส่งแล้ว
+// จะติดมาแสดงในคอลัมน์ "อยู่ใน PO/SO ไหนบ้าง" ของแถวที่ผ่าน filter "ยังไม่ส่ง" (เพราะ product 1 ตัวมักอยู่หลาย SO)
 function _csFilteredProductItems(st) {
   var q = (csSearch || '').trim().toLowerCase();
   var map = {}, order = [];
@@ -406,30 +419,39 @@ function _csFilteredProductItems(st) {
     pg.sos.forEach(function(s) {
       (s.items || []).forEach(function(it) {
         var key = it.sku || it.model;
-        var shipped = _csShippedQtyForSku(s, it.sku);
-        if (!map[key]) { map[key] = { model: it.model, sku: it.sku, totalQty: 0, totalShipped: 0, poMap: {}, poOrder: [] }; order.push(key); }
-        map[key].totalQty += Number(it.qty) || 0;
-        map[key].totalShipped += shipped;
-        if (!map[key].poMap[pg.poNo]) { map[key].poMap[pg.poNo] = { pg: pg, qty: 0, sos: [] }; map[key].poOrder.push(pg.poNo); }
-        map[key].poMap[pg.poNo].qty += Number(it.qty) || 0;
-        map[key].poMap[pg.poNo].sos.push({ so: s, shipped: shipped });
+        if (!map[key]) { map[key] = { model: it.model, sku: it.sku, pairs: [] }; order.push(key); }
+        map[key].pairs.push({ poNo: pg.poNo, pg: pg, lineQty: Number(it.qty) || 0, so: s, shipped: _csShippedQtyForSku(s, it.sku) });
       });
     });
   });
-  return order.map(function(k) { return map[k]; })
-    .filter(function(it) {
-      var remain = it.totalQty - it.totalShipped;
-      if (csDeliveryFlt === 'delivered' && remain > 0) return false;
-      if (csDeliveryFlt === 'pending' && remain <= 0) return false;
-      if (q) {
-        var soNums = [];
-        it.poOrder.forEach(function(poNo) { it.poMap[poNo].sos.forEach(function(x) { soNums.push(x.so.soNumber); }); });
-        var hay = [it.model, it.sku, it.poOrder.join(' ')].concat(soNums).filter(Boolean).join(' ').toLowerCase();
-        if (hay.indexOf(q) === -1) return false;
-      }
+
+  var items = [];
+  order.forEach(function(key) {
+    var raw = map[key];
+    var pairs = raw.pairs.filter(function(p) {
+      var remain = p.lineQty - p.shipped;
+      if (csDeliveryFlt === 'delivered') return remain <= 0 && p.lineQty > 0;
+      if (csDeliveryFlt === 'pending') return remain > 0;
       return true;
-    })
-    .sort(function(a, b) { return b.poOrder.length - a.poOrder.length || b.totalQty - a.totalQty; });
+    });
+    if (!pairs.length) return;
+    if (q) {
+      var soNums = pairs.map(function(p) { return p.so.soNumber; });
+      var poNos = pairs.map(function(p) { return p.poNo; });
+      var hay = [raw.model, raw.sku].concat(poNos).concat(soNums).filter(Boolean).join(' ').toLowerCase();
+      if (hay.indexOf(q) === -1) return;
+    }
+    var poMap = {}, poOrder = [], totalQty = 0, totalShipped = 0;
+    pairs.forEach(function(p) {
+      totalQty += p.lineQty; totalShipped += p.shipped;
+      if (!poMap[p.poNo]) { poMap[p.poNo] = { pg: p.pg, qty: 0, sos: [] }; poOrder.push(p.poNo); }
+      poMap[p.poNo].qty += p.lineQty;
+      poMap[p.poNo].sos.push({ so: p.so, shipped: p.shipped });
+    });
+    items.push({ model: raw.model, sku: raw.sku, totalQty: totalQty, totalShipped: totalShipped, poMap: poMap, poOrder: poOrder });
+  });
+
+  return items.sort(function(a, b) { return b.poOrder.length - a.poOrder.length || b.totalQty - a.totalQty; });
 }
 
 // ---------------- Export Excel — ส่งออกเฉพาะสิ่งที่กำลังแสดงอยู่ (มุมมอง + filter ปัจจุบัน) ----------------
