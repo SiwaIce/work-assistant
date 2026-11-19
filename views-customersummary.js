@@ -17,6 +17,9 @@
 
 var csViewMode = 'po'; // 'po' | 'so' | 'product'
 var csSelectedDealerId = null;
+var csDeliveryFlt = ''; // '' | 'delivered' | 'pending' — กรองว่า "ส่งแล้ว (ครบ)" หรือ "ยังไม่ส่งครบ" (รวม partial ด้วย เพราะถือว่ายังไม่จบงาน)
+var csSearch = ''; // ค้นหา PO/SO/Project ID/สินค้า/SKU — ใช้ร่วมกันทั้ง 3 มุมมอง
+var csStatusFlt = ''; // กรองสถานะ SO (ใช้เฉพาะมุมมอง "ตาม SO")
 var CS_DUE_SOON_DAYS = 7;
 var CS_STALE_WARN_DAYS = 10;
 var CS_STALE_BAD_DAYS = 20;
@@ -281,11 +284,16 @@ function _csRenderDealerCard(d, opts) {
     '</div>';
   h += '<div style="height:7px;border-radius:4px;background:var(--bg2);overflow:hidden;margin-bottom:14px"><i style="display:block;height:100%;width:' + pct + '%;background:' + barColor + '"></i></div>';
 
-  h += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">' +
+  h += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;justify-content:space-between;align-items:center">' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
     _csViewBtn('po', '📦 ตาม PO ลูกค้า', d.id) +
     _csViewBtn('so', '📋 ตาม SO', d.id) +
     _csViewBtn('product', '🧰 ตามสินค้า', d.id) +
+    '</div>' +
+    '<button class="btn bo bsm" onclick="_csExportExcel(\'' + d.id + '\')">📤 Export Excel</button>' +
     '</div>';
+
+  if (st.sos.length) h += _csRenderFilterBar();
 
   if (!st.sos.length) {
     h += '<div style="color:var(--text2);font-size:13px">Dealer นี้ยังไม่มี Sales Order</div>';
@@ -307,6 +315,184 @@ function _csTile(label, val) {
 function _csViewBtn(mode, label, dealerId) {
   var act = csViewMode === mode;
   return '<button class="btn bsm ' + (act ? 'bp' : 'bo') + '" onclick="csViewMode=\'' + mode + '\';csSelectedDealerId=\'' + dealerId + '\';render()">' + label + '</button>';
+}
+
+// ---------------- แถบ filter ร่วม — ค้นหา + ส่งแล้ว/ยังไม่ส่ง + สถานะ SO (เฉพาะมุมมอง "ตาม SO") ----------------
+function _csDeliveryFltBtn(val, label) {
+  var act = csDeliveryFlt === val;
+  return '<button class="btn bsm ' + (act ? 'bp' : 'bo') + '" onclick="csDeliveryFlt=\'' + val + '\';render()">' + label + '</button>';
+}
+function _csRenderFilterBar() {
+  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">';
+  h += '<input class="inp" style="flex:1;min-width:170px;max-width:280px" placeholder="🔎 ค้นหา PO/SO/Project ID/สินค้า/SKU" value="' + sanitize(csSearch) + '" oninput="csSearch=this.value;render()">';
+  h += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    _csDeliveryFltBtn('', 'ทั้งหมด') +
+    _csDeliveryFltBtn('pending', '🔴 ยังไม่ส่ง') +
+    _csDeliveryFltBtn('delivered', '✅ ส่งแล้ว') +
+    '</div>';
+  if (csViewMode === 'so') {
+    h += '<select class="inp" style="max-width:180px" onchange="csStatusFlt=this.value;render()">' +
+      '<option value="">สถานะ: ทั้งหมด</option>';
+    Object.keys(SO_STATUS).forEach(function(k) {
+      h += '<option value="' + k + '"' + (csStatusFlt === k ? ' selected' : '') + '>' + sanitize((SO_STATUS[k] || {}).label || k) + '</option>';
+    });
+    h += '</select>';
+  }
+  if (csSearch || csDeliveryFlt || csStatusFlt) {
+    h += '<button class="btn bo bsm" onclick="csSearch=\'\';csDeliveryFlt=\'\';csStatusFlt=\'\';render()">✕ ล้าง filter</button>';
+  }
+  h += '</div>';
+  return h;
+}
+
+// ---------------- ข้อมูลผ่าน filter ปัจจุบัน (ใช้ร่วมทั้ง render และ export Excel) ----------------
+function _csFilteredPOGroups(st) {
+  var q = (csSearch || '').trim().toLowerCase();
+  var out = [];
+  st.poGroups.forEach(function(pg) {
+    var items = {}, order = [];
+    pg.sos.forEach(function(s) {
+      (s.items || []).forEach(function(it) {
+        var key = it.sku || it.model;
+        if (!items[key]) { items[key] = { model: it.model, sku: it.sku, qty: 0, shipped: 0, unitPrice: it.unitPrice || 0, perSo: [] }; order.push(key); }
+        var shipped = _csShippedQtyForSku(s, it.sku);
+        items[key].qty += Number(it.qty) || 0;
+        items[key].shipped += shipped;
+        items[key].perSo.push({ so: s, shipped: shipped });
+      });
+    });
+    var filteredOrder = order.filter(function(k) {
+      var it = items[k];
+      var remain = it.qty - it.shipped;
+      if (csDeliveryFlt === 'delivered' && remain > 0) return false;
+      if (csDeliveryFlt === 'pending' && remain <= 0) return false;
+      if (q) {
+        var hay = [it.model, it.sku, pg.poNo, pg.projectId].concat(it.perSo.map(function(p) { return p.so.soNumber; })).filter(Boolean).join(' ').toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+    if (!filteredOrder.length) return;
+    var totalQty = 0, shippedQty = 0, poValue = 0;
+    filteredOrder.forEach(function(k) { totalQty += items[k].qty; shippedQty += items[k].shipped; poValue += items[k].qty * items[k].unitPrice; });
+    out.push({ pg: pg, items: items, order: filteredOrder, totalQty: totalQty, shippedQty: shippedQty, poValue: poValue });
+  });
+  return out;
+}
+
+function _csFilteredSOs(st) {
+  var q = (csSearch || '').trim().toLowerCase();
+  return st.sos.filter(function(s) {
+    if (csStatusFlt && s.status !== csStatusFlt) return false;
+    if (csDeliveryFlt) {
+      var totalQty = 0, shipped = 0;
+      (s.items || []).forEach(function(it) { totalQty += Number(it.qty) || 0; shipped += _csShippedQtyForSku(s, it.sku); });
+      var delivered = totalQty > 0 && shipped >= totalQty;
+      if (csDeliveryFlt === 'delivered' && !delivered) return false;
+      if (csDeliveryFlt === 'pending' && delivered) return false;
+    }
+    if (q) {
+      var hay = [s.soNumber, s.customerPO, s.projectId].filter(Boolean).join(' ').toLowerCase();
+      if (hay.indexOf(q) === -1) return false;
+    }
+    return true;
+  }).slice().sort(function(a, b) { return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1; });
+}
+
+function _csFilteredProductItems(st) {
+  var q = (csSearch || '').trim().toLowerCase();
+  var map = {}, order = [];
+  st.poGroups.forEach(function(pg) {
+    pg.sos.forEach(function(s) {
+      (s.items || []).forEach(function(it) {
+        var key = it.sku || it.model;
+        var shipped = _csShippedQtyForSku(s, it.sku);
+        if (!map[key]) { map[key] = { model: it.model, sku: it.sku, totalQty: 0, totalShipped: 0, poMap: {}, poOrder: [] }; order.push(key); }
+        map[key].totalQty += Number(it.qty) || 0;
+        map[key].totalShipped += shipped;
+        if (!map[key].poMap[pg.poNo]) { map[key].poMap[pg.poNo] = { pg: pg, qty: 0, sos: [] }; map[key].poOrder.push(pg.poNo); }
+        map[key].poMap[pg.poNo].qty += Number(it.qty) || 0;
+        map[key].poMap[pg.poNo].sos.push({ so: s, shipped: shipped });
+      });
+    });
+  });
+  return order.map(function(k) { return map[k]; })
+    .filter(function(it) {
+      var remain = it.totalQty - it.totalShipped;
+      if (csDeliveryFlt === 'delivered' && remain > 0) return false;
+      if (csDeliveryFlt === 'pending' && remain <= 0) return false;
+      if (q) {
+        var soNums = [];
+        it.poOrder.forEach(function(poNo) { it.poMap[poNo].sos.forEach(function(x) { soNums.push(x.so.soNumber); }); });
+        var hay = [it.model, it.sku, it.poOrder.join(' ')].concat(soNums).filter(Boolean).join(' ').toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    })
+    .sort(function(a, b) { return b.poOrder.length - a.poOrder.length || b.totalQty - a.totalQty; });
+}
+
+// ---------------- Export Excel — ส่งออกเฉพาะสิ่งที่กำลังแสดงอยู่ (มุมมอง + filter ปัจจุบัน) ----------------
+function _csExportExcel(dealerId) {
+  ensureXLSX().then(function() {
+    _csExportExcel_impl(dealerId);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+function _csExportExcel_impl(dealerId) {
+  var d = ST.getAll('dealers').filter(function(x) { return x.id === dealerId; })[0];
+  if (!d) { toast('ไม่พบ Dealer'); return; }
+  var st = _csDealerStats(d);
+  var wb = XLSX.utils.book_new();
+  var modeLabel = csViewMode === 'po' ? 'ตาม PO ลูกค้า' : (csViewMode === 'so' ? 'ตาม SO' : 'ตามสินค้า');
+  var rowCount = 0;
+
+  if (csViewMode === 'po') {
+    var groups = _csFilteredPOGroups(st);
+    var header = ['PO ลูกค้า', 'Project ID', 'รายการสินค้า', 'SKU', 'ตาม PO', 'ส่งแล้ว', 'คงค้าง', 'ราคาต่อหน่วย', 'มูลค่าคงค้าง', 'อยู่ใน SO ไหนบ้าง'];
+    var rows = [];
+    groups.forEach(function(g) {
+      g.order.forEach(function(k) {
+        var it = g.items[k];
+        var remain = it.qty - it.shipped;
+        var soTxt = it.perSo.map(function(p) { return p.so.soNumber + (p.shipped > 0 ? ' (ส่งแล้ว ' + p.shipped + ')' : ' (ยังไม่ส่ง)'); }).join('; ');
+        rows.push([g.pg.poNo, g.pg.projectId || '', it.model || '', it.sku || '', it.qty, it.shipped, remain, it.unitPrice || 0, remain * (it.unitPrice || 0), soTxt]);
+      });
+    });
+    rowCount = rows.length;
+    var ws = XLSX.utils.aoa_to_sheet([header].concat(rows));
+    ws['!cols'] = [{ wch: 18 }, { wch: 16 }, { wch: 28 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'ตาม PO ลูกค้า');
+  } else if (csViewMode === 'so') {
+    var sos = _csFilteredSOs(st);
+    var header2 = ['SO Number', 'PO ลูกค้า', 'Project ID', 'สถานะ', 'สร้างเมื่อ', 'เทอมเครดิต (วัน)'];
+    var rows2 = sos.map(function(s) {
+      var cd = _csCreditDaysForSO(d, s);
+      return [s.soNumber || '', s.customerPO || '', s.projectId || '', (SO_STATUS[s.status] || {}).label || s.status || '', (s.createdAt || '').slice(0, 10), cd.days != null ? cd.days : ''];
+    });
+    rowCount = rows2.length;
+    var ws2 = XLSX.utils.aoa_to_sheet([header2].concat(rows2));
+    ws2['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'ตาม SO');
+  } else {
+    var items = _csFilteredProductItems(st);
+    var header3 = ['รายการสินค้า', 'SKU', 'รวมทุก PO', 'ส่งแล้ว', 'คงค้าง', 'อยู่ใน PO ไหนบ้าง', 'อยู่ใน SO ไหนบ้าง'];
+    var rows3 = items.map(function(it) {
+      var soNums = [];
+      it.poOrder.forEach(function(poNo) { it.poMap[poNo].sos.forEach(function(x) { soNums.push(x.so.soNumber + (x.shipped > 0 ? ' (ส่งแล้ว ' + x.shipped + ')' : ' (ยังไม่ส่ง)')); }); });
+      return [it.model || '', it.sku || '', it.totalQty, it.totalShipped, it.totalQty - it.totalShipped, it.poOrder.join(', '), soNums.join('; ')];
+    });
+    rowCount = rows3.length;
+    var ws3 = XLSX.utils.aoa_to_sheet([header3].concat(rows3));
+    ws3['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 30 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'ตามสินค้า');
+  }
+
+  if (!rowCount) { toast('ไม่มีรายการให้ export ตาม filter ปัจจุบัน'); return; }
+  var safeName = String(d.name || 'dealer').replace(/[\\/:*?"<>|]/g, '_');
+  XLSX.writeFile(wb, 'สรุปค้างส่ง-' + safeName + '-' + _td() + '.xlsx');
+  toast('📤 Export Excel แล้ว (' + modeLabel + ', ' + rowCount + ' รายการ)');
 }
 
 function _csProjChip(pid) {
@@ -337,22 +523,12 @@ function _csShowProjectModal(pid) {
 
 // ---------------- มุมมอง "ตาม PO ลูกค้า" ----------------
 function _csRenderByPO(d, st) {
+  var groups = _csFilteredPOGroups(st);
+  if (!groups.length) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
   var h = '';
-  st.poGroups.forEach(function(pg, idx) {
-    var items = {}; // รวม item ข้ามทุก SO ของ PO นี้ (match ด้วย sku ก่อน, ไม่มี sku ใช้ model)
-    var order = [];
-    pg.sos.forEach(function(s) {
-      (s.items || []).forEach(function(it) {
-        var key = it.sku || it.model;
-        if (!items[key]) { items[key] = { model: it.model, qty: 0, shipped: 0, unitPrice: it.unitPrice || 0, perSo: [] }; order.push(key); }
-        var shipped = _csShippedQtyForSku(s, it.sku);
-        items[key].qty += Number(it.qty) || 0;
-        items[key].shipped += shipped;
-        items[key].perSo.push({ so: s, shipped: shipped });
-      });
-    });
-    var totalQty = 0, shippedQty = 0, poValue = 0;
-    order.forEach(function(k) { totalQty += items[k].qty; shippedQty += items[k].shipped; poValue += items[k].qty * items[k].unitPrice; });
+  groups.forEach(function(g, idx) {
+    var pg = g.pg, items = g.items, order = g.order;
+    var totalQty = g.totalQty, shippedQty = g.shippedQty, poValue = g.poValue;
     var badge = shippedQty === 0 ? _soStatusBadge(pg.sos[0].status) : (shippedQty < totalQty ? _soStatusBadge('partial_shipped') : _soStatusBadge('shipped'));
 
     h += '<details' + (idx === 0 ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:11px;overflow:hidden;margin-bottom:10px">';
@@ -394,9 +570,11 @@ function _csRenderByPO(d, st) {
 
 // ---------------- มุมมอง "ตาม SO" ----------------
 function _csRenderBySO(d, st) {
+  var sos = _csFilteredSOs(st);
+  if (!sos.length) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
   var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">';
   h += '<thead><tr><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">SO</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">PO ลูกค้า</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สถานะ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สร้างเมื่อ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">เทอมเครดิต</th></tr></thead><tbody>';
-  st.sos.slice().sort(function(a, b) { return (b.createdAt || '') > (a.createdAt || '') ? 1 : -1; }).forEach(function(s) {
+  sos.forEach(function(s) {
     var cd = _csCreditDaysForSO(d, s);
     var creditNote = cd.special
       ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;background:var(--accent-light,#17344a);border-color:var(--accent);color:var(--accent)">🏷️ เครดิตโปรเจค ' + cd.days + ' วัน</span>'
@@ -416,22 +594,8 @@ function _csRenderBySO(d, st) {
 // ---------------- มุมมอง "ตามสินค้า" ----------------
 // รวมรายการสินค้าข้ามทุก PO/SO ของ Dealer — สินค้า 1 รายการโผล่ได้หลาย PO พร้อมกัน แยกเป็น PO/SO คนละคอลัมน์ merge แถวให้คู่กัน
 function _csRenderByProduct(d, st) {
-  var map = {}, order = [];
-  st.poGroups.forEach(function(pg) {
-    pg.sos.forEach(function(s) {
-      (s.items || []).forEach(function(it) {
-        var key = it.sku || it.model;
-        var shipped = _csShippedQtyForSku(s, it.sku);
-        if (!map[key]) { map[key] = { model: it.model, totalQty: 0, totalShipped: 0, poMap: {}, poOrder: [] }; order.push(key); }
-        map[key].totalQty += Number(it.qty) || 0;
-        map[key].totalShipped += shipped;
-        if (!map[key].poMap[pg.poNo]) { map[key].poMap[pg.poNo] = { pg: pg, qty: 0, sos: [] }; map[key].poOrder.push(pg.poNo); }
-        map[key].poMap[pg.poNo].qty += Number(it.qty) || 0;
-        map[key].poMap[pg.poNo].sos.push({ so: s, shipped: shipped });
-      });
-    });
-  });
-  var items = order.map(function(k) { return map[k]; }).sort(function(a, b) { return b.poOrder.length - a.poOrder.length || b.totalQty - a.totalQty; });
+  var items = _csFilteredProductItems(st);
+  if (!items.length) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
 
   var h = '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการสินค้ารวมทุก PO/SO ของ Dealer นี้ (' + items.length + ' รายการ)</div>';
   h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
