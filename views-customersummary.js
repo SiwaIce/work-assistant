@@ -62,6 +62,16 @@ function _csShippedQtyForSku(so, sku) {
   return sum;
 }
 
+// จำนวนที่ "ควรถือว่าส่งแล้ว" ของ sku หนึ่งใน SO — ปกติใช้ยอดจริงจาก shipments[] (รอบส่งมอบที่บันทึกไว้)
+// แต่ถ้า SO ปิด/ส่งแล้ว/ออก invoice แล้ว (_soIsDone) ให้ถือว่าส่งครบเต็มจำนวนที่สั่งเสมอ ไม่ว่า shipments[] จะ
+// บันทึกครบหรือไม่ — กันเคสที่เพิ่ม serial ส่งมอบตรงๆ โดยไม่ได้สร้าง/แก้ไขรอบส่งมอบให้ตรงจำนวนจริง (serial ส่วนเกิน
+// ขึ้น "⚠️ ไม่ทราบรอบ" ในหน้า SO) ทำให้ยอดค้างส่งในสรุปไม่ตรงกับ SO ที่ปิดงานไปแล้วจริงๆ (รายงานโดยผู้ใช้ 2026-11-19)
+// — เหมือน logic เดิมที่ใช้กับรายการไม่มี sku อยู่แล้ว (ดูคอมเมนต์ใน _csDealerStats) แค่ขยายให้ครอบคลุมรายการมี sku ด้วย
+function _csEffectiveShipped(so, sku, orderedQty) {
+  if (typeof _soIsDone === 'function' && _soIsDone(so.status)) return Number(orderedQty) || 0;
+  return _csShippedQtyForSku(so, sku);
+}
+
 // รวม SO ของ Dealer เป็นกลุ่มตามเลข PO ลูกค้า (customerPO) — 1 PO อาจมีหลาย SO (แบ่งส่ง/ของมาไม่พร้อมกัน)
 function _csGroupByPO(sos) {
   var map = {}, order = [];
@@ -85,11 +95,14 @@ function _csDealerStats(d) {
     pg.sos.forEach(function(s) {
       var soDone = (typeof _soIsDone === 'function') && _soIsDone(s.status);
       (s.items || []).forEach(function(it) {
+        var qty = Number(it.qty) || 0;
         // รายการไม่มี SKU (by-order ไม่ track คลัง) ไม่มีทางถูกบันทึกว่า "ส่งแล้ว" ผ่าน shipments[] เลย
         // (soRecordShipmentRound ต้องมี sku) ถ้า SO ปิด/ส่งแล้วถือว่าส่งครบ ไม่งั้นจะค้างโชว์ตลอดไปแม้ปิด SO แล้ว
-        if (!it.sku) { if (!soDone) remainVal += (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); return; }
-        var shipped = _csShippedQtyForSku(s, it.sku);
-        var remain = Math.max(0, (Number(it.qty) || 0) - shipped);
+        // รายการมี SKU ก็ใช้กฎเดียวกัน (ผ่าน _csEffectiveShipped) — กัน SO ที่ปิดแล้วแต่ shipments[] บันทึกจำนวน
+        // ไม่ครบ (เช่น เพิ่ม serial ตรงๆ โดยไม่ได้แก้รอบส่งมอบ) ยังค้างโชว์ว่าส่งไม่ครบทั้งที่ปิดงานไปแล้ว
+        if (!it.sku) { if (!soDone) remainVal += qty * (Number(it.unitPrice) || 0); return; }
+        var shipped = _csEffectiveShipped(s, it.sku, qty);
+        var remain = Math.max(0, qty - shipped);
         remainVal += remain * (Number(it.unitPrice) || 0);
       });
     });
@@ -358,7 +371,7 @@ function _csFilteredPOGroups(st) {
         var key = it.sku || it.model;
         if (!raw[key]) { raw[key] = { model: it.model, sku: it.sku, unitPrice: it.unitPrice || 0, pairs: [] }; rawOrder.push(key); }
         var lineQty = Number(it.qty) || 0;
-        var shipped = _csShippedQtyForSku(s, it.sku);
+        var shipped = _csEffectiveShipped(s, it.sku, lineQty);
         raw[key].pairs.push({ so: s, lineQty: lineQty, shipped: shipped });
       });
     });
@@ -397,7 +410,7 @@ function _csFilteredSOs(st) {
     if (csStatusFlt && s.status !== csStatusFlt) return false;
     if (csDeliveryFlt) {
       var totalQty = 0, shipped = 0;
-      (s.items || []).forEach(function(it) { totalQty += Number(it.qty) || 0; shipped += _csShippedQtyForSku(s, it.sku); });
+      (s.items || []).forEach(function(it) { var qty = Number(it.qty) || 0; totalQty += qty; shipped += _csEffectiveShipped(s, it.sku, qty); });
       var delivered = totalQty > 0 && shipped >= totalQty;
       if (csDeliveryFlt === 'delivered' && !delivered) return false;
       if (csDeliveryFlt === 'pending' && delivered) return false;
@@ -420,7 +433,8 @@ function _csFilteredProductItems(st) {
       (s.items || []).forEach(function(it) {
         var key = it.sku || it.model;
         if (!map[key]) { map[key] = { model: it.model, sku: it.sku, pairs: [] }; order.push(key); }
-        map[key].pairs.push({ poNo: pg.poNo, pg: pg, lineQty: Number(it.qty) || 0, so: s, shipped: _csShippedQtyForSku(s, it.sku) });
+        var lineQty = Number(it.qty) || 0;
+        map[key].pairs.push({ poNo: pg.poNo, pg: pg, lineQty: lineQty, so: s, shipped: _csEffectiveShipped(s, it.sku, lineQty) });
       });
     });
   });
@@ -580,7 +594,7 @@ function _csExportExcel_impl(dealerId) {
   var soRows = sos.map(function(s) {
     var cd = _csCreditDaysForSO(d, s);
     var totalQty = 0, shipped = 0;
-    (s.items || []).forEach(function(it) { totalQty += Number(it.qty) || 0; shipped += _csShippedQtyForSku(s, it.sku); });
+    (s.items || []).forEach(function(it) { var qty = Number(it.qty) || 0; totalQty += qty; shipped += _csEffectiveShipped(s, it.sku, qty); });
     var deliveryStatus = totalQty > 0 && shipped >= totalQty ? 'ส่งแล้ว (ครบ)' : (shipped > 0 ? 'ส่งบางส่วน' : 'ยังไม่ส่ง');
     return [s.soNumber || '', s.customerPO || '', s.projectId || '', (SO_STATUS[s.status] || {}).label || s.status || '', deliveryStatus, (s.createdAt || '').slice(0, 10), cd.days != null ? cd.days : ''];
   });
