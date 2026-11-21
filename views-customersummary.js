@@ -20,6 +20,10 @@ var csSelectedDealerId = null;
 var csDeliveryFlt = ''; // '' | 'delivered' | 'pending' — กรองว่า "ส่งแล้ว (ครบ)" หรือ "ยังไม่ส่งครบ" (รวม partial ด้วย เพราะถือว่ายังไม่จบงาน)
 var csSearch = ''; // ค้นหา PO/SO/Project ID/สินค้า/SKU — ใช้ร่วมกันทั้ง 3 มุมมอง
 var csStatusFlt = ''; // กรองสถานะ SO (ใช้เฉพาะมุมมอง "ตาม SO")
+// ตัวกรองหมวดหมู่สินค้า (เฉพาะมุมมอง "ตามสินค้า") — array ของ id หมวด (PRODUCT_CATEGORIES ใน products.js)
+// ว่าง = ทุกหมวด เลือกได้พร้อมกันหลายหมวด เหมือนตัวกรองหมวดในหน้า demo-unit (ดู unitCatFilter ใน demo-staff.html)
+// ใช้ร่วมกันทั้งแท็บ "ตามสินค้า" ของ Dealer รายตัว และแท็บ "🧰 ตามสินค้า" ใน PO Tracker (views-potracker.js)
+var csCatFilter = [];
 var CS_DUE_SOON_DAYS = 7;
 var CS_STALE_WARN_DAYS = 10;
 var CS_STALE_BAD_DAYS = 20;
@@ -462,10 +466,62 @@ function _csFilteredProductItems(st) {
       poMap[p.poNo].qty += p.lineQty;
       poMap[p.poNo].sos.push({ so: p.so, shipped: p.shipped });
     });
-    items.push({ model: raw.model, sku: raw.sku, totalQty: totalQty, totalShipped: totalShipped, poMap: poMap, poOrder: poOrder });
+    // หมวดหมู่สินค้า — มาจาก catalog (products.js) ผูกด้วย sku ไม่ใช่ field ของ SO item เอง ถ้าหา sku ใน
+    // catalog ไม่เจอ (เช่น สินค้าที่ลบไปแล้ว หรือ item ไม่มี sku) ถือเป็น 'other' ไปก่อน กันตัวกรองหมวดพังเวลาไม่มีข้อมูล
+    var catProd = raw.sku && typeof getProductBySku === 'function' ? getProductBySku(raw.sku) : null;
+    items.push({ model: raw.model, sku: raw.sku, category: (catProd && catProd.category) || 'other', totalQty: totalQty, totalShipped: totalShipped, poMap: poMap, poOrder: poOrder });
   });
 
   return items.sort(function(a, b) { return b.poOrder.length - a.poOrder.length || b.totalQty - a.totalQty; });
+}
+
+// ---------------- ตัวกรองหมวดหมู่สินค้า (มุมมอง "ตามสินค้า") — ใช้ร่วมกับ PO Tracker ----------------
+// กดหมวด "ทุกหมวด" ล้างตัวเลือกทั้งหมด กดหมวดอื่นติ๊กเข้า/ออกทีละหมวด เลือกพร้อมกันได้หลายหมวด
+// (แบบเดียวกับตัวกรองหมวดในหน้า demo-unit — ดู setUnitCat ใน demo-staff.html)
+function csSetCatFilter(id) {
+  if (id === 'all') { csCatFilter = []; }
+  else {
+    var i = csCatFilter.indexOf(id);
+    if (i === -1) csCatFilter.push(id); else csCatFilter.splice(i, 1);
+  }
+  render();
+}
+// นับจาก items ที่ผ่านค้นหา/ยังไม่ส่ง-ส่งแล้วแล้ว (แต่ยังไม่กรองหมวด) ให้ตัวนับสะท้อนสโคปปัจจุบันเสมอ
+function _csCategoryTabsHtml(items) {
+  if (typeof PRODUCT_CATEGORIES === 'undefined') return '';
+  var counts = { all: items.length }, present = [];
+  PRODUCT_CATEGORIES.forEach(function(c) {
+    var n = items.filter(function(it) { return it.category === c.id; }).length;
+    if (n) { counts[c.id] = n; present.push(c); }
+  });
+  if (!present.length) return '';
+  var h = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">';
+  h += '<div class="btn bsm ' + (csCatFilter.length ? 'bo' : 'bp') + '" style="cursor:pointer" onclick="csSetCatFilter(\'all\')">📂 ทุกหมวด <span style="opacity:.7;margin-left:4px">' + counts.all + '</span></div>';
+  present.forEach(function(c) {
+    var on = csCatFilter.indexOf(c.id) !== -1;
+    h += '<div class="btn bsm ' + (on ? 'bp' : 'bo') + '" style="cursor:pointer" onclick="csSetCatFilter(\'' + c.id + '\')">' + c.name + ' <span style="opacity:.7;margin-left:4px">' + counts[c.id] + '</span></div>';
+  });
+  h += '</div>';
+  return h;
+}
+function _csPassesCatFilter(category) { return !csCatFilter.length || csCatFilter.indexOf(category) !== -1; }
+
+// ---------------- ทางลัดแก้หมวดสินค้าตรงจากแถวในตาราง "ตามสินค้า" — ไม่ต้องเปิด modal "แก้ไขสินค้า" เต็มรูปแบบ ----------------
+function _csSetProductCategoryQuick(sku, newCat) {
+  if (typeof getProductBySku !== 'function' || typeof updateProduct !== 'function') return;
+  var p = getProductBySku(sku);
+  if (!p) return;
+  updateProduct(p.id, { category: newCat });
+  render();
+}
+function _csQuickCatSelectHtml(sku) {
+  if (!sku || typeof PRODUCT_CATEGORIES === 'undefined' || typeof getProductBySku !== 'function') return '';
+  var p = getProductBySku(sku);
+  if (!p) return '';
+  var cur = p.category || 'other';
+  var opts = PRODUCT_CATEGORIES.map(function(c) { return '<option value="' + c.id + '"' + (c.id === cur ? ' selected' : '') + '>' + sanitize(c.name) + '</option>'; }).join('');
+  return '<select class="inp" style="font-size:10.5px;padding:2px 6px;margin-top:3px;max-width:180px" title="แก้หมวดสินค้านี้ด่วนจากตรงนี้" ' +
+    'onclick="event.stopPropagation()" onchange="event.stopPropagation();_csSetProductCategoryQuick(\'' + sku + '\',this.value)">' + opts + '</select>';
 }
 
 // ---------------- Export Excel — ไฟล์เดียว 3 แท็บ (ตาม PO ลูกค้า/ตาม SO/ตามสินค้า) ใช้ filter ที่เลือกอยู่ทุกแท็บ ----------------
@@ -725,10 +781,12 @@ function _csRenderBySO(d, st) {
 // ---------------- มุมมอง "ตามสินค้า" ----------------
 // รวมรายการสินค้าข้ามทุก PO/SO ของ Dealer — สินค้า 1 รายการโผล่ได้หลาย PO พร้อมกัน แยกเป็น PO/SO คนละคอลัมน์ merge แถวให้คู่กัน
 function _csRenderByProduct(d, st) {
-  var items = _csFilteredProductItems(st);
-  if (!items.length) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
+  var rawItems = _csFilteredProductItems(st);
+  var h = _csCategoryTabsHtml(rawItems);
+  var items = rawItems.filter(function(it) { return _csPassesCatFilter(it.category); });
+  if (!items.length) return h + '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
 
-  var h = '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการสินค้ารวมทุก PO/SO ของ Dealer นี้ (' + items.length + ' รายการ)</div>';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการสินค้ารวมทุก PO/SO ของ Dealer นี้ (' + items.length + ' รายการ)</div>';
   h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
   h += '<thead><tr><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">รายการสินค้า</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">รวมทุก PO</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">ส่งแล้ว</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">คงค้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน PO ไหนบ้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน SO ไหนบ้าง</th></tr></thead><tbody>';
 
@@ -747,7 +805,7 @@ function _csRenderByProduct(d, st) {
       var rowBg = (poGroupIdx % 2 === 1) ? ' style="background:var(--bg2)"' : '';
       h += '<tr' + rowBg + '>';
       if (pi === 0) {
-        h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);vertical-align:top">' + sanitize(it.model || '-') + (it.poOrder.length > 1 ? '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">อยู่ ' + it.poOrder.length + ' PO</div>' : '') + '</td>';
+        h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);vertical-align:top">' + sanitize(it.model || '-') + (it.poOrder.length > 1 ? '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">อยู่ ' + it.poOrder.length + ' PO</div>' : '') + _csQuickCatSelectHtml(it.sku) + '</td>';
         h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);text-align:center;vertical-align:top">' + it.totalQty + '</td>';
         h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);text-align:center;vertical-align:top">' + it.totalShipped + '</td>';
         h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);vertical-align:top"><div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg2);overflow:hidden"><i style="display:block;height:100%;width:' + pct + '%;background:#3ecf8e"></i></div><span style="font-size:11px;color:var(--text2);white-space:nowrap">' + (remain > 0 ? 'เหลือ ' + remain : 'ครบ') + '</span></div></td>';
@@ -762,6 +820,89 @@ function _csRenderByProduct(d, st) {
         (pair.shipped > 0 ? 'background:#3ecf8e22;border-color:#3ecf8e55;color:#3ecf8e' : 'background:var(--bg2);border-color:var(--border);color:var(--text2)') + '">' +
         (pair.shipped > 0 ? 'ส่งแล้ว ' + pair.shipped : 'ยังไม่ส่ง') + '</span></td>';
       h += '</tr>';
+    });
+  });
+  h += '</tbody></table></div>';
+  return h;
+}
+
+// ---------------- รวมทุก Dealer ตามสินค้า — ใช้โดย PO Tracker (views-potracker.js) แท็บ "🧰 ตามสินค้า" ----------------
+// จัดกลุ่มสินค้าเดียวกัน (sku/model) ข้ามทุก Dealer แล้วแตกย่อยเป็น Dealer ใต้สินค้าแต่ละตัว (ไม่ใช่คอลัมน์ Dealer
+// เฉยๆ) เพราะสินค้า 1 ตัวมักมีหลาย PO/SO ต่อ 1 Dealer อยู่แล้ว — ใช้ csSearch/csDeliveryFlt/csCatFilter ตัวเดียว
+// กับแท็บ "ตามสินค้า" ของ Dealer รายตัว ให้พฤติกรรม filter คุ้นเคยเหมือนเดิม ไม่มีตัวกรองแยกชุดใหม่
+function _csAllDealersProductHtml() {
+  var groupsMap = {}, groupOrder = [];
+  ST.getAll('dealers').forEach(function(d) {
+    if (!_csSOsForDealer(d.id).length) return;
+    var st = _csDealerStats(d);
+    _csFilteredProductItems(st).forEach(function(it) {
+      var key = it.sku || it.model;
+      if (!groupsMap[key]) { groupsMap[key] = { model: it.model, sku: it.sku, category: it.category, dealerItems: [] }; groupOrder.push(key); }
+      groupsMap[key].dealerItems.push({ dealer: d, it: it });
+    });
+  });
+  var groups = groupOrder.map(function(k) { return groupsMap[k]; });
+
+  var h = _csCategoryTabsHtml(groups);
+  var filtered = groups.filter(function(g) { return _csPassesCatFilter(g.category); });
+  if (!filtered.length) return h + '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
+
+  function _groupTotals(g) {
+    var qty = 0, shipped = 0;
+    g.dealerItems.forEach(function(di) { qty += di.it.totalQty; shipped += di.it.totalShipped; });
+    return { qty: qty, shipped: shipped };
+  }
+
+  var kpiQty = 0, kpiRemain = 0, dealersWithRemain = {}, productsWithRemain = 0;
+  filtered.forEach(function(g) {
+    var t = _groupTotals(g);
+    kpiQty += t.qty; kpiRemain += (t.qty - t.shipped);
+    if (t.qty - t.shipped > 0) {
+      productsWithRemain++;
+      g.dealerItems.forEach(function(di) { if (di.it.totalQty - di.it.totalShipped > 0) dealersWithRemain[di.dealer.id] = true; });
+    }
+  });
+  filtered.sort(function(a, b) { var ta = _groupTotals(a), tb = _groupTotals(b); return (tb.qty - tb.shipped) - (ta.qty - ta.shipped); });
+
+  h += '<div class="card-grid" style="margin-bottom:10px">' +
+    _csTile('คงค้างรวม', kpiRemain + ' ชิ้น') +
+    _csTile('สั่งรวมทั้งหมด', kpiQty + ' ชิ้น') +
+    _csTile('สินค้าที่ยังค้าง', productsWithRemain + ' รายการ') +
+    _csTile('Dealer ที่มีของค้าง', String(Object.keys(dealersWithRemain).length)) +
+    '</div>';
+  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการสินค้ารวมทุก PO/SO ของทุก Dealer (' + filtered.length + ' รายการ)</div>';
+  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+  h += '<thead><tr><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">Dealer</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">รวมทุก PO</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">ส่งแล้ว</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">คงค้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน PO ไหนบ้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน SO ไหนบ้าง</th></tr></thead><tbody>';
+
+  filtered.forEach(function(g) {
+    var t = _groupTotals(g);
+    var pct = t.qty ? Math.round(t.shipped / t.qty * 100) : 0;
+    h += '<tr style="background:var(--bg2)"><td colspan="6" style="padding:8px 8px;border-top:1px solid var(--border)">' +
+      '<div style="font-weight:600">' + sanitize(g.model || '-') + ' <span style="font-size:10.5px;color:var(--text2);font-weight:400">' + sanitize(g.sku || '') + '</span></div>' +
+      _csQuickCatSelectHtml(g.sku) +
+      '<div style="display:flex;align-items:center;gap:7px;margin-top:4px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg3,var(--bg));overflow:hidden"><i style="display:block;height:100%;width:' + pct + '%;background:#3ecf8e"></i></div>' +
+      '<span style="font-size:11px;color:var(--text2);white-space:nowrap">รวม ' + t.qty + ' ชิ้น · ส่งแล้ว ' + t.shipped + ' · ' + g.dealerItems.length + ' Dealer</span></div>' +
+      '</td></tr>';
+    g.dealerItems.forEach(function(di) {
+      var it = di.it;
+      var remain = it.totalQty - it.totalShipped;
+      var ipct = it.totalQty ? Math.round(it.totalShipped / it.totalQty * 100) : 0;
+      var poHtml = it.poOrder.map(function(poNo) {
+        var pe = it.poMap[poNo];
+        return '<div><b style="font-family:monospace">' + sanitize(poNo) + '</b> <span style="font-size:10.5px;color:var(--text2)">' + pe.qty + ' ชิ้น</span>' + _csProjChip(pe.pg.projectId) + '</div>';
+      }).join('');
+      var soHtml = it.poOrder.map(function(poNo) {
+        return it.poMap[poNo].sos.map(function(x) {
+          return '<div onclick="go(\'soDetail\',{soId:\'' + x.so.id + '\'})" style="cursor:pointer"><span style="font-family:monospace;font-weight:600">' + sanitize(x.so.soNumber || '-') + '</span> ' +
+            '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;' + (x.shipped > 0 ? 'background:#3ecf8e22;border-color:#3ecf8e55;color:#3ecf8e' : 'background:var(--bg2);border-color:var(--border);color:var(--text2)') + '">' + (x.shipped > 0 ? 'ส่งแล้ว ' + x.shipped : 'ยังไม่ส่ง') + '</span></div>';
+        }).join('');
+      }).join('');
+      h += '<tr><td style="padding:7px 8px;border-top:1px solid var(--border)"><span style="font-size:10.5px;padding:2px 8px;border-radius:7px;background:var(--accent-light,rgba(59,130,246,.1));color:var(--accent);font-weight:600;white-space:nowrap">🏢 ' + sanitize(di.dealer.name) + '</span></td>' +
+        '<td style="padding:7px 8px;border-top:1px solid var(--border);text-align:center">' + it.totalQty + '</td>' +
+        '<td style="padding:7px 8px;border-top:1px solid var(--border);text-align:center">' + it.totalShipped + '</td>' +
+        '<td style="padding:7px 8px;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg2);overflow:hidden"><i style="display:block;height:100%;width:' + ipct + '%;background:#3ecf8e"></i></div><span style="font-size:11px;color:var(--text2);white-space:nowrap">' + (remain > 0 ? 'เหลือ ' + remain : 'ครบ') + '</span></div></td>' +
+        '<td style="padding:7px 8px;border-top:1px solid var(--border)">' + poHtml + '</td>' +
+        '<td style="padding:7px 8px;border-top:1px solid var(--border)">' + soHtml + '</td></tr>';
     });
   });
   h += '</tbody></table></div>';

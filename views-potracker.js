@@ -6,7 +6,8 @@
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
 var poTrackerTypeFlt = ''; // '' | project | runrate — แยก SO โครงการ กับ Run rate
-var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว) | reserve1021 — แท็บติดตามการจองคลัง 1021 (แสดงได้ทุกเมื่อ ไม่ต้องเลือก Dealer)
+var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว) | reserve1021 — แท็บติดตามการจองคลัง 1021 (แสดงได้ทุกเมื่อ ไม่ต้องเลือก Dealer) | byProduct — แท็บ "🧰 ตามสินค้า" (ของเดิมในหน้า Dealer มาไว้ตรงนี้ด้วย + โหมดรวมทุก Dealer)
+var poTrackerProductAllDealer = false; // ใช้เฉพาะแท็บ byProduct — false = ดูเฉพาะ Dealer ที่เลือกอยู่ (poTrackerDealerFlt) | true = รวมทุก Dealer
 var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
 var poTrackerReadyFlt = '';  // '' | ready | notready
@@ -329,6 +330,38 @@ function _poTrackerClusterRowHtml(c, selectedBuckets) {
   });
   html += '</div>';
   return html;
+}
+
+// แท็บ "🧰 ตามสินค้า" ของ PO Tracker — เอาแท็บ "ตามสินค้า" ของหน้า Dealer (dealerARSummaryTab ใน views-dealer.js,
+// เรนเดอร์จริงใน _csRenderByProduct ที่ views-customersummary.js) มาไว้ตรงนี้ด้วย ไม่ต้องออกไปหน้า Dealer
+// เพิ่มโหมด "ดูรวมทุก Dealer" ที่แท็บเดิมไม่มี — ใช้ฟังก์ชันชุดเดียวกับหน้า Dealer ไม่ได้เขียนซ้ำ (ของเดิมในหน้า
+// Dealer ไม่ถูกแตะ ยังทำงานเหมือนเดิมทุกอย่าง) ตัวกรองค้นหา/ยังไม่ส่ง-ส่งแล้ว/หมวดสินค้า (csSearch/csDeliveryFlt/
+// csCatFilter ใน views-customersummary.js) ใช้ร่วมกับหน้า Dealer ด้วย เพื่อให้พฤติกรรมคุ้นเคยเหมือนเดิม
+function _poTrackerByProductHtml(dealerName) {
+  // บังคับ csViewMode เป็น 'product' เสมอตอนเปิดแท็บนี้ กัน state ค้างจากหน้า Dealer (เช่นถ้าเพิ่งดูแท็บ "ตาม SO"
+  // มาก่อน) ทำให้ _csRenderFilterBar() โชว์ dropdown สถานะ SO ที่ไม่เกี่ยวกับแท็บนี้ติดมาด้วย
+  csViewMode = 'product';
+
+  var h = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+    '<button class="btn bsm ' + (!poTrackerProductAllDealer ? 'bp' : 'bo') + '" onclick="poTrackerProductAllDealer=false;render()">👤 Dealer นี้</button>' +
+    '<button class="btn bsm ' + (poTrackerProductAllDealer ? 'bp' : 'bo') + '" onclick="poTrackerProductAllDealer=true;render()">🏭 ดูรวมทุก Dealer</button>' +
+    '</div>';
+
+  if (poTrackerProductAllDealer) {
+    h += _csRenderFilterBar();
+    h += _csAllDealersProductHtml();
+    return h;
+  }
+
+  var dealerRec = ST.getAll('dealers').filter(function(dl) { return dl.name === dealerName; })[0];
+  if (!dealerRec) {
+    return h + '<div style="color:var(--text2);font-size:13px">ไม่พบ Dealer "' + sanitize(dealerName) + '" ในรายชื่อ Dealer ของระบบ (ชื่ออาจไม่ตรงกัน) — ลองดูโหมด "ดูรวมทุก Dealer" แทน</div>';
+  }
+  var st = _csDealerStats(dealerRec);
+  if (!st.sos.length) return h + '<div style="color:var(--text2);font-size:13px">Dealer นี้ยังไม่มี Sales Order</div>';
+  h += _csRenderFilterBar();
+  h += _csRenderByProduct(dealerRec, st);
+  return h;
 }
 
 // แผงสรุปรายการสินค้าของ Dealer ที่กำลังกรองอยู่ — แบ่งแท็ปตามสถานะ (เลือกได้พร้อมกันหลายแท็ป) แล้วจัดกลุ่มตามหมวดหมู่สินค้า
@@ -1052,10 +1085,16 @@ function rPOTracker(el) {
     html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
     html += '<button class="btn bsm ' + (poTrackerMainTab === 'summary' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'summary\';render()">📊 สรุปรายการสินค้า</button>';
     html += '<button class="btn bsm ' + (poTrackerMainTab === 'cards' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'cards\';render()">🗂️ PO/SO Cards</button>';
+    html += '<button class="btn bsm ' + (poTrackerMainTab === 'byProduct' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'byProduct\';render()" title="หน้าตาเดียวกับแท็บ ตามสินค้า ในหน้า Dealer แต่เปิดจาก PO Tracker ตรงนี้ได้เลย + ดูรวมทุก Dealer ได้">🧰 ตามสินค้า</button>';
     html += '</div>';
     if (poTrackerMainTab === 'summary') {
       var dealerRows = _poTrackerSortRows(rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt && _poTrackerRowMatchesTopFilters(r); }));
       html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
+      el.innerHTML = html;
+      return;
+    }
+    if (poTrackerMainTab === 'byProduct') {
+      html += _poTrackerByProductHtml(poTrackerDealerFlt);
       el.innerHTML = html;
       return;
     }
