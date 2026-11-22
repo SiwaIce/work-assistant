@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>ราคาสินค้า</title>
+<link rel="icon" href="data:,">
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js" defer></script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --border:#2a2e38; --text:#eef0f3; --text2:#9aa1ad;
+    --accent:#3b82f6; --accent-fg:#ffffff; --warn:#fbbf24; --warnbg:#3a2e0f; --chip:#232733;
+    --good:#4ade80;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;}
+  button{font-family:inherit}
+  header{position:sticky;top:0;z-index:10;background:var(--bg);padding:10px 12px 8px;border-bottom:1px solid var(--border)}
+  .h-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+  header h1{font-size:15px;margin:0;display:flex;align-items:center;gap:6px;font-weight:700}
+  .btn{border:1px solid var(--border);background:var(--chip);color:var(--text);border-radius:8px;padding:7px 11px;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+  .btn.ghost{background:transparent}
+  .btn:active{opacity:.8}
+  .search-row{display:flex;gap:6px}
+  .search-row input{flex:1;min-width:0;background:var(--chip);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-size:14px}
+  .search-row input:focus{outline:none;border-color:var(--accent)}
+  .filters{display:flex;gap:6px;margin-top:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .filters::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;background:var(--chip);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:12.5px;color:var(--text2);white-space:nowrap;cursor:pointer}
+  .chip.active{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+  main{padding:10px 12px 24px}
+  main.has-bar{padding-bottom:150px}
+  .count{font-size:12px;color:var(--text2);margin:8px 2px 10px;display:flex;justify-content:space-between;align-items:center}
+  .count .sel{color:var(--accent);font-weight:700}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:8px;position:relative;transition:border-color .15s}
+  .card.picked{border-color:var(--accent)}
+  .card-top{display:flex;gap:8px;align-items:flex-start}
+  .chk{flex:0 0 auto;width:20px;height:20px;border-radius:6px;border:2px solid var(--border);background:var(--chip);
+    display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--accent-fg);cursor:pointer;margin-top:1px}
+  .chk.on{background:var(--accent);border-color:var(--accent)}
+  .card-main{flex:1;min-width:0}
+  .name-row{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+  .name{font-size:14px;font-weight:700;line-height:1.35}
+  .sku{font-size:11px;color:var(--text2);margin-top:2px}
+  .cat{font-size:10.5px;background:var(--chip);color:var(--text2);padding:2px 7px;border-radius:6px;flex:0 0 auto;white-space:nowrap}
+  .eol-badge{font-size:10px;background:#3a1414;color:#f87171;padding:2px 7px;border-radius:6px;margin-left:6px}
+  .prices{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .ptag{flex:1;min-width:72px;background:var(--chip);border-radius:8px;padding:6px 8px;text-align:center}
+  .ptag .lv{font-size:10px;color:var(--text2)}
+  .ptag .val{font-size:13px;font-weight:700;margin-top:1px;font-variant-numeric:tabular-nums}
+  .rrp{font-size:11.5px;color:var(--text2);margin-top:8px;display:flex;justify-content:space-between;gap:8px;font-variant-numeric:tabular-nums}
+  .rrp b{color:var(--text)}
+  .card-foot{display:flex;justify-content:flex-end;margin-top:8px}
+  .copy-one{display:flex;align-items:center;gap:5px;background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;padding:4px 2px;cursor:pointer}
+  .copy-one.done{color:var(--good)}
+  .empty{text-align:center;padding:40px 10px;color:var(--text2);font-size:13px}
+  .gate{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
+  .gate .logo{font-size:40px}
+  .gate h2{margin:0;font-size:17px}
+  .gate p{margin:0;color:var(--text2);font-size:13px;max-width:280px}
+  .gate .err{color:#f87171;font-size:12.5px}
+  .spin{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .bar{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--card);border-top:1px solid var(--border);
+    padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -6px 18px -8px rgba(0,0,0,.4); display:none}
+  .bar.show{display:block}
+  .bar-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch}
+  .bar-row::-webkit-scrollbar{display:none}
+  .bar-row .lbl{font-size:10.5px;color:var(--text2);flex:0 0 auto;align-self:center;padding-right:2px}
+  .bar-actions{display:flex;gap:8px;align-items:center}
+  .fmt-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex:0 0 auto}
+  .fmt-toggle button{border:none;background:var(--chip);color:var(--text2);font-size:12px;padding:8px 10px;cursor:pointer;font-weight:600}
+  .fmt-toggle button.on{background:var(--accent);color:var(--accent-fg)}
+  .bar-actions .btn.primary{flex:1}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate">
+  <div class="logo">⚡</div>
+  <h2>ราคาสินค้า</h2>
+  <p>หน้าดูราคาสินค้าแบบเบา สำหรับเช็กราคาให้ลูกค้าได้รวดเร็วบนมือถือ</p>
+  <div id="gateLoading" hidden><div class="spin"></div></div>
+  <button class="btn primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบด้วย Google</button>
+  <div class="err" id="gateErr" hidden></div>
+</div>
+
+<div id="app" hidden>
+<header>
+  <div class="h-row">
+    <h1>⚡ ราคาสินค้า</h1>
+    <div style="display:flex;gap:6px">
+      <button class="btn" id="selToggleBtn" onclick="toggleSelectMode()">☑️ เลือกหลายชิ้น</button>
+      <button class="btn ghost" onclick="doLogout()" title="ออกจากระบบ">⎋</button>
+    </div>
+  </div>
+  <div class="search-row">
+    <input id="q" type="text" placeholder="🔍 ค้นหาชื่อ / SKU" oninput="render()">
+  </div>
+  <div class="filters" id="catFilters"></div>
+</header>
+
+<main id="mainEl">
+  <div class="count" id="count"></div>
+  <div id="list"></div>
+</main>
+</div>
+
+<div class="bar" id="bar">
+  <div class="bar-row" id="levelChips"></div>
+  <div class="bar-actions">
+    <div class="fmt-toggle" id="fmtToggle"></div>
+    <button class="btn ghost" onclick="clearSelection()">ยกเลิก</button>
+    <button class="btn primary" id="copyBtn" onclick="copySelected()">📋 คัดลอก (<span id="selCount">0</span>)</button>
+  </div>
+</div>
+
+<script>
+// แยกจากแอพหลักโดยตั้งใจ — โหลดแค่ Firebase SDK (auth + firestore) กับสคริปต์นี้ไฟล์เดียว ไม่พ่วง
+// utils.js/storage.js/views-*.js/app.js ฯลฯ ของแอพหลัก (รวมกันหลาย MB) เพื่อให้เปิดเร็วบนมือถือ/เน็ตช้า
+// ต้อง login ด้วย Google account เดียวกับที่ใช้ในแอพหลัก (uid เดียวกัน) เพราะ products ของผู้ใช้เก็บที่
+// users/{uid}/products ตาม firestore.rules (อ่าน/เขียนได้เฉพาะเจ้าของ uid) — หน้านี้อ่านอย่างเดียว ไม่เขียน
+firebase.initializeApp({
+  apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
+  authDomain: "work-assistant-9e024.firebaseapp.com",
+  projectId: "work-assistant-9e024",
+  storageBucket: "work-assistant-9e024.firebasestorage.app",
+  messagingSenderId: "796607223436",
+  appId: "1:796607223436:web:1455abe90b141104678da9"
+});
+var db = firebase.firestore();
+var auth = firebase.auth();
+
+var PRODUCT_CATEGORIES = [
+  { id: 'drone', name: '🚁 Drone' },
+  { id: 'payload', name: '📷 Payload' },
+  { id: 'battery', name: '🔋 Battery' },
+  { id: 'charger', name: '⚡ Charger/Accessory' },
+  { id: 'software', name: '💻 Software' },
+  { id: 'service', name: '🛠️ Service' },
+  { id: 'bundle', name: '🎁 Bundle' },
+  { id: 'demo', name: '🎪 Demo Unit' },
+  { id: 'demo_accessory', name: '🔧 Demo Accessory' },
+  { id: 'other', name: '📦 Other' }
+];
+function categoryName(id) {
+  var c = PRODUCT_CATEGORIES.find(function(x) { return x.id === id; });
+  return c ? c.name : '📦 Other';
+}
+function isDemoCategory(id) { return id === 'demo' || id === 'demo_accessory'; }
+
+var LEVELS = [
+  {id:"rrpInVat", label:"RRP รวม Vat"},
+  {id:"rrpExVat", label:"RRP Ex Vat"},
+  {id:"S", label:"ราคา S"},
+  {id:"A", label:"ราคา A"},
+  {id:"B", label:"ราคา B"},
+  {id:"Other", label:"ราคา Other"}
+];
+
+var PRODUCTS = [];
+var activeCat = "all";
+var selectMode = false;
+var selected = {};
+var selectedLevels = {rrpInVat:true, rrpExVat:true, S:true, A:true, B:true, Other:true};
+var copyFormat = "text";
+
+function fmt(n){ return (n || 0).toLocaleString('th-TH'); }
+function byId(id){ for (var i=0;i<PRODUCTS.length;i++) if (PRODUCTS[i].id===id) return PRODUCTS[i]; return null; }
+function levelVal(p, levelId) {
+  if (levelId === 'rrpInVat') return p.rrpInVat || 0;
+  if (levelId === 'rrpExVat') return p.rrpExVat || 0;
+  return (p.typePrices && p.typePrices[levelId]) || 0;
+}
+
+// ---------- Auth ----------
+function doLogin() {
+  document.getElementById('gateErr').hidden = true;
+  document.getElementById('gateLoading').hidden = false;
+  document.getElementById('loginBtn').hidden = true;
+  var provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(function(err) {
+    document.getElementById('gateLoading').hidden = true;
+    document.getElementById('loginBtn').hidden = false;
+    var el = document.getElementById('gateErr');
+    el.textContent = '❌ เข้าสู่ระบบไม่สำเร็จ: ' + (err && err.message ? err.message : 'ไม่ทราบสาเหตุ');
+    el.hidden = false;
+  });
+}
+function doLogout() {
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(function(user) {
+  if (user) {
+    document.getElementById('gate').hidden = true;
+    document.getElementById('app').hidden = false;
+    loadProducts(user.uid);
+  } else {
+    document.getElementById('gate').hidden = false;
+    document.getElementById('app').hidden = true;
+    document.getElementById('gateLoading').hidden = true;
+    document.getElementById('loginBtn').hidden = false;
+  }
+});
+
+// ---------- Data ----------
+function loadProducts(uid) {
+  document.getElementById('list').innerHTML = '<div class="empty"><div class="spin" style="margin:0 auto 10px"></div>กำลังโหลดรายการสินค้า…</div>';
+  db.collection('users').doc(uid).collection('products').get().then(function(snap) {
+    var items = [];
+    snap.forEach(function(doc) {
+      if (doc.id === '_meta') return;
+      var d = doc.data();
+      if (!d.id) d.id = doc.id;
+      items.push(d);
+    });
+    PRODUCTS = items;
+    renderFilters();
+    render();
+  }).catch(function(err) {
+    document.getElementById('list').innerHTML = '<div class="empty">❌ โหลดรายการสินค้าไม่สำเร็จ: ' + (err && err.message ? err.message : '') + '</div>';
+  });
+}
+
+// ---------- UI: filters / select mode ----------
+function renderFilters(){
+  var cats = {};
+  PRODUCTS.forEach(function(p){ if (p.category) cats[p.category] = true; });
+  var list = [{id:'all', name:'📂 ทุกหมวด'}].concat(
+    Object.keys(cats).map(function(id){ return {id:id, name:categoryName(id)}; })
+  );
+  var el = document.getElementById('catFilters');
+  el.innerHTML = list.map(function(c){
+    return '<div class="chip'+(c.id===activeCat?' active':'')+'" onclick="setCat(\''+c.id+'\')">'+c.name+'</div>';
+  }).join('');
+}
+function setCat(id){ activeCat = id; renderFilters(); render(); }
+
+function toggleSelectMode(){
+  selectMode = !selectMode;
+  var btn = document.getElementById('selToggleBtn');
+  btn.textContent = selectMode ? '✖️ ออกจากโหมดเลือก' : '☑️ เลือกหลายชิ้น';
+  btn.className = selectMode ? 'btn primary' : 'btn';
+  if (!selectMode) selected = {};
+  render();
+}
+function clearSelection(){ selected = {}; render(); }
+function toggleOne(id, ev){
+  if (ev) ev.stopPropagation();
+  if (selected[id]) delete selected[id]; else selected[id] = true;
+  render();
+}
+function toggleLevel(id){ selectedLevels[id] = !selectedLevels[id]; renderLevelChips(); }
+function setFormat(f){ copyFormat = f; renderFmtToggle(); }
+
+function renderLevelChips(){
+  var el = document.getElementById('levelChips');
+  el.innerHTML = '<span class="lbl">คัดลอกข้อมูล:</span>' + LEVELS.map(function(l){
+    return '<div class="chip'+(selectedLevels[l.id]?' active':'')+'" onclick="toggleLevel(\''+l.id+'\')">'+l.label+'</div>';
+  }).join('');
+}
+function renderFmtToggle(){
+  var el = document.getElementById('fmtToggle');
+  el.innerHTML =
+    '<button class="'+(copyFormat==='text'?'on':'')+'" onclick="setFormat(\'text\')">📝 ข้อความ</button>' +
+    '<button class="'+(copyFormat==='table'?'on':'')+'" onclick="setFormat(\'table\')">📊 ตาราง</button>';
+}
+function activeLevelList(){ return LEVELS.filter(function(l){ return selectedLevels[l.id]; }); }
+
+// ---------- Copy ----------
+function productLines(p, levels){
+  return levels.map(function(l){ return l.label + ': ' + fmt(levelVal(p, l.id)) + ' บาท'; });
+}
+function oneItemText(p){
+  var levels = activeLevelList();
+  return [p.name, 'SKU: ' + (p.sku || '-')].concat(productLines(p, levels)).join('\n');
+}
+function buildTextBlock(products){
+  var levels = activeLevelList();
+  return products.map(function(p){
+    return [p.name, 'SKU: ' + (p.sku || '-')].concat(productLines(p, levels)).join('\n');
+  }).join('\n\n');
+}
+function buildTableBlock(products){
+  var levels = activeLevelList();
+  var header = ['ชื่อสินค้า', 'SKU'].concat(levels.map(function(l){ return l.label; }));
+  var rows = [header.join('\t')];
+  products.forEach(function(p){
+    var row = [p.name, p.sku || '-'].concat(levels.map(function(l){ return fmt(levelVal(p, l.id)); }));
+    rows.push(row.join('\t'));
+  });
+  return rows.join('\n');
+}
+function doCopy(text, onDone){
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(onDone, function(){ fallbackCopy(text, onDone); });
+  } else {
+    fallbackCopy(text, onDone);
+  }
+}
+function fallbackCopy(text, onDone){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch(e) {}
+  if (onDone) onDone();
+}
+function copyOne(id, ev){
+  if (ev) ev.stopPropagation();
+  var p = byId(id);
+  if (!p) return;
+  doCopy(oneItemText(p), function(){
+    var el = document.getElementById('copyOne-' + id);
+    if (!el) return;
+    var old = el.innerHTML;
+    el.innerHTML = '✅ คัดลอกแล้ว';
+    el.classList.add('done');
+    setTimeout(function(){ el.innerHTML = old; el.classList.remove('done'); }, 1400);
+  });
+}
+function copySelected(){
+  var ids = Object.keys(selected);
+  if (!ids.length) return;
+  var products = ids.map(byId).filter(Boolean);
+  var text = copyFormat === 'table' ? buildTableBlock(products) : buildTextBlock(products);
+  doCopy(text, function(){
+    var btn = document.getElementById('copyBtn');
+    var old = btn.innerHTML;
+    btn.innerHTML = '✅ คัดลอกแล้ว';
+    setTimeout(function(){ btn.innerHTML = old; }, 1400);
+  });
+}
+
+// ---------- Render ----------
+function render(){
+  var q = document.getElementById('q').value.trim().toLowerCase();
+  var items = PRODUCTS.filter(function(p){
+    var okCat = activeCat === 'all' || p.category === activeCat;
+    var okQ = !q ||
+      (p.name || '').toLowerCase().indexOf(q) !== -1 ||
+      (p.sku || '').toLowerCase().indexOf(q) !== -1 ||
+      (p.ean || '').toLowerCase().indexOf(q) !== -1;
+    return okCat && okQ;
+  });
+
+  var selCount = Object.keys(selected).length;
+  var countEl = document.getElementById('count');
+  countEl.innerHTML = '<span>พบ ' + items.length + ' รายการ</span>' +
+    (selectMode ? '<span class="sel">เลือกแล้ว ' + selCount + ' รายการ</span>' : '');
+
+  var list = document.getElementById('list');
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">🔍 ไม่พบสินค้าที่ค้นหา</div>';
+  } else {
+    list.innerHTML = items.map(function(p){
+      var picked = !!selected[p.id];
+      var chkHtml = selectMode
+        ? '<div class="chk'+(picked?' on':'')+'" onclick="toggleOne(\''+p.id+'\', event)">'+(picked?'✓':'')+'</div>'
+        : '';
+      var tp = p.typePrices || {};
+      return '' +
+        '<div class="card'+(picked?' picked':'')+'"'+(selectMode?' onclick="toggleOne(\''+p.id+'\', event)"':'')+'>' +
+          '<div class="card-top">' +
+            chkHtml +
+            '<div class="card-main">' +
+              '<div class="name-row">' +
+                '<div><div class="name">'+(p.name||'-')+'</div><div class="sku">SKU: '+(p.sku||'-')+'</div></div>' +
+                '<div class="cat">'+categoryName(p.category)+(p.eol ? '<span class="eol-badge">EOL</span>' : '')+'</div>' +
+              '</div>' +
+              '<div class="prices">' +
+                '<div class="ptag"><div class="lv">S</div><div class="val">'+fmt(tp.S)+'</div></div>' +
+                '<div class="ptag"><div class="lv">A</div><div class="val">'+fmt(tp.A)+'</div></div>' +
+                '<div class="ptag"><div class="lv">B</div><div class="val">'+fmt(tp.B)+'</div></div>' +
+                '<div class="ptag"><div class="lv">Other</div><div class="val">'+fmt(tp.Other)+'</div></div>' +
+              '</div>' +
+              '<div class="rrp"><span>RRP รวม VAT: <b>'+fmt(p.rrpInVat)+'</b></span><span>Ex VAT: <b>'+fmt(p.rrpExVat)+'</b></span></div>' +
+              '<div class="card-foot"><button class="copy-one" id="copyOne-'+p.id+'" onclick="copyOne(\''+p.id+'\', event)">📋 คัดลอกรายการนี้</button></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  var bar = document.getElementById('bar');
+  var main = document.getElementById('mainEl');
+  var showBar = selectMode && selCount > 0;
+  bar.className = 'bar' + (showBar ? ' show' : '');
+  main.className = showBar ? 'has-bar' : '';
+  document.getElementById('selCount').textContent = selCount;
+}
+
+renderLevelChips();
+renderFmtToggle();
+</script>
+</body>
+</html>
