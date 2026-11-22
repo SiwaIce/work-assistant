@@ -123,6 +123,13 @@ function _publishGuestViewProducts(data) {
     db.collection('guestViewData').doc(CURRENT_USER.uid).collection('products').doc('_data')
       .set({ value: data.models || [] }).catch(function(e) { console.warn('publish guest products error:', e); });
   } catch (e) { console.warn('publish guest products error:', e); }
+  // เก็บ uid ของ user ปัจจุบันไว้ใน dealerUpdates/productPricesAuth (เปิด read/write:true อยู่แล้ว) ด้วย —
+  // เพื่อให้ product-prices.html หาข้อมูลเจ้าของได้เองจาก PIN อย่างเดียว ไม่ต้องพึ่ง ?u= จากลิงก์ในแอพหลัก
+  // (ผู้ใช้แอพนี้มีคนเดียว จึงไม่ต้องกังวลเรื่องชนกันระหว่างหลาย uid)
+  try {
+    db.collection('dealerUpdates').doc('productPricesAuth').set({ ownerUid: CURRENT_USER.uid }, { merge: true })
+      .catch(function(e) { console.warn('publish productPricesAuth ownerUid error:', e); });
+  } catch (e) { console.warn('publish productPricesAuth ownerUid error:', e); }
 }
 
 // ✅ Publish แคตตาล็อก (ชื่อ+หมวด) ไป Firestore ให้ client-view อ่านได้ (ลูกค้าอ่าน localStorage เครื่องเซลล์ไม่ได้)
@@ -2200,7 +2207,7 @@ function rProducts(el) {
     html += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 เพิ่มสินค้าทีละมากๆ ใช้ 📤 Export ออกไปแก้ใน Excel แล้ว 📥 นำเข้ากลับ หรือ 📋 วาง Excel ก๊อปจากชีตมาวางตรงๆ</div>';
     html += '</div>';
   }
-  html += '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button><button class="btn bo" onclick="openProductPricesLite()" title="หน้าแยก โหลดเร็ว เหมาะกับมือถือ ไม่ต้อง login ซ้ำ">⚡ ลิงก์ราคาเร็ว (มือถือ)</button></span></h2>';
+  html += '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button>' + productPricesLiteLinkHtml() + '</span></h2>';
   // ทางลัดไปหน้า "ราคาตาม Level" — เดิมเป็นเมนูแยกในไซด์บาร์ ยุบมารวมเป็นปุ่มในหน้านี้แทนเพื่อลดจำนวนเมนู
   // (2026-08-30) หน้า productPrices เองไม่ได้แก้/ย้ายอะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกในไซด์บาร์แล้ว
   html += '<div style="margin-bottom:10px"><button class="btn bsm bp">📋 Catalog</button> <button class="btn bsm bo" onclick="go(\'productPrices\')">💰 ราคาตาม Level</button></div>';
@@ -3514,12 +3521,18 @@ function getCategoryIcon(catId) {
   return cat ? cat.icon : '📦';
 }
 
-// เปิดหน้าแยก product-prices.html (เบา, มือถือ, ไม่ login) พร้อม uid ของผู้ใช้ปัจจุบัน — เรียกจากปุ่มใน
-// หน้า "สินค้าทั้งหมด" โดยตรง (ย้ายมาจากเมนูไซด์บาร์แยกต่างหากตามที่ผู้ใช้ขอ 2026-11-22 กันสับสนว่าเป็นคนละหน้า)
-function openProductPricesLite() {
+// ลิงก์ไปหน้าแยก product-prices.html (เบา, มือถือ, ไม่ login) พร้อม uid ของผู้ใช้ปัจจุบัน — แสดงในหน้า
+// "สินค้าทั้งหมด" โดยตรง (ย้ายมาจากเมนูไซด์บาร์แยกต่างหากตามที่ผู้ใช้ขอ 2026-11-22 กันสับสนว่าเป็นคนละหน้า)
+//
+// ⚠️ เดิมใช้ <button onclick="window.open(...)"> แต่ window.open() ที่เรียกจาก event handler ของปุ่มที่สร้าง
+// ผ่าน innerHTML ไม่น่าเชื่อถือบนมือถือ/โหมด PWA บางเครื่อง (เปิดไม่ติด/เปิดแล้วไม่พกพารามิเตอร์ไปด้วย ผู้ใช้
+// แจ้งซ้ำหลายรอบ 2026-11-22) เปลี่ยนเป็น <a href> จริงที่ฝัง uid ไว้ในลิงก์ตอน render เลย ให้เบราว์เซอร์จัดการ
+// เปิดแท็บใหม่แบบเดียวกับลิงก์ทั่วไป เสถียรกว่ามาก
+function productPricesLiteLinkHtml() {
   var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER && CURRENT_USER.uid) || '';
-  if (!uid) { if (typeof toast === 'function') toast('❌ ต้อง login ก่อนถึงจะเปิดลิงก์นี้ได้'); return; }
-  window.open('product-prices.html?u=' + encodeURIComponent(uid), '_blank');
+  if (!uid) return '';
+  var href = 'product-prices.html?u=' + encodeURIComponent(uid);
+  return '<a class="btn bo" href="' + href + '" target="_blank" rel="noopener noreferrer" title="หน้าแยก โหลดเร็ว เหมาะกับมือถือ ไม่ต้อง login ซ้ำ">⚡ ลิงก์ราคาเร็ว (มือถือ)</a>';
 }
 
 // ================================================================

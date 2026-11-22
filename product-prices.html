@@ -157,6 +157,21 @@ if (OWNER_UID) {
 } else {
   try { OWNER_UID = localStorage.getItem(OWNER_UID_KEY) || ''; } catch(e) {}
 }
+// ถ้าไม่มีทั้ง ?u= และ localStorage (เช่น เปิดลิงก์เปล่าๆ/บุ๊กมาร์กที่ไม่เคยมี uid มาก่อน) ลองอ่าน uid ของ
+// เจ้าของจาก dealerUpdates/productPricesAuth.ownerUid ซึ่งแอพหลัก publish ไว้ให้อัตโนมัติทุกครั้งที่ login
+// (ดู _publishGuestViewProducts ใน products.js) — ทำให้หน้านี้เข้าได้ด้วย PIN อย่างเดียว ไม่ต้องพึ่งลิงก์จาก
+// แอพหลักเลย (แอพนี้มีผู้ใช้คนเดียวจึงไม่ต้องกังวลว่าจะได้ uid ผิดคน)
+function resolveOwnerUid() {
+  if (OWNER_UID) return Promise.resolve(OWNER_UID);
+  return db.collection('dealerUpdates').doc('productPricesAuth').get().then(function(doc) {
+    var uid = (doc.exists && doc.data().ownerUid) || '';
+    if (uid) {
+      OWNER_UID = uid;
+      try { localStorage.setItem(OWNER_UID_KEY, OWNER_UID); } catch(e) {}
+    }
+    return OWNER_UID;
+  }).catch(function() { return OWNER_UID; });
+}
 var PIN_OK_KEY = 'productPricesPinOk';
 var PIN_OK_DAYS = 30;
 
@@ -237,15 +252,17 @@ function changePin() {
   });
 }
 function attemptUnlock() {
-  if (!OWNER_UID) {
-    showGateErr('❌ ลิงก์นี้ไม่สมบูรณ์ — กรุณาเปิดจากเมนู "ราคาสินค้า (ลิงก์แยก/เร็ว)" ในแอพหลักอีกครั้ง');
-    return;
-  }
   var pin = document.getElementById('pinInput').value.trim();
   var btn = document.getElementById('unlockBtn');
   document.getElementById('gateErr').hidden = true;
   if (!pin) { showGateErr('กรอกรหัสผ่านก่อนนะครับ'); return; }
   btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
+  resolveOwnerUid().then(function(uid) {
+  if (!uid) {
+    showGateErr('❌ ยังไม่มีข้อมูลเจ้าของลิงก์นี้ — กรุณาเปิดแอพหลัก เข้าเมนู "สินค้าทั้งหมด" สักครั้งเพื่อซิงก์ข้อมูล แล้วลองใหม่');
+    btn.disabled = false; btn.textContent = '🔓 เข้าดูราคา';
+    return;
+  }
   db.collection('dealerUpdates').doc('productPricesAuth').get().then(function(doc) {
     if (!doc.exists || !doc.data().pinHash) {
       if (!confirm('ยังไม่เคยตั้งรหัสผ่านสำหรับหน้านี้ ต้องการตั้งรหัส "' + pin + '" เป็นรหัสผ่านเลยไหม?')) {
@@ -267,6 +284,7 @@ function attemptUnlock() {
     showGateErr('⚠️ เชื่อมต่อไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
     btn.disabled = false; btn.textContent = '🔓 เข้าดูราคา';
   });
+  });
 }
 function unlockSuccess() {
   try { localStorage.setItem(PIN_OK_KEY, String(Date.now() + PIN_OK_DAYS * 86400000)); } catch(e) {}
@@ -277,7 +295,7 @@ function unlockSuccess() {
 function checkStoredPin() {
   try {
     var v = localStorage.getItem(PIN_OK_KEY);
-    if (v && Number(v) > Date.now()) { unlockSuccess(); return true; }
+    if (v && Number(v) > Date.now()) { resolveOwnerUid().then(unlockSuccess); return true; }
   } catch(e) {}
   return false;
 }
@@ -473,11 +491,7 @@ function render(){
 
 renderLevelChips();
 renderFmtToggle();
-if (!OWNER_UID) {
-  showGateErr('❌ ลิงก์นี้ไม่สมบูรณ์ — กรุณาเปิดจากเมนู "ราคาสินค้า (ลิงก์แยก/เร็ว)" ในแอพหลักอีกครั้ง');
-} else {
-  checkStoredPin();
-}
+checkStoredPin();
 </script>
 </body>
 </html>
