@@ -147,7 +147,16 @@ firebase.initializeApp({
 });
 var db = firebase.firestore();
 
+// เก็บ uid ที่เคยใช้สำเร็จไว้ใน localStorage เสมอ — ถ้าเปิดหน้านี้จากแท็บ/บุ๊กมาร์กเก่าที่ไม่มี ?u= แนบมา
+// (เช่น เปิดจากประวัติเบราว์เซอร์ หรือ PWA เปิดแท็บเดิมซ้ำแทนที่จะเปิดแท็บใหม่ตาม URL ที่ส่งไป) จะได้ยังใช้ได้
+// โดยไม่ต้องกลับไปกดปุ่มในแอพหลักใหม่ทุกครั้ง
+var OWNER_UID_KEY = 'productPricesOwnerUid';
 var OWNER_UID = new URLSearchParams(location.search).get('u') || '';
+if (OWNER_UID) {
+  try { localStorage.setItem(OWNER_UID_KEY, OWNER_UID); } catch(e) {}
+} else {
+  try { OWNER_UID = localStorage.getItem(OWNER_UID_KEY) || ''; } catch(e) {}
+}
 var PIN_OK_KEY = 'productPricesPinOk';
 var PIN_OK_DAYS = 30;
 
