@@ -6,7 +6,7 @@
 var poTrackerFlt = 'all'; // all | notdone | done
 var poTrackerDealerFlt = '';
 var poTrackerTypeFlt = ''; // '' | project | runrate — แยก SO โครงการ กับ Run rate
-var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว) | reserve1021 — แท็บติดตามการจองคลัง 1021 (แสดงได้ทุกเมื่อ ไม่ต้องเลือก Dealer) | byProduct — แท็บ "🧰 ตามสินค้า" (ของเดิมในหน้า Dealer มาไว้ตรงนี้ด้วย + โหมดรวมทุก Dealer)
+var poTrackerMainTab = 'summary'; // summary | cards — แยก tab สรุปรายการสินค้า กับ การ์ด PO/SO (แสดงเฉพาะตอนเลือก Dealer แล้ว) | reserve1021 — แท็บติดตามการจองคลัง 1021 (แสดงได้ทุกเมื่อ ไม่ต้องเลือก Dealer) | byProduct — แท็บ "📦 ตาม PO / 📋 ตาม SO / 🧰 ตามสินค้า" (ของเดิมในหน้า Dealer มาไว้ตรงนี้ด้วย + โหมดรวมทุก Dealer, เปิดได้ทุกเมื่อไม่ต้องเลือก Dealer ก่อนก็ได้)
 var poTrackerProductAllDealer = false; // ใช้เฉพาะแท็บ byProduct — false = ดูเฉพาะ Dealer ที่เลือกอยู่ (poTrackerDealerFlt) | true = รวมทุก Dealer
 var poTrackerSearch = '';
 var poTrackerStatusFlt = ''; // '' = ทุกสถานะ, ไม่งั้นตรงกับ key ใน SO_STATUS
@@ -332,25 +332,33 @@ function _poTrackerClusterRowHtml(c, selectedBuckets) {
   return html;
 }
 
-// แท็บ "🧰 ตามสินค้า" ของ PO Tracker — เอาแท็บ "ตามสินค้า" ของหน้า Dealer (dealerARSummaryTab ใน views-dealer.js,
-// เรนเดอร์จริงใน _csRenderByProduct ที่ views-customersummary.js) มาไว้ตรงนี้ด้วย ไม่ต้องออกไปหน้า Dealer
-// เพิ่มโหมด "ดูรวมทุก Dealer" ที่แท็บเดิมไม่มี — ใช้ฟังก์ชันชุดเดียวกับหน้า Dealer ไม่ได้เขียนซ้ำ (ของเดิมในหน้า
-// Dealer ไม่ถูกแตะ ยังทำงานเหมือนเดิมทุกอย่าง) ตัวกรองค้นหา/ยังไม่ส่ง-ส่งแล้ว/หมวดสินค้า (csSearch/csDeliveryFlt/
-// csCatFilter ใน views-customersummary.js) ใช้ร่วมกับหน้า Dealer ด้วย เพื่อให้พฤติกรรมคุ้นเคยเหมือนเดิม
-function _poTrackerByProductHtml(dealerName) {
-  // บังคับ csViewMode เป็น 'product' เสมอตอนเปิดแท็บนี้ กัน state ค้างจากหน้า Dealer (เช่นถ้าเพิ่งดูแท็บ "ตาม SO"
-  // มาก่อน) ทำให้ _csRenderFilterBar() โชว์ dropdown สถานะ SO ที่ไม่เกี่ยวกับแท็บนี้ติดมาด้วย
-  csViewMode = 'product';
-
+// แท็บ "📦 ตาม PO ลูกค้า / 📋 ตาม SO / 🧰 ตามสินค้า" ของ PO Tracker — เอา 3 มุมมองของหน้า Dealer
+// (dealerARSummaryTab ใน views-dealer.js, เรนเดอร์จริงใน _csRenderByPO/_csRenderBySO/_csRenderByProduct ที่
+// views-customersummary.js) มาไว้ตรงนี้ด้วย ไม่ต้องออกไปหน้า Dealer ใช้ฟังก์ชันชุดเดียวกับหน้า Dealer ไม่ได้
+// เขียนซ้ำ (ของเดิมในหน้า Dealer ไม่ถูกแตะ ยังทำงานเหมือนเดิมทุกอย่าง) ใช้ตัวแปร view mode เดียวกับหน้า Dealer
+// (csViewMode) และตัวกรองค้นหา/ยังไม่ส่ง-ส่งแล้ว/หมวดสินค้า (csSearch/csDeliveryFlt/csCatFilter) ร่วมกันด้วย
+// เพื่อให้พฤติกรรมคุ้นเคยเหมือนเดิม — เรียกได้ทั้งตอนเลือก Dealer แล้ว (ดู Dealer นั้น หรือสลับไปรวมทุก Dealer
+// ก็ได้) และตอนไม่ได้เลือก Dealer เลย (บังคับเป็นโหมดรวมทุก Dealer เสมอ เพราะไม่มี Dealer ให้เจาะจงดู)
+function _poTrackerByItemHtml(dealerName) {
   var h = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
-    '<button class="btn bsm ' + (!poTrackerProductAllDealer ? 'bp' : 'bo') + '" onclick="poTrackerProductAllDealer=false;render()">👤 Dealer นี้</button>' +
-    '<button class="btn bsm ' + (poTrackerProductAllDealer ? 'bp' : 'bo') + '" onclick="poTrackerProductAllDealer=true;render()">🏭 ดูรวมทุก Dealer</button>' +
+    '<button class="btn bsm ' + (csViewMode === 'po' ? 'bp' : 'bo') + '" onclick="csViewMode=\'po\';render()">📦 ตาม PO ลูกค้า</button>' +
+    '<button class="btn bsm ' + (csViewMode === 'so' ? 'bp' : 'bo') + '" onclick="csViewMode=\'so\';render()">📋 ตาม SO</button>' +
+    '<button class="btn bsm ' + (csViewMode === 'product' ? 'bp' : 'bo') + '" onclick="csViewMode=\'product\';render()">🧰 ตามสินค้า</button>' +
     '</div>';
 
-  if (poTrackerProductAllDealer) {
+  var allDealer = !dealerName || poTrackerProductAllDealer;
+  if (dealerName) {
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<button class="btn bsm ' + (!poTrackerProductAllDealer ? 'bp' : 'bo') + '" onclick="poTrackerProductAllDealer=false;render()">👤 Dealer นี้</button>' +
+      '<button class="btn bsm ' + (poTrackerProductAllDealer ? 'bp' : 'bo') + '" onclick="poTrackerProductAllDealer=true;render()">🏭 ดูรวมทุก Dealer</button>' +
+      '</div>';
+  }
+
+  if (allDealer) {
     h += _csRenderFilterBar();
-    h += _csAllDealersProductHtml();
-    return h;
+    if (csViewMode === 'po') return h + _csAllDealersPOHtml();
+    if (csViewMode === 'so') return h + _csAllDealersSOHtml();
+    return h + _csAllDealersProductHtml();
   }
 
   var dealerRec = ST.getAll('dealers').filter(function(dl) { return dl.name === dealerName; })[0];
@@ -360,8 +368,9 @@ function _poTrackerByProductHtml(dealerName) {
   var st = _csDealerStats(dealerRec);
   if (!st.sos.length) return h + '<div style="color:var(--text2);font-size:13px">Dealer นี้ยังไม่มี Sales Order</div>';
   h += _csRenderFilterBar();
-  h += _csRenderByProduct(dealerRec, st);
-  return h;
+  if (csViewMode === 'po') return h + _csRenderByPO(dealerRec, st);
+  if (csViewMode === 'so') return h + _csRenderBySO(dealerRec, st);
+  return h + _csRenderByProduct(dealerRec, st);
 }
 
 // แผงสรุปรายการสินค้าของ Dealer ที่กำลังกรองอยู่ — แบ่งแท็ปตามสถานะ (เลือกได้พร้อมกันหลายแท็ป) แล้วจัดกลุ่มตามหมวดหมู่สินค้า
@@ -997,10 +1006,10 @@ function rPOTracker(el) {
     html += '<option value="' + o[0] + '"' + (poTrackerSort === o[0] ? ' selected' : '') + (o[2] ? ' title="' + sanitize(o[2]) + '"' : '') + '>' + o[1] + '</option>';
   });
   html += '</select>';
-  // ซ่อนตัวสลับนี้ตอนกำลังดูแท็บ "สรุปรายการสินค้า" ของ Dealer เดียว (เลือก Dealer แล้ว mainTab เป็น summary)
-  // เพราะแท็บนั้นมีปุ่ม การ์ด/ตาราง ของตัวเองอยู่ในแผงแล้ว (poTrackerSummaryViewMode) — ตัวสลับนี้ไม่มีผลกับแท็บนั้นเลย
-  // เดิมโชว์ค้างไว้ตลอด กดแล้วไม่เห็นอะไรเปลี่ยนเพราะดันไปเปลี่ยน state คนละตัวกับที่แท็บ summary ใช้แสดงผล
-  if (!(poTrackerDealerFlt && poTrackerMainTab === 'summary')) {
+  // ซ่อนตัวสลับนี้ตอนกำลังดูแท็บ "สรุปรายการสินค้า" (poTrackerMainTab==='summary', ต้องเลือก Dealer ก่อน) หรือ
+  // แท็บ "📦/📋/🧰" (poTrackerMainTab==='byProduct') เพราะทั้งคู่มีปุ่มสลับมุมมองของตัวเองอยู่ในแผงแล้ว —
+  // ตัวสลับนี้ไม่มีผลกับ 2 แท็บนั้นเลย เดิมโชว์ค้างไว้ตลอด กดแล้วไม่เห็นอะไรเปลี่ยนเพราะดันไปเปลี่ยน state คนละตัว
+  if (!((poTrackerDealerFlt && poTrackerMainTab === 'summary') || poTrackerMainTab === 'byProduct')) {
     html += '<div class="viewtoggle" style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">';
     html += '<button class="btn bsm ' + (poTrackerViewMode === 'cards' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'cards\';render()">🗂️ การ์ด</button>';
     html += '<button class="btn bsm ' + (poTrackerViewMode === 'table' ? 'bp' : 'bo') + '" style="border:none;border-radius:0" onclick="poTrackerViewMode=\'table\';render()">📋 ตาราง</button>';
@@ -1081,24 +1090,28 @@ function rPOTracker(el) {
     return;
   }
 
+  // แท็บ "📦/📋/🧰" เปิดได้เสมอ ไม่ว่าจะเลือก Dealer ไว้หรือไม่ (ไม่เลือก Dealer = บังคับโหมดรวมทุก Dealer)
+  // ส่วน "📊 สรุปรายการสินค้า" กับ "🗂️ PO/SO Cards" ยังต้องเลือก Dealer ก่อนเหมือนเดิม ไม่ได้แตะของเดิม
+  html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
   if (poTrackerDealerFlt) {
-    html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">';
     html += '<button class="btn bsm ' + (poTrackerMainTab === 'summary' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'summary\';render()">📊 สรุปรายการสินค้า</button>';
     html += '<button class="btn bsm ' + (poTrackerMainTab === 'cards' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'cards\';render()">🗂️ PO/SO Cards</button>';
-    html += '<button class="btn bsm ' + (poTrackerMainTab === 'byProduct' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'byProduct\';render()" title="หน้าตาเดียวกับแท็บ ตามสินค้า ในหน้า Dealer แต่เปิดจาก PO Tracker ตรงนี้ได้เลย + ดูรวมทุก Dealer ได้">🧰 ตามสินค้า</button>';
-    html += '</div>';
-    if (poTrackerMainTab === 'summary') {
-      var dealerRows = _poTrackerSortRows(rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt && _poTrackerRowMatchesTopFilters(r); }));
-      html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
-      el.innerHTML = html;
-      return;
-    }
-    if (poTrackerMainTab === 'byProduct') {
-      html += _poTrackerByProductHtml(poTrackerDealerFlt);
-      el.innerHTML = html;
-      return;
-    }
   }
+  html += '<button class="btn bsm ' + (poTrackerMainTab === 'byProduct' ? 'bp' : 'bo') + '" onclick="poTrackerMainTab=\'byProduct\';render()" title="หน้าตาเดียวกับแท็บ ตาม PO ลูกค้า/ตาม SO/ตามสินค้า ในหน้า Dealer แต่เปิดจาก PO Tracker ตรงนี้ได้เลย + ดูรวมทุก Dealer ได้">📦 ตาม PO / 📋 ตาม SO / 🧰 ตามสินค้า</button>';
+  html += '</div>';
+  if (poTrackerDealerFlt && poTrackerMainTab === 'summary') {
+    var dealerRows = _poTrackerSortRows(rows.filter(function(r) { return r.so.dealerName === poTrackerDealerFlt && _poTrackerRowMatchesTopFilters(r); }));
+    html += _poTrackerCompanySummaryHtml(poTrackerDealerFlt, dealerRows);
+    el.innerHTML = html;
+    return;
+  }
+  if (poTrackerMainTab === 'byProduct') {
+    html += _poTrackerByItemHtml(poTrackerDealerFlt);
+    el.innerHTML = html;
+    return;
+  }
+  // ถ้าไม่ได้เลือก Dealer และ mainTab ยังเป็นค่าที่ใช้ได้แค่ตอนเลือก Dealer อยู่ (เช่น 'summary' ค่าเริ่มต้น)
+  // ให้ตกลงมาที่รายการ PO/SO หลักตามปกติด้านล่าง (พฤติกรรมเดิมของหน้านี้ตอนไม่ได้เลือก Dealer ไม่เปลี่ยน)
 
   var q = poTrackerSearch.trim().toLowerCase();
   var filtered = rows.filter(function(r) {
