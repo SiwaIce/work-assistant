@@ -140,7 +140,7 @@
 <div class="nl-label sg-toggle" onclick="toggleSbGroup('products')">📦 สินค้าและราคา <span class="sg-chev" id="sgc-products">▾</span></div>
 <div class="sg-items" id="sgi-products">
   <div class="nl" data-v="products" onclick="go('products')">📋 สินค้าทั้งหมด</div>
-  <a class="nl" href="product-prices.html" target="_blank" rel="noopener" title="หน้าแยก โหลดเร็ว เหมาะกับมือถือ">⚡ ราคาสินค้า (ลิงก์แยก/เร็ว)</a>
+  <a class="nl" href="#" onclick="event.preventDefault();window.open('product-prices.html?u=' + encodeURIComponent((typeof CURRENT_USER!=='undefined'&&CURRENT_USER&&CURRENT_USER.uid)||''), '_blank')" title="หน้าแยก โหลดเร็ว เหมาะกับมือถือ ไม่ต้อง login ซ้ำ">⚡ ราคาสินค้า (ลิงก์แยก/เร็ว)</a>
   <div class="nl" data-v="stock" onclick="go('stock')">🗃️ Stock สินค้า</div>
   <div class="nl" data-v="stockBatchReceive" onclick="go('stockBatchReceive')">📥 รับของเข้าคลัง (Batch)</div>
   <div class="nl" data-v="productBundles" onclick="go('productBundles')">🎁 Bundle/Combo</div>

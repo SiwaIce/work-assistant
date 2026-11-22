@@ -6,7 +6,6 @@
 <title>ราคาสินค้า</title>
 <link rel="icon" href="data:,">
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" defer></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js" defer></script>
 <style>
   :root{
@@ -24,6 +23,7 @@
   .btn.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
   .btn.ghost{background:transparent}
   .btn:active{opacity:.8}
+  .btn:disabled{opacity:.6}
   .search-row{display:flex;gap:6px}
   .search-row input{flex:1;min-width:0;background:var(--chip);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-size:14px}
   .search-row input:focus{outline:none;border-color:var(--accent)}
@@ -57,11 +57,14 @@
   .copy-one{display:flex;align-items:center;gap:5px;background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;padding:4px 2px;cursor:pointer}
   .copy-one.done{color:var(--good)}
   .empty{text-align:center;padding:40px 10px;color:var(--text2);font-size:13px}
-  .gate{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
+  .gate{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
   .gate .logo{font-size:40px}
   .gate h2{margin:0;font-size:17px}
   .gate p{margin:0;color:var(--text2);font-size:13px;max-width:280px}
   .gate .err{color:#f87171;font-size:12.5px}
+  .gate input{width:200px;text-align:center;font-size:18px;letter-spacing:4px;background:var(--chip);border:1px solid var(--border);
+    border-radius:9px;padding:10px 12px;color:var(--text)}
+  .gate input:focus{outline:none;border-color:var(--accent)}
   .spin{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -83,11 +86,11 @@
 <body>
 
 <div class="gate" id="gate">
-  <div class="logo">⚡</div>
+  <div class="logo">🔒</div>
   <h2>ราคาสินค้า</h2>
-  <p>หน้าดูราคาสินค้าแบบเบา สำหรับเช็กราคาให้ลูกค้าได้รวดเร็วบนมือถือ</p>
-  <div id="gateLoading" hidden><div class="spin"></div></div>
-  <button class="btn primary" id="loginBtn" onclick="doLogin()">เข้าสู่ระบบด้วย Google</button>
+  <p>หน้าดูราคาสินค้าแบบเบา ใส่รหัสผ่านทีมเพื่อเข้าดู (ไม่ต้อง login Google)</p>
+  <input id="pinInput" type="password" inputmode="numeric" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')attemptUnlock()">
+  <button class="btn primary" id="unlockBtn" onclick="attemptUnlock()">🔓 เข้าดูราคา</button>
   <div class="err" id="gateErr" hidden></div>
 </div>
 
@@ -97,7 +100,7 @@
     <h1>⚡ ราคาสินค้า</h1>
     <div style="display:flex;gap:6px">
       <button class="btn" id="selToggleBtn" onclick="toggleSelectMode()">☑️ เลือกหลายชิ้น</button>
-      <button class="btn ghost" onclick="doLogout()" title="ออกจากระบบ">⎋</button>
+      <button class="btn ghost" onclick="lockAgain()" title="ล็อกหน้าใหม่">🔒</button>
     </div>
   </div>
   <div class="search-row">
@@ -122,10 +125,17 @@
 </div>
 
 <script>
-// แยกจากแอพหลักโดยตั้งใจ — โหลดแค่ Firebase SDK (auth + firestore) กับสคริปต์นี้ไฟล์เดียว ไม่พ่วง
-// utils.js/storage.js/views-*.js/app.js ฯลฯ ของแอพหลัก (รวมกันหลาย MB) เพื่อให้เปิดเร็วบนมือถือ/เน็ตช้า
-// ต้อง login ด้วย Google account เดียวกับที่ใช้ในแอพหลัก (uid เดียวกัน) เพราะ products ของผู้ใช้เก็บที่
-// users/{uid}/products ตาม firestore.rules (อ่าน/เขียนได้เฉพาะเจ้าของ uid) — หน้านี้อ่านอย่างเดียว ไม่เขียน
+// แยกจากแอพหลักโดยตั้งใจ — โหลดแค่ Firebase SDK (เฉพาะ firestore ไม่ใช้ auth เลย) กับสคริปต์นี้ไฟล์เดียว
+// ไม่พ่วง utils.js/storage.js/views-*.js/app.js ของแอพหลัก เพื่อให้เปิดเร็วบนมือถือ/เน็ตช้า
+//
+// ไม่ login Google (signInWithPopup ค้างบ่อยบนเบราว์เซอร์มือถือ/in-app browser) ใช้ PIN gate แบบเดียวกับ
+// demo-staff.html แทน (เก็บ pinHash ไว้ที่ dealerUpdates/productPricesAuth ซึ่งเปิด read/write:true อยู่แล้ว
+// ตาม firestore.rules ข้อ 2 — เป็น soft gate กันเผลอ ไม่ใช่ความปลอดภัยจริง เหมือนที่ demo-staff ใช้)
+//
+// อ่านข้อมูลจาก guestViewData/{uid}/products/_data ซึ่งแอพหลัก sync ให้อัตโนมัติอยู่แล้วทุกครั้งที่
+// แก้ไข/บันทึก/ดึงสินค้า (ดู _publishGuestViewProducts ใน products.js) — collection นี้เปิด read:true
+// สำหรับทุกคนตาม firestore.rules ข้อ 8 (Guest View) จึงไม่ต้อง login เพื่ออ่าน
+// ต้องมาจากลิงก์ที่มี ?u=<uid> (กดจากเมนูในแอพหลักให้อัตโนมัติ) ถ้าไม่มี uid จะไม่รู้ว่าจะอ่านของใคร
 firebase.initializeApp({
   apiKey: "AIzaSyB_qYvFINwOehVQ1Y6UJW9bHRL1iYcyM7w",
   authDomain: "work-assistant-9e024.firebaseapp.com",
@@ -135,7 +145,10 @@ firebase.initializeApp({
   appId: "1:796607223436:web:1455abe90b141104678da9"
 });
 var db = firebase.firestore();
-var auth = firebase.auth();
+
+var OWNER_UID = new URLSearchParams(location.search).get('u') || '';
+var PIN_OK_KEY = 'productPricesPinOk';
+var PIN_OK_DAYS = 30;
 
 var PRODUCT_CATEGORIES = [
   { id: 'drone', name: '🚁 Drone' },
@@ -153,7 +166,6 @@ function categoryName(id) {
   var c = PRODUCT_CATEGORIES.find(function(x) { return x.id === id; });
   return c ? c.name : '📦 Other';
 }
-function isDemoCategory(id) { return id === 'demo' || id === 'demo_accessory'; }
 
 var LEVELS = [
   {id:"rrpInVat", label:"RRP รวม Vat"},
@@ -178,50 +190,76 @@ function levelVal(p, levelId) {
   if (levelId === 'rrpExVat') return p.rrpExVat || 0;
   return (p.typePrices && p.typePrices[levelId]) || 0;
 }
+async function sha256(str) {
+  var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.prototype.map.call(new Uint8Array(buf), function(b) { return b.toString(16).padStart(2,'0'); }).join('');
+}
 
-// ---------- Auth ----------
-function doLogin() {
+// ---------- PIN gate ----------
+function showGateErr(msg) {
+  var el = document.getElementById('gateErr');
+  el.textContent = msg;
+  el.hidden = false;
+}
+function lockAgain() {
+  try { localStorage.removeItem(PIN_OK_KEY); } catch(e) {}
+  location.reload();
+}
+function attemptUnlock() {
+  if (!OWNER_UID) {
+    showGateErr('❌ ลิงก์นี้ไม่สมบูรณ์ — กรุณาเปิดจากเมนู "ราคาสินค้า (ลิงก์แยก/เร็ว)" ในแอพหลักอีกครั้ง');
+    return;
+  }
+  var pin = document.getElementById('pinInput').value.trim();
+  var btn = document.getElementById('unlockBtn');
   document.getElementById('gateErr').hidden = true;
-  document.getElementById('gateLoading').hidden = false;
-  document.getElementById('loginBtn').hidden = true;
-  var provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(function(err) {
-    document.getElementById('gateLoading').hidden = true;
-    document.getElementById('loginBtn').hidden = false;
-    var el = document.getElementById('gateErr');
-    el.textContent = '❌ เข้าสู่ระบบไม่สำเร็จ: ' + (err && err.message ? err.message : 'ไม่ทราบสาเหตุ');
-    el.hidden = false;
+  if (!pin) { showGateErr('กรอกรหัสผ่านก่อนนะครับ'); return; }
+  btn.disabled = true; btn.textContent = 'กำลังตรวจสอบ...';
+  db.collection('dealerUpdates').doc('productPricesAuth').get().then(function(doc) {
+    if (!doc.exists || !doc.data().pinHash) {
+      if (!confirm('ยังไม่เคยตั้งรหัสผ่านสำหรับหน้านี้ ต้องการตั้งรหัส "' + pin + '" เป็นรหัสผ่านเลยไหม?')) {
+        btn.disabled = false; btn.textContent = '🔓 เข้าดูราคา';
+        return;
+      }
+      return sha256(pin).then(function(h) {
+        return db.collection('dealerUpdates').doc('productPricesAuth').set({ pinHash: h });
+      }).then(function() { unlockSuccess(); });
+    }
+    return sha256(pin).then(function(h) {
+      if (h === doc.data().pinHash) { unlockSuccess(); }
+      else {
+        showGateErr('❌ รหัสผ่านไม่ถูกต้อง');
+        btn.disabled = false; btn.textContent = '🔓 เข้าดูราคา';
+      }
+    });
+  }).catch(function(e) {
+    showGateErr('⚠️ เชื่อมต่อไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
+    btn.disabled = false; btn.textContent = '🔓 เข้าดูราคา';
   });
 }
-function doLogout() {
-  auth.signOut();
+function unlockSuccess() {
+  try { localStorage.setItem(PIN_OK_KEY, String(Date.now() + PIN_OK_DAYS * 86400000)); } catch(e) {}
+  document.getElementById('gate').hidden = true;
+  document.getElementById('app').hidden = false;
+  loadProducts();
+}
+function checkStoredPin() {
+  try {
+    var v = localStorage.getItem(PIN_OK_KEY);
+    if (v && Number(v) > Date.now()) { unlockSuccess(); return true; }
+  } catch(e) {}
+  return false;
 }
 
-auth.onAuthStateChanged(function(user) {
-  if (user) {
-    document.getElementById('gate').hidden = true;
-    document.getElementById('app').hidden = false;
-    loadProducts(user.uid);
-  } else {
-    document.getElementById('gate').hidden = false;
-    document.getElementById('app').hidden = true;
-    document.getElementById('gateLoading').hidden = true;
-    document.getElementById('loginBtn').hidden = false;
-  }
-});
-
 // ---------- Data ----------
-function loadProducts(uid) {
+function loadProducts() {
   document.getElementById('list').innerHTML = '<div class="empty"><div class="spin" style="margin:0 auto 10px"></div>กำลังโหลดรายการสินค้า…</div>';
-  db.collection('users').doc(uid).collection('products').get().then(function(snap) {
-    var items = [];
-    snap.forEach(function(doc) {
-      if (doc.id === '_meta') return;
-      var d = doc.data();
-      if (!d.id) d.id = doc.id;
-      items.push(d);
-    });
-    PRODUCTS = items;
+  db.collection('guestViewData').doc(OWNER_UID).collection('products').doc('_data').get().then(function(doc) {
+    if (!doc.exists || !doc.data().value) {
+      document.getElementById('list').innerHTML = '<div class="empty">ยังไม่มีข้อมูลสินค้าสำหรับลิงก์นี้ — กรุณาเปิดแอพหลัก เข้าเมนู "สินค้าทั้งหมด" แล้วบันทึก/แก้ไขสินค้าใดๆ สักครั้งเพื่อซิงก์ข้อมูล แล้วลองใหม่</div>';
+      return;
+    }
+    PRODUCTS = doc.data().value || [];
     renderFilters();
     render();
   }).catch(function(err) {
@@ -404,6 +442,11 @@ function render(){
 
 renderLevelChips();
 renderFmtToggle();
+if (!OWNER_UID) {
+  showGateErr('❌ ลิงก์นี้ไม่สมบูรณ์ — กรุณาเปิดจากเมนู "ราคาสินค้า (ลิงก์แยก/เร็ว)" ในแอพหลักอีกครั้ง');
+} else {
+  checkStoredPin();
+}
 </script>
 </body>
 </html>
