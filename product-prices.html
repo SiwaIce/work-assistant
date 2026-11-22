@@ -100,6 +100,7 @@
     <h1>⚡ ราคาสินค้า</h1>
     <div style="display:flex;gap:6px">
       <button class="btn" id="selToggleBtn" onclick="toggleSelectMode()">☑️ เลือกหลายชิ้น</button>
+      <button class="btn ghost" onclick="changePin()" title="เปลี่ยนรหัสผ่าน">🔑</button>
       <button class="btn ghost" onclick="lockAgain()" title="ล็อกหน้าใหม่">🔒</button>
     </div>
   </div>
@@ -204,6 +205,27 @@ function showGateErr(msg) {
 function lockAgain() {
   try { localStorage.removeItem(PIN_OK_KEY); } catch(e) {}
   location.reload();
+}
+function changePin() {
+  var cur = prompt('ใส่รหัสเดิมเพื่อยืนยัน:');
+  if (cur === null) return;
+  cur = cur.trim();
+  if (!cur) { alert('กรุณาใส่รหัสเดิม'); return; }
+  db.collection('dealerUpdates').doc('productPricesAuth').get().then(function(doc) {
+    var storedHash = doc.exists ? doc.data().pinHash : null;
+    return sha256(cur).then(function(h) {
+      if (!storedHash || h !== storedHash) { alert('❌ รหัสเดิมไม่ถูกต้อง'); return; }
+      var next = prompt('ตั้งรหัสใหม่:');
+      if (next === null) return;
+      next = next.trim();
+      if (!next) { alert('กรุณาใส่รหัสใหม่'); return; }
+      return sha256(next).then(function(h2) {
+        return db.collection('dealerUpdates').doc('productPricesAuth').set({ pinHash: h2 });
+      }).then(function() { alert('✅ เปลี่ยนรหัสเรียบร้อย'); });
+    });
+  }).catch(function(e) {
+    alert('⚠️ เชื่อมต่อไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
+  });
 }
 function attemptUnlock() {
   if (!OWNER_UID) {
