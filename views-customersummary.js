@@ -778,6 +778,39 @@ function _csRenderBySO(d, st) {
   return h;
 }
 
+// ---------------- รวมทุก Dealer ตาม PO ลูกค้า / ตาม SO — ใช้โดย PO Tracker (views-potracker.js) ----------------
+// ต่างจาก _csAllDealersProductHtml (จัดกลุ่มข้ามทุก Dealer ตามสินค้า) ตรงที่ PO/SO ผูกกับ Dealer เดียวอยู่แล้ว
+// โดยธรรมชาติ เลยแค่วนทุก Dealer แล้วเรียก _csRenderByPO/_csRenderBySO เดิมซ้ำต่อ Dealer ใต้หัวข้อชื่อ Dealer
+// ไม่ต้องเขียน render ใหม่ — ตัวกรองค้นหา/ยังไม่ส่ง-ส่งแล้ว (csSearch/csDeliveryFlt) มีผลเหมือนกับดู Dealer เดียว
+function _csAllDealersPOHtml() {
+  var h = '', any = false;
+  ST.getAll('dealers').forEach(function(d) {
+    if (!_csSOsForDealer(d.id).length) return;
+    var st = _csDealerStats(d);
+    var groups = _csFilteredPOGroups(st);
+    if (!groups.length) return;
+    any = true;
+    h += '<div style="margin:16px 0 8px;font-size:12.5px;font-weight:700;color:var(--text2)">🏢 ' + sanitize(d.name) + '</div>';
+    h += _csRenderByPO(d, st);
+  });
+  if (!any) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
+  return h;
+}
+function _csAllDealersSOHtml() {
+  var h = '', any = false;
+  ST.getAll('dealers').forEach(function(d) {
+    if (!_csSOsForDealer(d.id).length) return;
+    var st = _csDealerStats(d);
+    var sos = _csFilteredSOs(st);
+    if (!sos.length) return;
+    any = true;
+    h += '<div style="margin:16px 0 8px;font-size:12.5px;font-weight:700;color:var(--text2)">🏢 ' + sanitize(d.name) + '</div>';
+    h += _csRenderBySO(d, st);
+  });
+  if (!any) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
+  return h;
+}
+
 // ---------------- มุมมอง "ตามสินค้า" ----------------
 // รวมรายการสินค้าข้ามทุก PO/SO ของ Dealer — สินค้า 1 รายการโผล่ได้หลาย PO พร้อมกัน แยกเป็น PO/SO คนละคอลัมน์ merge แถวให้คู่กัน
 function _csRenderByProduct(d, st) {
