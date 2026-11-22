@@ -292,6 +292,10 @@ function loadProductsFromFirebase() {
     data.lastUpdated = cloudMax || new Date().toISOString();
     localStorage.setItem('v7_products_pulled_' + CURRENT_USER.uid, '1');
     _saveProductsDataLocalOnly(data); // เขียนแค่เครื่อง ไม่ push กลับขึ้น cloud (กัน echo-push race)
+    // เดิม _publishGuestViewProducts() วิ่งแค่ตอน saveProductsData() (แก้ไข/เพิ่ม/ลบสินค้า) เท่านั้น ทำให้
+    // ลิงก์ PIN แยก (product-prices.html) ที่อ่าน guestViewData/{uid}/products/_data อาจเจอข้อมูลเก่า/ไม่มีเลย
+    // ถ้าไม่มีใครแก้สินค้ามานาน — sync สำเนา guest view ซ้ำทุกครั้งที่ pull จาก cloud ด้วยเพื่อให้ลิงก์นี้ตรงเสมอ
+    if (typeof _publishGuestViewProducts === 'function') _publishGuestViewProducts(data);
     return true;
   }).catch(function() { return false; }).then(function(r) { _productsLoadDone = true; return r; });
   return _productsLoadPromise;
