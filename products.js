@@ -2200,7 +2200,7 @@ function rProducts(el) {
     html += '<div style="font-size:12px;color:var(--text3);margin-top:8px">💡 เพิ่มสินค้าทีละมากๆ ใช้ 📤 Export ออกไปแก้ใน Excel แล้ว 📥 นำเข้ากลับ หรือ 📋 วาง Excel ก๊อปจากชีตมาวางตรงๆ</div>';
     html += '</div>';
   }
-  html += '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button></span></h2>';
+  html += '<div class="card"><h2>📋 สินค้าทั้งหมด <span id="productsCount" style="font-size:.75rem;font-weight:400;color:var(--text2)">พบ ' + products.length + ' รายการ</span><span class="ml"><button class="btn bp" onclick="showAddProductM()">➕ เพิ่มสินค้า</button><button class="btn bo" onclick="exportProductsToExcel()">📥 Export Excel</button><button class="btn bo" onclick="document.getElementById(\'importProductFileList\').click()">📤 นำเข้า Excel</button><input type="file" id="importProductFileList" accept=".xlsx,.xls" style="display:none" onchange="importProductsFromExcelAdmin(event)"><button class="btn bo" onclick="showPasteProductsM()">📋 วาง Excel</button><button class="btn bo" onclick="showImportCostM()">💸 นำเข้าต้นทุน</button><button class="btn bo" onclick="openProductPricesLite()" title="หน้าแยก โหลดเร็ว เหมาะกับมือถือ ไม่ต้อง login ซ้ำ">⚡ ลิงก์ราคาเร็ว (มือถือ)</button></span></h2>';
   // ทางลัดไปหน้า "ราคาตาม Level" — เดิมเป็นเมนูแยกในไซด์บาร์ ยุบมารวมเป็นปุ่มในหน้านี้แทนเพื่อลดจำนวนเมนู
   // (2026-08-30) หน้า productPrices เองไม่ได้แก้/ย้ายอะไร ยังทำงานเหมือนเดิมทุกอย่าง แค่ไม่มีลิงก์แยกในไซด์บาร์แล้ว
   html += '<div style="margin-bottom:10px"><button class="btn bsm bp">📋 Catalog</button> <button class="btn bsm bo" onclick="go(\'productPrices\')">💰 ราคาตาม Level</button></div>';
@@ -3512,6 +3512,14 @@ function getCategoryName(catId) {
 function getCategoryIcon(catId) {
   var cat = PRODUCT_CATEGORIES.find(function(c) { return c.id === catId; });
   return cat ? cat.icon : '📦';
+}
+
+// เปิดหน้าแยก product-prices.html (เบา, มือถือ, ไม่ login) พร้อม uid ของผู้ใช้ปัจจุบัน — เรียกจากปุ่มใน
+// หน้า "สินค้าทั้งหมด" โดยตรง (ย้ายมาจากเมนูไซด์บาร์แยกต่างหากตามที่ผู้ใช้ขอ 2026-11-22 กันสับสนว่าเป็นคนละหน้า)
+function openProductPricesLite() {
+  var uid = (typeof CURRENT_USER !== 'undefined' && CURRENT_USER && CURRENT_USER.uid) || '';
+  if (!uid) { if (typeof toast === 'function') toast('❌ ต้อง login ก่อนถึงจะเปิดลิงก์นี้ได้'); return; }
+  window.open('product-prices.html?u=' + encodeURIComponent(uid), '_blank');
 }
 
 // ================================================================
