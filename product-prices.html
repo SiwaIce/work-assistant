@@ -47,7 +47,9 @@
   .card-main{flex:1;min-width:0}
   .name-row{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
   .name{font-size:14px;font-weight:700;line-height:1.35}
-  .sku{font-size:11px;color:var(--text2);margin-top:2px}
+  .sku{font-size:11px;color:var(--text2);margin-top:2px;display:flex;align-items:center;gap:5px}
+  .sku-copy{background:none;border:none;color:var(--text2);font-size:12px;padding:0 2px;cursor:pointer;line-height:1}
+  .sku-copy.done{color:var(--good)}
   .cat{font-size:10.5px;background:var(--chip);color:var(--text2);padding:2px 7px;border-radius:6px;flex:0 0 auto;white-space:nowrap}
   .cat-select{font-size:10.5px;background:var(--chip);color:var(--text2);padding:2px 18px 2px 7px;border-radius:6px;flex:0 0 auto;white-space:nowrap;border:1px solid var(--border);-webkit-appearance:none;appearance:none;font-family:inherit}
   .eol-badge{font-size:10px;background:#3a1414;color:#f87171;padding:2px 7px;border-radius:6px;margin-left:6px}
@@ -463,6 +465,19 @@ function copyOne(id, ev){
     setTimeout(function(){ el.innerHTML = old; el.classList.remove('done'); }, 1400);
   });
 }
+function copySku(id, ev){
+  if (ev) ev.stopPropagation();
+  var p = byId(id);
+  if (!p || !p.sku) return;
+  doCopy(p.sku, function(){
+    var el = document.getElementById('skuCopy-' + id);
+    if (!el) return;
+    var old = el.innerHTML;
+    el.innerHTML = '✅';
+    el.classList.add('done');
+    setTimeout(function(){ el.innerHTML = old; el.classList.remove('done'); }, 1200);
+  });
+}
 function copySelected(){
   var ids = Object.keys(selected);
   if (!ids.length) return;
@@ -509,7 +524,7 @@ function render(){
             chkHtml +
             '<div class="card-main">' +
               '<div class="name-row">' +
-                '<div><div class="name">'+(p.name||'-')+'</div><div class="sku">SKU: '+(p.sku||'-')+'</div></div>' +
+                '<div><div class="name">'+(p.name||'-')+'</div><div class="sku">SKU: '+(p.sku||'-')+' <button class="sku-copy" id="skuCopy-'+p.id+'" onclick="copySku(\''+p.id+'\', event)" title="คัดลอก SKU">📋</button></div></div>' +
                 '<div onclick="event.stopPropagation()">' + categorySelectHtml(p) + (p.eol ? '<span class="eol-badge">EOL</span>' : '') + '</div>' +
               '</div>' +
               '<div class="prices">' +
