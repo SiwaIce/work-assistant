@@ -112,6 +112,29 @@ function saveProductsData(data) {
   }
 }
 
+// รับการแก้ไข "หมวดสินค้า" ที่ผู้ใช้กดแก้จากหน้าลิงก์แยก product-prices.html — หน้านั้นไม่มี auth เขียนเข้า
+// guestViewData/{uid} (เจ้าของเท่านั้นเขียนได้) หรือ users/{uid}/products ตรงๆไม่ได้เลย จึงพักคำขอไว้ที่
+// dealerUpdates/productPricesCategoryEdits ซึ่งเปิด read/write:true อยู่แล้ว (รูปแบบเดียวกับ
+// publicDemoEdits ของหน้า demo) — ที่นี่ดึงไปใช้จริงกับ data.models แล้วเคลียร์คิวทิ้งทุกครั้งที่ sync จาก
+// cloud apply อัตโนมัติไม่ต้องกด "รับเข้า" เหมือนหน้า demo เพราะคนแก้คือเจ้าของแอปเอง ไม่ใช่ลูกค้า/บุคคลอื่น
+function _applyPendingCategoryEditsFromLitePage(data) {
+  if (typeof db === 'undefined') return Promise.resolve();
+  return db.collection('dealerUpdates').doc('productPricesCategoryEdits').get().then(function(doc) {
+    if (!doc.exists) return;
+    var edits = (doc.data() && doc.data().edits) || {};
+    var ids = Object.keys(edits);
+    if (!ids.length) return;
+    var changed = false;
+    ids.forEach(function(id) {
+      var m = (data.models || []).find(function(x) { return x.id === id; });
+      if (m && edits[id] && m.category !== edits[id]) { m.category = edits[id]; changed = true; }
+    });
+    return db.collection('dealerUpdates').doc('productPricesCategoryEdits').set({ edits: {} }).then(function() {
+      if (changed) saveProductsData(data);
+    });
+  }).catch(function(e) { console.warn('apply pending category edits error:', e); });
+}
+
 // เผยแพร่สำเนาสินค้าเต็มรูปแบบ (รวมราคาทุก level) ให้ลิงก์ Guest View (ดู firebase-sync.js) อ่านได้ — ใช้ทั้งหน้า
 // Stock และหน้า "สินค้าทั้งหมด" ซึ่งต้องโชว์ราคา RRP/S/A/B/Other เต็มๆ — เก็บเป็น doc เดียว '_data' ง่ายกว่า
 // products/bundles/demoUnits ของจริงที่ต้อง track การลบแบบละเอียด เพราะ guest ไม่ได้แก้ไขอะไรอยู่แล้ว
@@ -303,6 +326,9 @@ function loadProductsFromFirebase() {
     // ลิงก์ PIN แยก (product-prices.html) ที่อ่าน guestViewData/{uid}/products/_data อาจเจอข้อมูลเก่า/ไม่มีเลย
     // ถ้าไม่มีใครแก้สินค้ามานาน — sync สำเนา guest view ซ้ำทุกครั้งที่ pull จาก cloud ด้วยเพื่อให้ลิงก์นี้ตรงเสมอ
     if (typeof _publishGuestViewProducts === 'function') _publishGuestViewProducts(data);
+    if (typeof _applyPendingCategoryEditsFromLitePage === 'function') {
+      return _applyPendingCategoryEditsFromLitePage(data).then(function() { return true; });
+    }
     return true;
   }).catch(function() { return false; }).then(function(r) { _productsLoadDone = true; return r; });
   return _productsLoadPromise;
