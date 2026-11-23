@@ -49,7 +49,10 @@
   .name{font-size:14px;font-weight:700;line-height:1.35}
   .sku{font-size:11px;color:var(--text2);margin-top:2px}
   .cat{font-size:10.5px;background:var(--chip);color:var(--text2);padding:2px 7px;border-radius:6px;flex:0 0 auto;white-space:nowrap}
+  .cat-select{font-size:10.5px;background:var(--chip);color:var(--text2);padding:2px 18px 2px 7px;border-radius:6px;flex:0 0 auto;white-space:nowrap;border:1px solid var(--border);-webkit-appearance:none;appearance:none;font-family:inherit}
   .eol-badge{font-size:10px;background:#3a1414;color:#f87171;padding:2px 7px;border-radius:6px;margin-left:6px}
+  .save-toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--accent);color:var(--accent-fg);font-size:12.5px;padding:8px 14px;border-radius:8px;z-index:50;opacity:0;pointer-events:none;transition:opacity .2s}
+  .save-toast.show{opacity:1}
   .prices{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
   .ptag{flex:1;min-width:72px;background:var(--chip);border-radius:8px;padding:6px 8px;text-align:center}
   .ptag .lv{font-size:10px;color:var(--text2)}
@@ -127,6 +130,7 @@
     <button class="btn primary" id="copyBtn" onclick="copySelected()">📋 คัดลอก (<span id="selCount">0</span>)</button>
   </div>
 </div>
+<div class="save-toast" id="saveToast"></div>
 
 <script>
 // แยกจากแอพหลักโดยตั้งใจ — โหลดแค่ Firebase SDK (เฉพาะ firestore ไม่ใช้ auth เลย) กับสคริปต์นี้ไฟล์เดียว
@@ -193,6 +197,44 @@ var PRODUCT_CATEGORIES = [
 function categoryName(id) {
   var c = PRODUCT_CATEGORIES.find(function(x) { return x.id === id; });
   return c ? c.name : '📦 Other';
+}
+function categorySelectHtml(p) {
+  var opts = PRODUCT_CATEGORIES.map(function(c) {
+    return '<option value="'+c.id+'"'+(p.category===c.id?' selected':'')+'>'+c.name+'</option>';
+  }).join('');
+  return '<select class="cat-select" onchange="changeCategory(\''+p.id+'\', this.value)">'+opts+'</select>';
+}
+function showSaveToast(msg) {
+  var el = document.getElementById('saveToast');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(function(){ el.classList.remove('show'); }, 2000);
+}
+// แก้ "หมวดสินค้า" จากหน้านี้ไม่มี auth เขียนเข้า guestViewData/{uid} (เจ้าของเท่านั้นเขียนได้ ตาม
+// firestore.rules ข้อ 8) หรือ users/{uid}/products จริงตรงๆไม่ได้เลย — พักคำขอแก้ไว้ที่
+// dealerUpdates/productPricesCategoryEdits ซึ่งเปิด read/write:true อยู่แล้ว (รูปแบบเดียวกับ
+// publicDemoEdits ของหน้า demo) แอพหลักจะดึงไปใช้จริงกับ users/{uid}/products แล้วเคลียร์คิวทุกครั้งที่
+// sync จาก cloud (ดู _applyPendingCategoryEditsFromLitePage ใน products.js) — apply อัตโนมัติไม่ต้องกด
+// "รับเข้า" เหมือนหน้า demo เพราะคนแก้คือเจ้าของแอปเอง ไม่ใช่ลูกค้า/บุคคลอื่น
+function changeCategory(id, newCat) {
+  var p = byId(id);
+  if (!p || p.category === newCat) return;
+  var oldCat = p.category;
+  p.category = newCat;
+  renderFilters();
+  render();
+  var edits = {};
+  edits[id] = newCat;
+  db.collection('dealerUpdates').doc('productPricesCategoryEdits').set({ edits: edits }, { merge: true })
+    .then(function() { showSaveToast('✅ บันทึกหมวดแล้ว — จะอัพเดตในแอพหลักรอบถัดไปที่เปิด'); })
+    .catch(function(e) {
+      p.category = oldCat;
+      renderFilters();
+      render();
+      alert('⚠️ บันทึกไม่สำเร็จ: ' + (e && e.message ? e.message : ''));
+    });
 }
 
 var LEVELS = [
@@ -468,7 +510,7 @@ function render(){
             '<div class="card-main">' +
               '<div class="name-row">' +
                 '<div><div class="name">'+(p.name||'-')+'</div><div class="sku">SKU: '+(p.sku||'-')+'</div></div>' +
-                '<div class="cat">'+categoryName(p.category)+(p.eol ? '<span class="eol-badge">EOL</span>' : '')+'</div>' +
+                '<div onclick="event.stopPropagation()">' + categorySelectHtml(p) + (p.eol ? '<span class="eol-badge">EOL</span>' : '') + '</div>' +
               '</div>' +
               '<div class="prices">' +
                 '<div class="ptag"><div class="lv">S</div><div class="val">'+fmt(tp.S)+'</div></div>' +
