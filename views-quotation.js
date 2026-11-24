@@ -195,6 +195,14 @@ function formatNumber(n) {
   return Number(n).toLocaleString('th-TH');
 }
 
+// ปัดทศนิยม 2 ตำแหน่งแบบปัดครึ่งขึ้น (round half up) กันปัญหา float เช่น 1.005 ปัดลงเพราะ floating point
+// เก็บจริงเป็น 1.00499999... — ใช้ทุกจุดที่คำนวณส่วนลดเงินสดต่อรายการ ให้ราคา/หน่วย ยอดต่อแถว และยอดสรุปตรงกัน
+function round2(n) {
+  n = Number(n) || 0;
+  var sign = n < 0 ? -1 : 1;
+  return sign * Math.round((Math.abs(n) + 1e-9) * 100) / 100;
+}
+
 // คำนวณยอดทั้งใบจากรายการสินค้า + ส่วนลดเงินสดต่อรายการ + ส่วนลดอื่นๆ (กำหนดเอง % หรือบาท เรียงตามลำดับ) +
 // ส่วนลดท้ายบิล % เดิม แล้วค่อยคิด VAT — ใช้ฟังก์ชันเดียวนี้ร่วมกันทั้งการ์ดสรุป/แถวสรุปท้ายตาราง/ตอนบันทึก
 // เพื่อไม่ให้สูตรเพี้ยนไม่ตรงกันระหว่างจุด (เดิมแต่ละจุดคำนวณซ้ำเองคนละที่)
@@ -206,7 +214,8 @@ function computeQuoteTotals(items, extraDiscounts, overallDiscountPct) {
     var amt = Number(items[i].amount) || 0;
     grossTotal += amt;
     totalCost += (Number(items[i].cost) || 0) * (Number(items[i].quantity) || 1);
-    cashDiscountTotal += amt * (Number(items[i].cashDiscountPercent) || 0) / 100;
+    // ปัดส่วนลดเงินสดต่อรายการเป็น 2 ตำแหน่งต่อแถวก่อนรวม ให้ตรงกับยอดที่โชว์ในตาราง (ดู renderQuotationItemsTable)
+    cashDiscountTotal += round2(amt * (Number(items[i].cashDiscountPercent) || 0) / 100);
   }
   var running = grossTotal - cashDiscountTotal;
   var extraDiscountTotal = 0;
@@ -357,8 +366,8 @@ function renderQuotationItemsTable() {
     var itemMargin = item.unitPrice > 0 ? ((item.unitPrice - itemCost) / item.unitPrice * 100) : 0;
     var itemAmount = Number(item.amount) || 0;
     var itemCashDiscPct = Number(item.cashDiscountPercent) || 0;
-    var itemCashDiscAmt = itemAmount * itemCashDiscPct / 100;
-    var itemNetAmount = itemAmount - itemCashDiscAmt;
+    var itemCashDiscAmt = round2(itemAmount * itemCashDiscPct / 100);
+    var itemNetAmount = round2(itemAmount - itemCashDiscAmt);
     html += '<tr>';
     html += '<td class="pipe-row-num" style="text-align:center">' + (i + 1) + '</td>';
     html += '<td style="font-size:11px" id="qiskucel_' + i + '">' + (item.sku ? qcopyHtml(item.sku) : '-') + '</td>';
@@ -367,7 +376,7 @@ function renderQuotationItemsTable() {
       (!quotationItemsFullscreen && !item.isOther && typeof stockQuoteAvailabilityHtml === 'function' ? stockQuoteAvailabilityHtml(item.sku, itemQty, _curQuote) : '') + '</td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-qty" data-idx="' + i + '" value="' + itemQty + '" min="1" style="width:70px;text-align:center;padding:4px" onchange="updateQuotationItemQty(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right"><input type="text" inputmode="decimal" class="quote-item-price js-money" data-idx="' + i + '" value="' + nmI(item.unitPrice || 0) + '" style="width:110px;text-align:right;padding:4px" onchange="updateQuotationItemPrice(' + i + ', this.value)">' +
-      (itemCashDiscPct > 0 ? '<div style="font-size:10px;color:#f59e0b;text-align:right;margin-top:2px">หลังลดเงินสด: ' + formatNumber((item.unitPrice || 0) - (item.unitPrice || 0) * itemCashDiscPct / 100) + ' ฿/หน่วย</div>' : '') +
+      (itemCashDiscPct > 0 ? '<div style="font-size:10px;color:#f59e0b;text-align:right;margin-top:2px">หลังลดเงินสด: ' + formatNumber(round2((item.unitPrice || 0) - (item.unitPrice || 0) * itemCashDiscPct / 100)) + ' ฿/หน่วย</div>' : '') +
       '<div style="display:flex;gap:2px;justify-content:flex-end;margin-top:3px">' + _qiLevelChips(item, i) + '</div></td>';
     html += '<td style="text-align:center"><input type="number" class="quote-item-cashdisc" data-idx="' + i + '" value="' + itemCashDiscPct + '" min="0" max="100" step="0.1" style="width:65px;text-align:center;padding:4px" onchange="updateQuotationItemCashDiscount(' + i + ', this.value)"></td>';
     html += '<td style="text-align:right;font-weight:700;color:#22c55e">' + formatNumber(itemNetAmount) + ' ฿' +
@@ -2910,8 +2919,8 @@ function previewQuotation(quoteId) {
     var item = quote.items[i];
     var itemAmt = Number(item.amount) || 0;
     var itemCashPct = Number(item.cashDiscountPercent) || 0;
-    var itemCashAmt = itemAmt * itemCashPct / 100;
-    var itemNetAmt = itemAmt - itemCashAmt;
+    var itemCashAmt = round2(itemAmt * itemCashPct / 100);
+    var itemNetAmt = round2(itemAmt - itemCashAmt);
     itemsHtml += '<tr>';
     itemsHtml += '<td style="padding:8px;text-align:center">' + (i + 1) + '</td>';
     itemsHtml += '<td style="padding:8px">' + sanitize(item.sku || '-') + '</td>';
