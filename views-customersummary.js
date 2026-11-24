@@ -708,7 +708,41 @@ function _csShowProjectModal(pid) {
   openM('🗂️ รายละเอียด Project ID', h);
 }
 
+// ---------------- สถานะ "ส่งแล้วเท่าไหร่" ของ PO/SO/สินค้า 1 รายการ — ใช้เป็นสี/ป้ายหลักของการ์ดทั้ง 3 มุมมองด้านล่าง ----------------
+// ตั้งใจแยกจาก SO_STATUS (สถานะ workflow เช่น เปิด SO/ออก invoice/ปิด) เพราะที่นี่สนใจแค่ "ส่งของไปกี่ชิ้นจากที่สั่ง"
+// ให้สีเดียวกันทั้ง 3 แท็บไม่ว่าจะมองจาก PO, SO หรือสินค้า (ของเดิมแต่ละมุมมองมีตรรกะ badge ของตัวเอง ไม่ตรงกัน —
+// mockup การ์ด "แบบ A" ที่ Siwawong เลือก ใช้สี 3 โทนตายตัวนี้แทน)
+var CS_QTY_STATUS = {
+  pending: { label: 'ยังไม่ส่ง',   icon: '🔴', color: '#ef4444' },
+  partial: { label: 'ส่งบางส่วน', icon: '🟡', color: '#f59e0b' },
+  done:    { label: 'ครบแล้ว',    icon: '🟢', color: '#22c55e' }
+};
+function _csQtyStatus(qty, shipped) {
+  if (shipped <= 0) return 'pending';
+  if (shipped < qty) return 'partial';
+  return 'done';
+}
+function _csQtyBadgeHtml(qty, shipped, big) {
+  var m = CS_QTY_STATUS[_csQtyStatus(qty, shipped)];
+  return '<span style="font-size:' + (big ? '11.5px' : '10px') + ';font-weight:700;padding:' + (big ? '4px 10px' : '2px 8px') +
+    ';border-radius:99px;background:' + m.color + '1f;color:' + m.color + ';white-space:nowrap">' + m.icon + ' ' + m.label + '</span>';
+}
+function _csQtyBarHtml(qty, shipped) {
+  var pct = qty ? Math.round(shipped / qty * 100) : 0;
+  var color = CS_QTY_STATUS[_csQtyStatus(qty, shipped)].color;
+  return '<div style="display:flex;align-items:center;gap:7px;min-width:90px">' +
+    '<div style="flex:1;height:7px;min-width:40px;border-radius:4px;background:var(--bg2);overflow:hidden"><i style="display:block;height:100%;width:' + pct + '%;background:' + color + '"></i></div>' +
+    '<span style="font-size:11px;color:var(--text2);white-space:nowrap">' + shipped + '/' + qty + '</span></div>';
+}
+// การ์ด <details> พับเก็บได้ 1 ใบ — ใช้ร่วมกันทั้ง 3 มุมมอง เส้นสีซ้ายบอกสถานะทันทีโดยไม่ต้องอ่านตัวหนังสือ
+function _csCardWrap(statusKey, open, inner) {
+  var color = CS_QTY_STATUS[statusKey].color;
+  return '<details' + (open ? ' open' : '') + ' style="border:1px solid var(--border);border-left:4px solid ' + color + ';border-radius:11px;overflow:hidden;margin-bottom:10px">' + inner + '</details>';
+}
+
 // ---------------- มุมมอง "ตาม PO ลูกค้า" ----------------
+// การ์ด 1 ใบต่อ 1 PO ลูกค้า (ใบแรกเปิดไว้ก่อน) หัวการ์ดใหญ่ชัด: เลข PO, มูลค่า, ป้ายสถานะส่งสี 3 โทน
+// ขยายดูได้ทั้งรายการสินค้าเทียบ PO (เป็นการ์ดย่อยแทนแถวตาราง) และ SO ที่ผูกกับ PO นี้
 function _csRenderByPO(d, st) {
   var groups = _csFilteredPOGroups(st);
   if (!groups.length) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
@@ -716,65 +750,68 @@ function _csRenderByPO(d, st) {
   groups.forEach(function(g, idx) {
     var pg = g.pg, items = g.items, order = g.order;
     var totalQty = g.totalQty, shippedQty = g.shippedQty, poValue = g.poValue;
-    var badge = shippedQty === 0 ? _soStatusBadge(pg.sos[0].status) : (shippedQty < totalQty ? _soStatusBadge('partial_shipped') : _soStatusBadge('shipped'));
+    var qst = _csQtyStatus(totalQty, shippedQty);
 
-    h += '<details' + (idx === 0 ? ' open' : '') + ' style="border:1px solid var(--border);border-radius:11px;overflow:hidden;margin-bottom:10px">';
-    h += '<summary style="padding:12px 14px;background:var(--bg2);cursor:pointer;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;list-style:none">' +
-      '<span><b style="font-family:monospace">' + sanitize(pg.poNo) + '</b> <span style="color:var(--text2);font-size:12px">· ' + order.length + ' รายการ · ' + pg.sos.length + ' SO</span>' + _csProjChip(pg.projectId) + '</span>' +
-      '<span style="display:flex;align-items:center;gap:8px">' + badge + '<b>' + fmtMoney(poValue) + ' ฿</b></span></summary>';
-    h += '<div style="padding:14px">';
+    var inner = '<summary style="padding:12px 14px;background:var(--bg2);cursor:pointer;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;list-style:none">' +
+      '<span><div style="font-family:monospace;font-weight:700;font-size:14px">' + sanitize(pg.poNo) + '</div>' +
+      '<div style="color:var(--text2);font-size:11.5px;margin-top:2px">' + order.length + ' รายการ · ' + pg.sos.length + ' SO</div>' + _csProjChip(pg.projectId) + '</span>' +
+      '<span style="display:flex;align-items:center;gap:8px">' + _csQtyBadgeHtml(totalQty, shippedQty, true) + '<b>' + fmtMoney(poValue) + ' ฿</b></span></summary>';
+    inner += '<div style="padding:14px">';
+    inner += _csQtyBarHtml(totalQty, shippedQty);
 
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการ เทียบกับ PO ลูกค้า</div>';
-    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
-    h += '<thead><tr><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">รายการ</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">ตาม PO</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">ส่งแล้ว</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">คงค้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ SO ไหน / สถานะ</th></tr></thead><tbody>';
+    inner += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:12px">';
     order.forEach(function(k) {
       var it = items[k];
-      var remain = it.qty - it.shipped;
-      var pct = it.qty ? Math.round(it.shipped / it.qty * 100) : 0;
-      h += '<tr><td style="padding:7px 8px;border-top:1px solid var(--border)">' + sanitize(it.model || '-') + '</td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border);text-align:center">' + it.qty + '</td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border);text-align:center">' + it.shipped + '</td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg2);overflow:hidden"><i style="display:block;height:100%;width:' + pct + '%;background:#3ecf8e"></i></div><span style="font-size:11px;color:var(--text2);white-space:nowrap">' + (remain > 0 ? 'เหลือ ' + remain : 'ครบ') + '</span></div></td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border)"><div style="display:flex;flex-wrap:wrap;gap:4px">';
+      inner += '<div style="background:var(--bg2);border-radius:9px;padding:9px 11px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+        '<div style="font-size:13px;font-weight:600">' + sanitize(it.model || '-') + '</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' + _csQtyBarHtml(it.qty, it.shipped) + _csQtyBadgeHtml(it.qty, it.shipped) + '</div></div>';
+      inner += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">';
       it.perSo.forEach(function(p) {
-        h += '<span onclick="event.stopPropagation();go(\'soDetail\',{soId:\'' + p.so.id + '\'})" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;background:var(--bg2);border:1px solid var(--border);border-radius:999px;padding:2px 7px"><b style="font-family:monospace">' + sanitize(p.so.soNumber || '-') + '</b> ' + (p.shipped > 0 ? 'ส่งแล้ว ' + p.shipped : 'ยังไม่ส่ง') + '</span>';
+        inner += '<span onclick="event.stopPropagation();go(\'soDetail\',{soId:\'' + p.so.id + '\'})" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:999px;padding:2px 8px"><b style="font-family:monospace">' + sanitize(p.so.soNumber || '-') + '</b> ' + (p.shipped > 0 ? 'ส่งแล้ว ' + p.shipped : 'ยังไม่ส่ง') + '</span>';
       });
-      h += '</div></td></tr>';
+      inner += '</div></div>';
     });
-    h += '</tbody></table></div>';
+    inner += '</div>';
 
-    h += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin:16px 0 8px">SO ที่ผูกกับ PO นี้ (' + pg.sos.length + ')</div>';
+    inner += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin:16px 0 8px">SO ที่ผูกกับ PO นี้ (' + pg.sos.length + ')</div>';
     pg.sos.forEach(function(s) {
-      h += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">' +
+      inner += '<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">' +
         '<span><b style="font-family:monospace">' + sanitize(s.soNumber || '-') + '</b> <span style="color:var(--text2);font-size:11.5px">· สร้าง ' + sanitize((s.createdAt || '').slice(0, 10)) + '</span></span>' +
         '<span style="display:flex;align-items:center;gap:8px">' + _soStatusBadge(s.status) + '<span style="font-size:11px;color:var(--accent)">เปิด SO →</span></span></div>';
     });
+    inner += '</div>';
 
-    h += '</div></details>';
+    h += _csCardWrap(qst, idx === 0, inner);
   });
   return h;
 }
 
 // ---------------- มุมมอง "ตาม SO" ----------------
+// การ์ด 1 ใบต่อ 1 SO แทนแถวตาราง — ป้ายสถานะส่ง (สี 3 โทน) เด่นด้านขวา คู่กับ _soStatusBadge (สถานะ workflow
+// ของ SO เอง เช่น ออก invoice แล้ว/ปิด) ที่ยังมีความหมายต่างกัน จึงโชว์คู่กันไว้ ไม่ได้ตัดอันไหนทิ้ง
 function _csRenderBySO(d, st) {
   var sos = _csFilteredSOs(st);
   if (!sos.length) return '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
-  var h = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px;min-width:560px">';
-  h += '<thead><tr><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">SO</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">PO ลูกค้า</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สถานะ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">สร้างเมื่อ</th><th style="text-align:left;padding:0 8px 7px;font-size:10.5px;color:var(--text2)">เทอมเครดิต</th></tr></thead><tbody>';
+  var h = '';
   sos.forEach(function(s) {
+    var qty = 0, shipped = 0;
+    (s.items || []).forEach(function(it) { var q = Number(it.qty) || 0; qty += q; shipped += _csEffectiveShipped(s, it.sku, q); });
+    var qst = _csQtyStatus(qty, shipped);
     var cd = _csCreditDaysForSO(d, s);
     var creditNote = cd.special
       ? '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;background:var(--accent-light,#17344a);border-color:var(--accent);color:var(--accent)">🏷️ เครดิตโปรเจค ' + cd.days + ' วัน</span>'
-      : (cd.days != null ? '<span style="font-size:10.5px;color:var(--text2)">' + cd.days + ' วัน</span>' : '');
-    h += '<tr style="cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">' +
-      '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace;font-weight:600">' + sanitize(s.soNumber || '-') + '</td>' +
-      '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace">' + sanitize(s.customerPO || '-') + _csProjChip(s.projectId) + '</td>' +
-      '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + _soStatusBadge(s.status) + '</td>' +
-      '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + sanitize((s.createdAt || '').slice(0, 10)) + '</td>' +
-      '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + creditNote + '</td>' +
-      '</tr>';
+      : (cd.days != null ? '<span style="font-size:10.5px;color:var(--text2)">เครดิต ' + cd.days + ' วัน</span>' : '');
+    h += '<div onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})" style="cursor:pointer;border:1px solid var(--border);border-left:4px solid ' + CS_QTY_STATUS[qst].color + ';border-radius:11px;padding:12px 14px;margin-bottom:10px">';
+    h += '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px">' +
+      '<span><div style="font-family:monospace;font-weight:700;font-size:14px">' + sanitize(s.soNumber || '-') + '</div>' +
+      '<div style="color:var(--text2);font-size:11.5px;margin-top:2px">PO <span style="font-family:monospace">' + sanitize(s.customerPO || '-') + '</span>' + _csProjChip(s.projectId) + '</div></span>' +
+      '<span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' + _csQtyBadgeHtml(qty, shipped, true) + _soStatusBadge(s.status) + '</span></div>';
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:9px;flex-wrap:wrap">' +
+      _csQtyBarHtml(qty, shipped) +
+      '<span style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2)">สร้าง ' + sanitize((s.createdAt || '').slice(0, 10)) + creditNote + '</span></div>';
+    h += '</div>';
   });
-  h += '</tbody></table></div>';
   return h;
 }
 
@@ -812,50 +849,37 @@ function _csAllDealersSOHtml() {
 }
 
 // ---------------- มุมมอง "ตามสินค้า" ----------------
-// รวมรายการสินค้าข้ามทุก PO/SO ของ Dealer — สินค้า 1 รายการโผล่ได้หลาย PO พร้อมกัน แยกเป็น PO/SO คนละคอลัมน์ merge แถวให้คู่กัน
+// การ์ด 1 ใบต่อ 1 สินค้า (รวมทุก PO/SO ของ Dealer นี้) — สินค้า 1 รายการโผล่ได้หลาย PO พร้อมกัน พับเก็บรายละเอียด
+// PO/SO ย่อยไว้ กดขยายดูได้ แทนแถวตาราง rowspan เดิมที่อ่านยากเมื่อมีหลาย PO/SO ต่อสินค้า
 function _csRenderByProduct(d, st) {
   var rawItems = _csFilteredProductItems(st);
   var h = _csCategoryTabsHtml(rawItems);
   var items = rawItems.filter(function(it) { return _csPassesCatFilter(it.category); });
   if (!items.length) return h + '<div style="color:var(--text2);font-size:13px;padding:10px 2px">ไม่พบรายการที่ตรงกับ filter</div>';
 
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการสินค้ารวมทุก PO/SO ของ Dealer นี้ (' + items.length + ' รายการ)</div>';
-  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
-  h += '<thead><tr><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">รายการสินค้า</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">รวมทุก PO</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">ส่งแล้ว</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">คงค้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน PO ไหนบ้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน SO ไหนบ้าง</th></tr></thead><tbody>';
-
-  items.forEach(function(it) {
-    var remain = it.totalQty - it.totalShipped;
-    var pct = it.totalQty ? Math.round(it.totalShipped / it.totalQty * 100) : 0;
-    var pairs = [];
+  items.forEach(function(it, idx) {
+    var qst = _csQtyStatus(it.totalQty, it.totalShipped);
+    var inner = '<summary style="padding:12px 14px;background:var(--bg2);cursor:pointer;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;list-style:none">' +
+      '<span><div style="font-weight:700;font-size:13.5px">' + sanitize(it.model || '-') + '</div>' +
+      '<div style="color:var(--text2);font-size:11px;margin-top:2px">' + sanitize(it.sku || '') + ' · อยู่ ' + it.poOrder.length + ' PO</div></span>' +
+      '<span style="display:flex;align-items:center;gap:8px">' + _csQtyBadgeHtml(it.totalQty, it.totalShipped, true) + '</span></summary>';
+    inner += '<div style="padding:4px 14px 14px">';
+    inner += _csQuickCatSelectHtml(it.sku);
+    inner += '<div style="margin-top:8px">' + _csQtyBarHtml(it.totalQty, it.totalShipped) + '</div>';
+    inner += '<div style="display:flex;flex-direction:column;gap:7px;margin-top:10px">';
     it.poOrder.forEach(function(poNo) {
       var pe = it.poMap[poNo];
-      pe.sos.forEach(function(x, si) { pairs.push({ poNo: poNo, pg: pe.pg, qty: pe.qty, so: x.so, shipped: x.shipped, isFirstSoOfPo: si === 0, soCountOfPo: pe.sos.length }); });
+      inner += '<div style="background:var(--bg2);border-radius:9px;padding:9px 11px">' +
+        '<div style="font-family:monospace;font-weight:600;font-size:12.5px">' + sanitize(poNo) + ' <span style="font-weight:400;color:var(--text2);font-size:10.5px">' + pe.qty + ' ชิ้น</span>' + _csProjChip(pe.pg.projectId) + '</div>';
+      inner += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">';
+      pe.sos.forEach(function(x) {
+        inner += '<span onclick="event.stopPropagation();go(\'soDetail\',{soId:\'' + x.so.id + '\'})" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;background:var(--bg3,var(--bg));border:1px solid var(--border);border-radius:999px;padding:2px 8px"><b style="font-family:monospace">' + sanitize(x.so.soNumber || '-') + '</b> ' + (x.shipped > 0 ? 'ส่งแล้ว ' + x.shipped : 'ยังไม่ส่ง') + '</span>';
+      });
+      inner += '</div></div>';
     });
-    var totalRows = pairs.length || 1;
-    var poGroupIdx = -1;
-    pairs.forEach(function(pair, pi) {
-      if (pair.isFirstSoOfPo) poGroupIdx++;
-      var rowBg = (poGroupIdx % 2 === 1) ? ' style="background:var(--bg2)"' : '';
-      h += '<tr' + rowBg + '>';
-      if (pi === 0) {
-        h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);vertical-align:top">' + sanitize(it.model || '-') + (it.poOrder.length > 1 ? '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">อยู่ ' + it.poOrder.length + ' PO</div>' : '') + _csQuickCatSelectHtml(it.sku) + '</td>';
-        h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);text-align:center;vertical-align:top">' + it.totalQty + '</td>';
-        h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);text-align:center;vertical-align:top">' + it.totalShipped + '</td>';
-        h += '<td rowspan="' + totalRows + '" style="padding:7px 8px;border-top:1px solid var(--border);vertical-align:top"><div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg2);overflow:hidden"><i style="display:block;height:100%;width:' + pct + '%;background:#3ecf8e"></i></div><span style="font-size:11px;color:var(--text2);white-space:nowrap">' + (remain > 0 ? 'เหลือ ' + remain : 'ครบ') + '</span></div></td>';
-      }
-      if (pair.isFirstSoOfPo) {
-        h += '<td rowspan="' + pair.soCountOfPo + '" style="padding:7px 8px;border-top:1px solid var(--border);vertical-align:top">' +
-          '<b style="font-family:monospace">' + sanitize(pair.poNo) + '</b><br><span style="font-size:11px;color:var(--text2)">' + pair.qty + ' ชิ้น</span>' + _csProjChip(pair.pg.projectId) + '</td>';
-      }
-      h += '<td style="padding:7px 8px;border-top:1px solid var(--border);cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + pair.so.id + '\'})">' +
-        '<span style="font-family:monospace;font-weight:600">' + sanitize(pair.so.soNumber || '-') + '</span> ' +
-        '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;' +
-        (pair.shipped > 0 ? 'background:#3ecf8e22;border-color:#3ecf8e55;color:#3ecf8e' : 'background:var(--bg2);border-color:var(--border);color:var(--text2)') + '">' +
-        (pair.shipped > 0 ? 'ส่งแล้ว ' + pair.shipped : 'ยังไม่ส่ง') + '</span></td>';
-      h += '</tr>';
-    });
+    inner += '</div></div>';
+    h += _csCardWrap(qst, idx === 0, inner);
   });
-  h += '</tbody></table></div>';
   return h;
 }
 
@@ -897,47 +921,46 @@ function _csAllDealersProductHtml() {
   });
   filtered.sort(function(a, b) { var ta = _groupTotals(a), tb = _groupTotals(b); return (tb.qty - tb.shipped) - (ta.qty - ta.shipped); });
 
-  h += '<div class="card-grid" style="margin-bottom:10px">' +
+  h += '<div class="card-grid" style="margin-bottom:12px">' +
     _csTile('คงค้างรวม', kpiRemain + ' ชิ้น') +
     _csTile('สั่งรวมทั้งหมด', kpiQty + ' ชิ้น') +
     _csTile('สินค้าที่ยังค้าง', productsWithRemain + ' รายการ') +
     _csTile('Dealer ที่มีของค้าง', String(Object.keys(dealersWithRemain).length)) +
     '</div>';
-  h += '<div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;margin-bottom:8px">รายการสินค้ารวมทุก PO/SO ของทุก Dealer (' + filtered.length + ' รายการ)</div>';
-  h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
-  h += '<thead><tr><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">Dealer</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">รวมทุก PO</th><th style="padding:0 8px 6px;font-size:10.5px;color:var(--text2);text-align:center">ส่งแล้ว</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">คงค้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน PO ไหนบ้าง</th><th style="text-align:left;padding:0 8px 6px;font-size:10.5px;color:var(--text2)">อยู่ใน SO ไหนบ้าง</th></tr></thead><tbody>';
 
-  filtered.forEach(function(g) {
+  filtered.forEach(function(g, idx) {
     var t = _groupTotals(g);
-    var pct = t.qty ? Math.round(t.shipped / t.qty * 100) : 0;
-    h += '<tr style="background:var(--bg2)"><td colspan="6" style="padding:8px 8px;border-top:1px solid var(--border)">' +
-      '<div style="font-weight:600">' + sanitize(g.model || '-') + ' <span style="font-size:10.5px;color:var(--text2);font-weight:400">' + sanitize(g.sku || '') + '</span></div>' +
-      _csQuickCatSelectHtml(g.sku) +
-      '<div style="display:flex;align-items:center;gap:7px;margin-top:4px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg3,var(--bg));overflow:hidden"><i style="display:block;height:100%;width:' + pct + '%;background:#3ecf8e"></i></div>' +
-      '<span style="font-size:11px;color:var(--text2);white-space:nowrap">รวม ' + t.qty + ' ชิ้น · ส่งแล้ว ' + t.shipped + ' · ' + g.dealerItems.length + ' Dealer</span></div>' +
-      '</td></tr>';
+    var qst = _csQtyStatus(t.qty, t.shipped);
+    var inner = '<summary style="padding:12px 14px;background:var(--bg2);cursor:pointer;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;list-style:none">' +
+      '<span><div style="font-weight:700;font-size:13.5px">' + sanitize(g.model || '-') + '</div>' +
+      '<div style="color:var(--text2);font-size:11px;margin-top:2px">' + sanitize(g.sku || '') + ' · ' + g.dealerItems.length + ' Dealer</div></span>' +
+      '<span style="display:flex;align-items:center;gap:8px">' + _csQtyBadgeHtml(t.qty, t.shipped, true) + '</span></summary>';
+    inner += '<div style="padding:4px 14px 14px">';
+    inner += _csQuickCatSelectHtml(g.sku);
+    inner += '<div style="margin-top:8px">' + _csQtyBarHtml(t.qty, t.shipped) + '</div>';
+    inner += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
     g.dealerItems.forEach(function(di) {
       var it = di.it;
-      var remain = it.totalQty - it.totalShipped;
-      var ipct = it.totalQty ? Math.round(it.totalShipped / it.totalQty * 100) : 0;
+      inner += '<div style="background:var(--bg2);border-radius:9px;padding:9px 11px">';
+      inner += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+        '<span style="font-size:11px;padding:2px 9px;border-radius:7px;background:var(--accent-light,rgba(59,130,246,.1));color:var(--accent);font-weight:600;white-space:nowrap">🏢 ' + sanitize(di.dealer.name) + '</span>' +
+        _csQtyBarHtml(it.totalQty, it.totalShipped) + '</div>';
       var poHtml = it.poOrder.map(function(poNo) {
         var pe = it.poMap[poNo];
-        return '<div><b style="font-family:monospace">' + sanitize(poNo) + '</b> <span style="font-size:10.5px;color:var(--text2)">' + pe.qty + ' ชิ้น</span>' + _csProjChip(pe.pg.projectId) + '</div>';
+        return '<div><b style="font-family:monospace">' + sanitize(poNo) + '</b> <span style="color:var(--text2)">' + pe.qty + ' ชิ้น</span>' + _csProjChip(pe.pg.projectId) + '</div>';
       }).join('');
       var soHtml = it.poOrder.map(function(poNo) {
         return it.poMap[poNo].sos.map(function(x) {
-          return '<div onclick="go(\'soDetail\',{soId:\'' + x.so.id + '\'})" style="cursor:pointer"><span style="font-family:monospace;font-weight:600">' + sanitize(x.so.soNumber || '-') + '</span> ' +
-            '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;' + (x.shipped > 0 ? 'background:#3ecf8e22;border-color:#3ecf8e55;color:#3ecf8e' : 'background:var(--bg2);border-color:var(--border);color:var(--text2)') + '">' + (x.shipped > 0 ? 'ส่งแล้ว ' + x.shipped : 'ยังไม่ส่ง') + '</span></div>';
+          return '<div onclick="event.stopPropagation();go(\'soDetail\',{soId:\'' + x.so.id + '\'})" style="cursor:pointer"><span style="font-family:monospace;font-weight:600">' + sanitize(x.so.soNumber || '-') + '</span> ' +
+            '<span style="font-size:10px;padding:2px 7px;border-radius:10px;border:1px solid;white-space:nowrap;' + (x.shipped > 0 ? 'background:#22c55e22;border-color:#22c55e55;color:#22c55e' : 'background:var(--bg3,var(--bg));border-color:var(--border);color:var(--text2)') + '">' + (x.shipped > 0 ? 'ส่งแล้ว ' + x.shipped : 'ยังไม่ส่ง') + '</span></div>';
         }).join('');
       }).join('');
-      h += '<tr><td style="padding:7px 8px;border-top:1px solid var(--border)"><span style="font-size:10.5px;padding:2px 8px;border-radius:7px;background:var(--accent-light,rgba(59,130,246,.1));color:var(--accent);font-weight:600;white-space:nowrap">🏢 ' + sanitize(di.dealer.name) + '</span></td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border);text-align:center">' + it.totalQty + '</td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border);text-align:center">' + it.totalShipped + '</td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border)"><div style="display:flex;align-items:center;gap:7px"><div style="flex:1;height:7px;min-width:50px;border-radius:4px;background:var(--bg2);overflow:hidden"><i style="display:block;height:100%;width:' + ipct + '%;background:#3ecf8e"></i></div><span style="font-size:11px;color:var(--text2);white-space:nowrap">' + (remain > 0 ? 'เหลือ ' + remain : 'ครบ') + '</span></div></td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border)">' + poHtml + '</td>' +
-        '<td style="padding:7px 8px;border-top:1px solid var(--border)">' + soHtml + '</td></tr>';
+      inner += '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:7px;font-size:11px">' +
+        '<div style="flex:1;min-width:140px">' + poHtml + '</div><div style="flex:1;min-width:140px">' + soHtml + '</div></div>';
+      inner += '</div>';
     });
+    inner += '</div></div>';
+    h += _csCardWrap(qst, idx === 0, inner);
   });
-  h += '</tbody></table></div>';
   return h;
 }
