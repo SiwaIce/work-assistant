@@ -1637,8 +1637,18 @@ function rSODetail(el) {
       (itLinkSafe ? '<a href="' + sanitize(itLinkSafe) + '" target="_blank" rel="noopener" style="font-size:10px;color:var(--accent);display:inline-block;margin-top:3px">🔗 เปิดลิงก์</a>' : '') + '</td>';
     html += '</tr>';
   });
-  html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="5" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
-  html += '<td style="padding:10px;text-align:right">' + (_gvHidden('so_price') ? '-' : fmtMoney(total)) + '</td><td colspan="4"></td></tr>';
+  if (!_gvHidden('so_price')) {
+    var _soVat = total * 7 / 100;
+    html += '<tr style="border-top:1px solid var(--border)"><td colspan="5" style="padding:6px 10px;text-align:right;color:var(--text2)">ยอดรวม (ไม่รวม VAT)</td>';
+    html += '<td style="padding:6px 10px;text-align:right;color:var(--text2)">' + fmtMoney(total) + '</td><td colspan="4"></td></tr>';
+    html += '<tr><td colspan="5" style="padding:6px 10px;text-align:right;color:var(--text2)">VAT 7%</td>';
+    html += '<td style="padding:6px 10px;text-align:right;color:var(--text2)">' + fmtMoney(_soVat) + '</td><td colspan="4"></td></tr>';
+    html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="5" style="padding:10px;text-align:right">รวมทั้งสิ้น (รวม VAT)</td>';
+    html += '<td style="padding:10px;text-align:right">' + fmtMoney(total + _soVat) + '</td><td colspan="4"></td></tr>';
+  } else {
+    html += '<tr style="font-weight:600;background:var(--bg2);border-top:1px solid var(--border)"><td colspan="5" style="padding:10px;text-align:right">รวมทั้งสิ้น</td>';
+    html += '<td style="padding:10px;text-align:right">-</td><td colspan="4"></td></tr>';
+  }
   html += '</tbody></table></div></div>';
 
   // การส่งมอบ — เทียบจำนวนตาม PO ลูกค้ากับที่ส่งไปแล้วจริงต่อรายการ รองรับแบ่งส่งหลายรอบ (ไม่ต้องรอของครบ)
