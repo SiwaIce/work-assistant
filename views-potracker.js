@@ -3116,17 +3116,25 @@ function _poTrackerDealerPOViewHtml(dealerSOs, search, statusFlt) {
 
 // สรุปยอด PO ของ Dealer แยกตามเดือน — ใช้วันที่ PO ลูกค้า (customerPODate) ถ้ามี ไม่งั้น fallback วันที่สร้าง SO (createdAt)
 // ยอด = มูลค่ารวมทั้งใบ (นิยามเดียวกับ totalVal ใน _poTrackerDealerMoneyTotals) ไม่ขึ้นกับว่าส่งแล้วหรือยัง เพราะเป็นยอดตาม "วันที่ตั้ง PO" ไม่ใช่วันส่ง
+// แต่ละใบยังคำนวณสถานะส่งของ (ws) + ยอดค้างส่ง ด้วย _poTrackerSoWholeStatus เดียวกับที่ใช้ในมุมมอง "ตาม PO" กันนิยามเพี้ยนไปคนละที่
 function _poTrackerDealerMonthlyPOData(dealerSOs) {
   var map = {};
   dealerSOs.forEach(function(s) {
     var d = s.customerPODate || (s.createdAt || '').slice(0, 10);
     if (!d) return;
     var month = d.slice(0, 7);
-    if (!map[month]) map[month] = { month: month, amount: 0, count: 0, list: [] };
-    var val = (s.items || []).reduce(function(sum, it) { return sum + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0); }, 0);
+    if (!map[month]) map[month] = { month: month, amount: 0, remainingAmount: 0, count: 0, list: [] };
+    var items = (s.items || []).map(function(it) {
+      return { qty: Number(it.qty) || 0, val: (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), bucket: _poTrackerItemBucket(it, s) };
+    });
+    var val = items.reduce(function(sum, it) { return sum + it.val; }, 0);
+    var remainingVal = items.reduce(function(sum, it) { return sum + (it.bucket === 'shipped' ? 0 : it.val); }, 0);
+    var ws = _poTrackerSoWholeStatus(s, items.map(function(it) { return { qty: it.qty, bucket: it.bucket }; }));
+    if (ws.key === 'closed') remainingVal = 0; // ปิดแล้วถือว่าจบ ไม่นับเป็นยอดค้างส่งอีก แม้มีรายการที่ bucket ไม่ใช่ shipped หลงเหลือ
     map[month].amount += val;
+    map[month].remainingAmount += remainingVal;
     map[month].count++;
-    map[month].list.push({ so: s, date: d, amount: val });
+    map[month].list.push({ so: s, date: d, amount: val, remainingAmount: remainingVal, ws: ws });
   });
   return Object.keys(map).map(function(k) { return map[k]; }).sort(function(a, b) { return b.month.localeCompare(a.month); });
 }
@@ -3195,10 +3203,12 @@ function _poTrackerDealerMonthlyHtml(dealerName, dealerSOs) {
     return html;
   }
 
+  var colCount = isInvoice ? 4 : 5;
   html += '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px">';
   html += '<table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--bg2)">';
   html += '<th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--text2)">เดือน</th>';
   html += '<th style="text-align:right;padding:8px 10px;font-size:11px;color:var(--text2)">ยอด</th>';
+  if (!isInvoice) html += '<th style="text-align:right;padding:8px 10px;font-size:11px;color:var(--text2);white-space:nowrap">ยอดค้างส่ง</th>';
   html += '<th style="text-align:right;padding:8px 10px;font-size:11px;color:var(--text2);white-space:nowrap">จำนวน ' + (isInvoice ? 'Invoice' : 'PO') + '</th>';
   html += '<th></th>';
   html += '</tr></thead><tbody>';
@@ -3208,30 +3218,69 @@ function _poTrackerDealerMonthlyHtml(dealerName, dealerSOs) {
     html += '<tr style="border-top:1px solid var(--border)">';
     html += '<td style="padding:8px 10px;font-weight:600;white-space:nowrap">' + _poTrackerMonthLabel(r.month) + '</td>';
     html += '<td class="num" style="padding:8px 10px;text-align:right;font-weight:700">' + _poTrackerDealerMoney(r.amount) + '</td>';
+    if (!isInvoice) html += '<td class="num" style="padding:8px 10px;text-align:right;font-weight:700;color:' + (r.remainingAmount > 0 ? '#f59e0b' : 'var(--text3)') + '">' + (r.remainingAmount > 0 ? _poTrackerDealerMoney(r.remainingAmount) : '—') + '</td>';
     html += '<td style="padding:8px 10px;text-align:right;color:var(--text2)">' + r.count + '</td>';
     html += '<td style="padding:8px 10px;text-align:right;white-space:nowrap"><a href="#" onclick="poTrackerDealerMonthlyToggle(\'' + key + '\');return false" style="color:var(--accent)">' + (open ? '▼ ซ่อน' : '▶ ดูรายการ') + '</a></td>';
     html += '</tr>';
     if (open) {
-      html += '<tr><td colspan="4" style="padding:0 10px 10px 10px;background:var(--bg2)"><div style="padding-top:6px">';
+      html += '<tr><td colspan="' + colCount + '" style="padding:0 10px 10px 10px;background:var(--bg2)"><div style="padding-top:6px">';
+      if (!isInvoice) html += _poTrackerDealerMonthlyPOStatusChipsHtml(r.list);
       r.list.forEach(function(x) {
         html += '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 6px;border-bottom:1px solid var(--border);flex-wrap:wrap">';
         if (isInvoice) {
           var rr = x.round;
           html += '<div style="min-width:0"><a href="#" onclick="go(\'soDetail\',{soId:\'' + rr.soId + '\'});return false" style="color:var(--accent);font-weight:600">🧾 ' + sanitize(rr.invoiceNumber) + '</a>' +
             '<span style="font-size:11px;color:var(--text2)"> · ' + sanitize(rr.soNumber || '-') + ' · ' + fD(x.date) + '</span></div>';
+          html += '<div style="font-weight:600;white-space:nowrap">' + _poTrackerDealerMoney(x.amount) + '</div>';
         } else {
-          var so = x.so;
-          html += '<div style="min-width:0"><a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="color:var(--accent);font-weight:600">📋 ' + sanitize(so.soNumber || '-') + '</a>' +
-            (so.customerPO ? '<span style="font-size:11px;color:var(--text2)"> · PO ' + sanitize(so.customerPO) + '</span>' : '') +
-            '<span style="font-size:11px;color:var(--text2)"> · ' + fD(x.date) + '</span></div>';
+          var so = x.so, ws = x.ws;
+          var pct = ws.totalQty > 0 ? Math.min(100, Math.round(ws.deliveredQty / ws.totalQty * 100)) : 0;
+          html += '<div style="min-width:0;flex:1">';
+          html += '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">' +
+            '<a href="#" onclick="go(\'soDetail\',{soId:\'' + so.id + '\'});return false" style="color:var(--accent);font-weight:600">📋 ' + sanitize(so.soNumber || '-') + '</a>' +
+            (so.customerPO ? '<span style="font-size:11px;color:var(--text2)">· PO ' + sanitize(so.customerPO) + '</span>' : '') +
+            '<span style="font-size:11px;color:var(--text2)">· ' + fD(x.date) + '</span>' +
+            _poTrackerSoWholeStatusBadgeHtml(ws) + '</div>';
+          html += '<div style="display:flex;align-items:center;gap:6px;margin-top:4px;max-width:260px">' +
+            '<div style="flex:1;height:6px;min-width:60px;border-radius:4px;background:var(--border-light,var(--bg3));overflow:hidden"><div style="height:100%;width:' + pct + '%;background:' + (ws.key === 'closed' ? '#64748b' : (pct >= 100 ? '#22c55e' : (pct > 0 ? '#f59e0b' : '#ef4444'))) + '"></div></div>' +
+            '<span style="font-size:10.5px;color:var(--text2);white-space:nowrap">' + ws.deliveredQty + '/' + ws.totalQty + ' ชิ้น</span></div>';
+          html += '</div>';
+          html += '<div style="text-align:right;white-space:nowrap">' +
+            '<div style="font-weight:600">' + _poTrackerDealerMoney(x.amount) + '</div>' +
+            (x.remainingAmount > 0 ? '<div style="font-size:10.5px;color:#f59e0b">ค้าง ' + _poTrackerDealerMoney(x.remainingAmount) + '</div>' : '') +
+            '</div>';
         }
-        html += '<div style="font-weight:600;white-space:nowrap">' + _poTrackerDealerMoney(x.amount) + '</div>';
         html += '</div>';
       });
       html += '</div></td></tr>';
     }
   });
   html += '</tbody></table></div>';
+  return html;
+}
+
+// ชิปสรุปจำนวน PO แยกตามสถานะส่งของ (ปิดแล้ว/ส่งครบแล้วรอปิด/แบ่งส่งบางส่วน/ค้างส่ง) ของเดือนที่กำลังดู drill-down อยู่
+// ใช้ key เดียวกับ _poTrackerSoWholeStatus ('closed' รวมทั้งปิดแล้ว, 'partial' แยกเป็นครบ/ไม่ครบด้วย ws.deliveredQty>=ws.totalQty)
+function _poTrackerDealerMonthlyPOStatusChipsHtml(list) {
+  var c = { closed: 0, full: 0, partial: 0, pending: 0 };
+  list.forEach(function(x) {
+    var ws = x.ws;
+    if (ws.key === 'closed') c.closed++;
+    else if (ws.key === 'pending') c.pending++;
+    else if (ws.totalQty > 0 && ws.deliveredQty >= ws.totalQty) c.full++;
+    else c.partial++;
+  });
+  var chips = [];
+  if (c.full) chips.push(['rgba(34,197,94,.14)', '#22c55e', '✅ ส่งครบแล้ว ' + c.full]);
+  if (c.partial) chips.push(['rgba(245,158,11,.14)', '#f59e0b', '🚚 แบ่งส่ง ' + c.partial]);
+  if (c.pending) chips.push(['rgba(239,68,68,.14)', '#ef4444', '⏳ ค้างส่ง ' + c.pending]);
+  if (c.closed) chips.push(['rgba(100,116,139,.14)', '#64748b', '🔒 ปิดแล้ว ' + c.closed]);
+  if (!chips.length) return '';
+  var html = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">';
+  chips.forEach(function(ch) {
+    html += '<span style="font-size:10.5px;font-weight:600;padding:2px 9px;border-radius:99px;white-space:nowrap;background:' + ch[0] + ';color:' + ch[1] + '">' + ch[2] + '</span>';
+  });
+  html += '</div>';
   return html;
 }
 
