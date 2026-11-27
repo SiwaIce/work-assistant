@@ -20,6 +20,9 @@ var csSelectedDealerId = null;
 var csDeliveryFlt = ''; // '' | 'delivered' | 'pending' — กรองว่า "ส่งแล้ว (ครบ)" หรือ "ยังไม่ส่งครบ" (รวม partial ด้วย เพราะถือว่ายังไม่จบงาน)
 var csSearch = ''; // ค้นหา PO/SO/Project ID/สินค้า/SKU — ใช้ร่วมกันทั้ง 3 มุมมอง
 var csStatusFlt = ''; // กรองสถานะ SO (ใช้เฉพาะมุมมอง "ตาม SO")
+// ตัวกรองเดือน PO (ใช้ร่วมกันทั้ง 3 มุมมอง + Export Excel) — array ของ 'YYYY-MM' เทียบกับ pg.poDate/s.customerPODate
+// ว่าง = ทุกเดือน เลือกได้พร้อมกันหลายเดือน (เหมือน csCatFilter)
+var csMonthFlt = [];
 // ตัวกรองหมวดหมู่สินค้า (เฉพาะมุมมอง "ตามสินค้า") — array ของ id หมวด (PRODUCT_CATEGORIES ใน products.js)
 // ว่าง = ทุกหมวด เลือกได้พร้อมกันหลายหมวด เหมือนตัวกรองหมวดในหน้า demo-unit (ดู unitCatFilter ใน demo-staff.html)
 // ใช้ร่วมกันทั้งแท็บ "ตามสินค้า" ของ Dealer รายตัว และแท็บ "🧰 ตามสินค้า" ใน PO Tracker (views-potracker.js)
@@ -313,7 +316,7 @@ function _csRenderDealerCard(d, opts) {
     '<button class="btn bo bsm" onclick="_csShowImportRemarksModal(\'' + d.id + '\')" title="แก้คอลัมน์ หมายเหตุ ในไฟล์ Export Excel (ชีต ตาม PO ลูกค้า) แล้วนำเข้ากลับมาที่นี่">📥 Import หมายเหตุ</button>' +
     '</div>';
 
-  if (st.sos.length) h += _csRenderFilterBar();
+  if (st.sos.length) h += _csRenderFilterBar(st);
 
   if (!st.sos.length) {
     h += '<div style="color:var(--text2);font-size:13px">Dealer นี้ยังไม่มี Sales Order</div>';
@@ -337,13 +340,66 @@ function _csViewBtn(mode, label, dealerId) {
   return '<button class="btn bsm ' + (act ? 'bp' : 'bo') + '" onclick="csViewMode=\'' + mode + '\';csSelectedDealerId=\'' + dealerId + '\';render()">' + label + '</button>';
 }
 
-// ---------------- แถบ filter ร่วม — ค้นหา + ส่งแล้ว/ยังไม่ส่ง + สถานะ SO (เฉพาะมุมมอง "ตาม SO") ----------------
+// ---------------- แถบ filter ร่วม — ค้นหา + ส่งแล้ว/ยังไม่ส่ง + สถานะ SO (เฉพาะมุมมอง "ตาม SO") + เดือน PO ----------------
 function _csDeliveryFltBtn(val, label) {
   var act = csDeliveryFlt === val;
   return '<button class="btn bsm ' + (act ? 'bp' : 'bo') + '" onclick="csDeliveryFlt=\'' + val + '\';render()">' + label + '</button>';
 }
-function _csRenderFilterBar() {
-  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">';
+// เดือน PO ที่มีข้อมูลจริงของ Dealer นี้ (ไม่โชว์เดือนว่าง) — ใช้ pg.poDate (มุมมอง PO/สินค้า) รวมกับ
+// s.customerPODate (กัน SO ที่หลุด group ไม่มี poDate เพราะไม่มีเลข PO) เรียงใหม่สุดก่อน
+function _csAvailableMonths(st) {
+  var set = {};
+  st.poGroups.forEach(function(pg) { if (pg.poDate) set[pg.poDate.slice(0, 7)] = true; });
+  st.sos.forEach(function(s) { if (s.customerPODate) set[s.customerPODate.slice(0, 7)] = true; });
+  return Object.keys(set).sort().reverse();
+}
+function _csMonthLabel(ym) {
+  var parts = String(ym || '').split('-');
+  var mi = parseInt(parts[1], 10) - 1;
+  return (THAI_MONTHS_SHORT[mi] || '?') + ' ' + parts[0];
+}
+function csToggleMonthFlt(ym) {
+  if (ym === 'all') { csMonthFlt = []; render(); return; }
+  var i = csMonthFlt.indexOf(ym);
+  if (i === -1) csMonthFlt.push(ym); else csMonthFlt.splice(i, 1);
+  render();
+}
+function _csMonthChipsHtml(st) {
+  var months = _csAvailableMonths(st);
+  if (!months.length) return '';
+  var h = '<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;margin-bottom:10px">';
+  h += '<button class="btn bsm ' + (!csMonthFlt.length ? 'bp' : 'bo') + '" style="white-space:nowrap" onclick="csToggleMonthFlt(\'all\')">📅 ทุกเดือน</button>';
+  months.forEach(function(ym) {
+    var on = csMonthFlt.indexOf(ym) !== -1;
+    h += '<button class="btn bsm ' + (on ? 'bp' : 'bo') + '" style="white-space:nowrap" onclick="csToggleMonthFlt(\'' + ym + '\')">' + sanitize(_csMonthLabel(ym)) + (on ? ' ✕' : '') + '</button>';
+  });
+  h += '</div>';
+  return h;
+}
+// แถบสรุปยอดของเดือนที่เลือกไว้ (โชว์เฉพาะตอนเลือกอย่างน้อย 1 เดือน) — รวมยอด/ค้างส่งจาก PO groups ที่ผ่าน
+// filter ปัจจุบันทั้งหมด (เดือน/สถานะ/ค้นหา) ใช้ร่วมกันทั้ง 3 มุมมอง เพราะอิงจากข้อมูล PO เดียวกัน
+function _csMonthSummaryHtml(st) {
+  if (!csMonthFlt.length) return '';
+  var groups = _csFilteredPOGroups(st);
+  var totalValue = 0, pendingValue = 0;
+  groups.forEach(function(g) {
+    g.order.forEach(function(k) {
+      var it = g.items[k];
+      var remain = Math.max(0, it.qty - it.shipped);
+      totalValue += it.qty * it.unitPrice;
+      pendingValue += remain * it.unitPrice;
+    });
+  });
+  var label = csMonthFlt.slice().sort().map(_csMonthLabel).join(' + ');
+  return '<div style="display:flex;gap:16px;flex-wrap:wrap;background:var(--accent-light,#17344a);border:1px solid var(--accent);border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:12px">' +
+    '<span style="font-weight:700;color:var(--accent)">📅 ' + sanitize(label) + '</span>' +
+    '<span>PO: <b>' + groups.length + ' ใบ</b></span>' +
+    '<span>ยอดรวม: <b>' + fmtMoney(totalValue) + ' ฿</b></span>' +
+    '<span>ค้างส่ง: <b style="color:#f0685f">' + fmtMoney(pendingValue) + ' ฿</b></span>' +
+    '</div>';
+}
+function _csRenderFilterBar(st) {
+  var h = '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">';
   h += '<input class="inp" style="flex:1;min-width:170px;max-width:280px" placeholder="🔎 ค้นหา PO/SO/Project ID/สินค้า/SKU" value="' + sanitize(csSearch) + '" oninput="csSearch=this.value;render()">';
   h += '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
     _csDeliveryFltBtn('', 'ทั้งหมด') +
@@ -358,10 +414,12 @@ function _csRenderFilterBar() {
     });
     h += '</select>';
   }
-  if (csSearch || csDeliveryFlt || csStatusFlt) {
-    h += '<button class="btn bo bsm" onclick="csSearch=\'\';csDeliveryFlt=\'\';csStatusFlt=\'\';render()">✕ ล้าง filter</button>';
+  if (csSearch || csDeliveryFlt || csStatusFlt || csMonthFlt.length) {
+    h += '<button class="btn bo bsm" onclick="csSearch=\'\';csDeliveryFlt=\'\';csStatusFlt=\'\';csMonthFlt=[];render()">✕ ล้าง filter</button>';
   }
   h += '</div>';
+  h += _csMonthChipsHtml(st);
+  h += _csMonthSummaryHtml(st);
   return h;
 }
 
@@ -372,6 +430,7 @@ function _csFilteredPOGroups(st) {
   var q = (csSearch || '').trim().toLowerCase();
   var out = [];
   st.poGroups.forEach(function(pg) {
+    if (csMonthFlt.length && (!pg.poDate || csMonthFlt.indexOf(pg.poDate.slice(0, 7)) === -1)) return;
     var raw = {}, rawOrder = [];
     pg.sos.forEach(function(s) {
       (s.items || []).forEach(function(it) {
@@ -419,6 +478,10 @@ function _csFilteredSOs(st) {
   var q = (csSearch || '').trim().toLowerCase();
   return st.sos.filter(function(s) {
     if (csStatusFlt && s.status !== csStatusFlt) return false;
+    if (csMonthFlt.length) {
+      var my = (s.customerPODate || '').slice(0, 7);
+      if (!my || csMonthFlt.indexOf(my) === -1) return false;
+    }
     if (csDeliveryFlt) {
       var totalQty = 0, shipped = 0;
       (s.items || []).forEach(function(it) { var qty = Number(it.qty) || 0; totalQty += qty; shipped += _csEffectiveShipped(s, it.sku, qty); });
@@ -441,6 +504,7 @@ function _csFilteredProductItems(st) {
   var q = (csSearch || '').trim().toLowerCase();
   var map = {}, order = [];
   st.poGroups.forEach(function(pg) {
+    if (csMonthFlt.length && (!pg.poDate || csMonthFlt.indexOf(pg.poDate.slice(0, 7)) === -1)) return;
     pg.sos.forEach(function(s) {
       (s.items || []).forEach(function(it) {
         var key = it.sku || it.model;
@@ -553,6 +617,7 @@ function _csXlDownload(buffer, filename) {
 function _csFilterDescLabel(includeStatus) {
   var parts = [csDeliveryFlt === 'delivered' ? 'สถานะส่ง: ส่งแล้ว' : (csDeliveryFlt === 'pending' ? 'สถานะส่ง: ยังไม่ส่ง' : 'สถานะส่ง: ทั้งหมด')];
   if (includeStatus && csStatusFlt) parts.push('สถานะ SO: ' + ((SO_STATUS[csStatusFlt] || {}).label || csStatusFlt));
+  if (csMonthFlt.length) parts.push('เดือน PO: ' + csMonthFlt.slice().sort().map(_csMonthLabel).join(', '));
   if (csSearch) parts.push('ค้นหา: "' + csSearch + '"');
   return parts.join('   ·   ');
 }
