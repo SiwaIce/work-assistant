@@ -81,8 +81,10 @@ function _csGroupByPO(sos) {
   var map = {}, order = [];
   sos.forEach(function(s) {
     var key = s.customerPO || ('(ไม่มีเลข PO) ' + (s.soNumber || s.id));
-    if (!map[key]) { map[key] = { poNo: key, projectId: s.projectId || '', sos: [] }; order.push(key); }
-    if (!map[key].projectId && s.projectId) map[key].projectId = s.projectId;
+    var pid = (typeof _soDisplayProjectId === 'function') ? _soDisplayProjectId(s) : (s.projectId || '');
+    if (!map[key]) { map[key] = { poNo: key, projectId: pid, poDate: s.customerPODate || '', sos: [] }; order.push(key); }
+    if (!map[key].projectId && pid) map[key].projectId = pid;
+    if (s.customerPODate && (!map[key].poDate || s.customerPODate < map[key].poDate)) map[key].poDate = s.customerPODate;
     map[key].sos.push(s);
   });
   return order.map(function(k) { return map[k]; });
@@ -308,6 +310,7 @@ function _csRenderDealerCard(d, opts) {
     _csViewBtn('product', '🧰 ตามสินค้า', d.id) +
     '</div>' +
     '<button class="btn bo bsm" onclick="_csExportExcel(\'' + d.id + '\')" title="ไฟล์เดียว 3 แท็บ: ตาม PO ลูกค้า / ตาม SO / ตามสินค้า — ใช้ filter ที่เลือกอยู่ทุกแท็บ">📤 Export Excel</button>' +
+    '<button class="btn bo bsm" onclick="_csShowImportRemarksModal(\'' + d.id + '\')" title="แก้คอลัมน์ หมายเหตุ ในไฟล์ Export Excel (ชีต ตาม PO ลูกค้า) แล้วนำเข้ากลับมาที่นี่">📥 Import หมายเหตุ</button>' +
     '</div>';
 
   if (st.sos.length) h += _csRenderFilterBar();
@@ -376,7 +379,7 @@ function _csFilteredPOGroups(st) {
         if (!raw[key]) { raw[key] = { model: it.model, sku: it.sku, unitPrice: it.unitPrice || 0, pairs: [] }; rawOrder.push(key); }
         var lineQty = Number(it.qty) || 0;
         var shipped = _csEffectiveShipped(s, it.sku, lineQty);
-        raw[key].pairs.push({ so: s, lineQty: lineQty, shipped: shipped });
+        raw[key].pairs.push({ so: s, lineQty: lineQty, shipped: shipped, comment: it.comment || '' });
       });
     });
 
@@ -392,12 +395,16 @@ function _csFilteredPOGroups(st) {
       if (!pairs.length) return;
       if (q) {
         var soNums = pairs.map(function(p) { return p.so.soNumber; });
-        var hay = [r.model, r.sku, pg.poNo, pg.projectId].concat(soNums).filter(Boolean).join(' ').toLowerCase();
+        var hay = [r.model, r.sku, pg.poNo, pg.projectId, pg.poDate].concat(soNums).filter(Boolean).join(' ').toLowerCase();
         if (hay.indexOf(q) === -1) return;
       }
-      var qty = 0, shipped = 0;
-      var perSo = pairs.map(function(p) { qty += p.lineQty; shipped += p.shipped; return { so: p.so, shipped: p.shipped }; });
-      items[key] = { model: r.model, sku: r.sku, qty: qty, shipped: shipped, unitPrice: r.unitPrice, perSo: perSo };
+      var qty = 0, shipped = 0, remarks = [];
+      var perSo = pairs.map(function(p) {
+        qty += p.lineQty; shipped += p.shipped;
+        if (p.comment && remarks.indexOf(p.comment) === -1) remarks.push(p.comment);
+        return { so: p.so, shipped: p.shipped };
+      });
+      items[key] = { model: r.model, sku: r.sku, qty: qty, shipped: shipped, unitPrice: r.unitPrice, perSo: perSo, remark: remarks.join('; ') };
       filteredOrder.push(key);
     });
     if (!filteredOrder.length) return;
@@ -420,7 +427,8 @@ function _csFilteredSOs(st) {
       if (csDeliveryFlt === 'pending' && delivered) return false;
     }
     if (q) {
-      var hay = [s.soNumber, s.customerPO, s.projectId].filter(Boolean).join(' ').toLowerCase();
+      var pid = (typeof _soDisplayProjectId === 'function') ? _soDisplayProjectId(s) : (s.projectId || '');
+      var hay = [s.soNumber, s.customerPO, pid, s.customerPODate].filter(Boolean).join(' ').toLowerCase();
       if (hay.indexOf(q) === -1) return false;
     }
     return true;
@@ -629,7 +637,7 @@ function _csExportExcel_impl(dealerId) {
 
   // แท็บ 1: ตาม PO ลูกค้า
   var groups = _csFilteredPOGroups(st);
-  var poHeader = ['PO ลูกค้า', 'Project ID', 'รายการสินค้า', 'SKU', 'ตาม PO', 'ส่งแล้ว', 'คงค้าง', 'ราคาต่อหน่วย', 'มูลค่าคงค้าง', 'สถานะ', 'อยู่ใน SO ไหนบ้าง'];
+  var poHeader = ['PO ลูกค้า', 'Project ID', 'วันที่เปิด PO', 'รายการสินค้า', 'SKU', 'ตาม PO', 'ส่งแล้ว', 'คงค้าง', 'ราคาต่อหน่วย', 'มูลค่าคงค้าง', 'สถานะ', 'หมายเหตุ', 'อยู่ใน SO ไหนบ้าง'];
   var poRows = [];
   groups.forEach(function(g) {
     g.order.forEach(function(k) {
@@ -637,26 +645,30 @@ function _csExportExcel_impl(dealerId) {
       var remain = it.qty - it.shipped;
       var status = remain <= 0 ? 'ส่งแล้ว (ครบ)' : (it.shipped > 0 ? 'ส่งบางส่วน' : 'ยังไม่ส่ง');
       var soTxt = it.perSo.map(function(p) { return p.so.soNumber + (p.shipped > 0 ? ' (ส่งแล้ว ' + p.shipped + ')' : ' (ยังไม่ส่ง)'); }).join('; ');
-      poRows.push([g.pg.poNo, g.pg.projectId || '', it.model || '', it.sku || '', it.qty, it.shipped, remain, it.unitPrice || 0, remain * (it.unitPrice || 0), status, soTxt]);
+      poRows.push([g.pg.poNo, g.pg.projectId || '', g.pg.poDate || '', it.model || '', it.sku || '', it.qty, it.shipped, remain, it.unitPrice || 0, remain * (it.unitPrice || 0), status, it.remark || '', soTxt]);
     });
   });
   totalRows += poRows.length;
   _csXlWriteSheet(wb, 'ตาม PO ลูกค้า', d.name, filterDesc, poHeader, poRows,
-    [18, 16, 28, 14, 8, 8, 8, 12, 14, 14, 40], [7, 8], 9);
+    [18, 16, 14, 28, 14, 8, 8, 8, 12, 14, 14, 22, 40], [8, 9], 10);
 
   // แท็บ 2: ตาม SO
   var sos = _csFilteredSOs(st);
-  var soHeader = ['SO Number', 'PO ลูกค้า', 'Project ID', 'สถานะ SO', 'สถานะส่ง', 'สร้างเมื่อ', 'เทอมเครดิต (วัน)'];
+  var soHeader = ['SO Number', 'PO ลูกค้า', 'Project ID', 'วันที่เปิด PO', 'สถานะ SO', 'สถานะส่ง', 'สร้างเมื่อ', 'เทอมเครดิต (วัน)', 'Invoice No.'];
   var soRows = sos.map(function(s) {
     var cd = _csCreditDaysForSO(d, s);
     var totalQty = 0, shipped = 0;
     (s.items || []).forEach(function(it) { var qty = Number(it.qty) || 0; totalQty += qty; shipped += _csEffectiveShipped(s, it.sku, qty); });
     var deliveryStatus = totalQty > 0 && shipped >= totalQty ? 'ส่งแล้ว (ครบ)' : (shipped > 0 ? 'ส่งบางส่วน' : 'ยังไม่ส่ง');
-    return [s.soNumber || '', s.customerPO || '', s.projectId || '', (SO_STATUS[s.status] || {}).label || s.status || '', deliveryStatus, (s.createdAt || '').slice(0, 10), cd.days != null ? cd.days : ''];
+    var pid = (typeof _soDisplayProjectId === 'function') ? _soDisplayProjectId(s) : (s.projectId || '');
+    var invNums = [];
+    var shipRounds = (typeof _soMigrateLegacyShipment === 'function') ? _soMigrateLegacyShipment(s) : (s.shipments || []);
+    shipRounds.forEach(function(sh) { if (sh.invoiceNumber && invNums.indexOf(sh.invoiceNumber) === -1) invNums.push(sh.invoiceNumber); });
+    return [s.soNumber || '', s.customerPO || '', pid, (s.customerPODate || '').slice(0, 10), (SO_STATUS[s.status] || {}).label || s.status || '', deliveryStatus, (s.createdAt || '').slice(0, 10), cd.days != null ? cd.days : '', invNums.join(', ')];
   });
   totalRows += soRows.length;
   _csXlWriteSheet(wb, 'ตาม SO', d.name, _csFilterDescLabel(true), soHeader, soRows,
-    [14, 18, 16, 14, 14, 12, 14], [], 4);
+    [14, 18, 16, 14, 14, 14, 12, 14, 20], [], 5);
 
   // แท็บ 3: ตามสินค้า
   var items = _csFilteredProductItems(st);
@@ -680,6 +692,180 @@ function _csExportExcel_impl(dealerId) {
   }).catch(function(e) {
     toast('⚠️ สร้างไฟล์ Excel ไม่สำเร็จ: ' + (e && e.message || e), true);
   });
+}
+
+// ---------------- Import หมายเหตุกลับจากไฟล์ Export Excel (เฉพาะคอลัมน์ "หมายเหตุ" ในชีต "ตาม PO ลูกค้า") ----------------
+// ไม่มีคอลัมน์ SO_ID/ITEM_IDX ซ่อนในไฟล์นี้ (เป็นไฟล์ส่งลูกค้าดูได้) เลย match แถวด้วย PO ลูกค้า + SKU (หรือชื่อสินค้าถ้าไม่มี SKU)
+// เหมือนที่ _csFilteredPOGroups ใช้จัดกลุ่ม — เขียนค่ากลับผ่าน it.comment ฟิลด์เดิม (ฟิลด์เดียวกับ "คอมเมนต์" ในหน้า SO/PO Tracker)
+var _csImportSel = {};
+function _csShowImportRemarksModal(dealerId) {
+  window._csImportPending = null;
+  _csImportSel = {};
+  var html = '<div class="hint" style="margin-bottom:8px">ใช้ไฟล์ที่ได้จากปุ่ม "📤 Export Excel" ของ Dealer นี้ (ชีต "ตาม PO ลูกค้า") แก้เฉพาะคอลัมน์ "หมายเหตุ" แล้วอัปโหลดไฟล์กลับมาที่นี่ — คอลัมน์อื่นจะไม่ถูกนำเข้า</div>';
+  html += '<input type="file" id="csImpFile" accept=".xlsx,.xls" class="fi" onchange="_csPreviewImportRemarks(this,\'' + dealerId + '\')">';
+  html += '<div id="csImpPreview"></div>';
+  html += '<label class="hint" id="csImpConfirmWrap" style="display:none;margin-top:10px;display:flex;gap:6px;align-items:flex-start">' +
+    '<input type="checkbox" id="csImpConfirm" style="margin-top:3px"> <span>ฉันตรวจสอบรายการเปลี่ยนแปลงหมายเหตุที่ "✅ เลือกไว้" ด้านบนแล้ว และต้องการบันทึกทับข้อมูลเดิม</span></label>';
+  html += '<button class="btn bp btn-full" id="csImpBtn" style="margin-top:8px;display:none" onclick="applyCsImportRemarks()">💾 บันทึกหมายเหตุเฉพาะรายการที่เลือกไว้</button>';
+  openM('📥 Import หมายเหตุจาก Excel', html);
+}
+
+function _csPreviewImportRemarks(input, dealerId) {
+  ensureXLSX().then(function() {
+    _csImportRemarksParse_impl(input, dealerId);
+  }).catch(function(e) {
+    if (typeof toast === 'function') toast('⚠️ โหลดไลบรารีไม่สำเร็จ: ' + (e && e.message || e), true);
+  });
+}
+
+function _csImportRemarksParse_impl(input, dealerId) {
+  var file = input.files[0];
+  if (!file) return;
+  var d = ST.getAll('dealers').filter(function(x) { return x.id === dealerId; })[0];
+  if (!d) { toast('ไม่พบ Dealer'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var prev = document.getElementById('csImpPreview');
+    if (!prev) return;
+    var wb;
+    try { wb = XLSX.read(e.target.result, { type: 'array' }); } catch (err) {
+      prev.innerHTML = '<div style="color:#ef4444;font-size:12px">เปิดไฟล์ไม่สำเร็จ: ' + sanitize(err && err.message || String(err)) + '</div>'; return;
+    }
+    var sheetName = wb.SheetNames.indexOf('ตาม PO ลูกค้า') !== -1 ? 'ตาม PO ลูกค้า' : wb.SheetNames[0];
+    var ws = wb.Sheets[sheetName];
+    var grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+    var headerRowIdx = -1, header = [];
+    for (var i = 0; i < grid.length; i++) {
+      if (grid[i].indexOf('PO ลูกค้า') !== -1) { headerRowIdx = i; header = grid[i]; break; }
+    }
+    if (headerRowIdx === -1) { prev.innerHTML = '<div style="color:#ef4444;font-size:12px">ไม่พบหัวตาราง "PO ลูกค้า" ในชีต "' + sanitize(sheetName) + '" — ไฟล์นี้อาจไม่ได้มาจากปุ่ม Export Excel ของหน้านี้</div>'; return; }
+    var poCol = header.indexOf('PO ลูกค้า'), skuCol = header.indexOf('SKU'), modelCol = header.indexOf('รายการสินค้า'), remarkCol = header.indexOf('หมายเหตุ');
+    if (remarkCol === -1) { prev.innerHTML = '<div style="color:#ef4444;font-size:12px">ไฟล์นี้ไม่มีคอลัมน์ "หมายเหตุ" — ลอง Export ไฟล์ใหม่จากปุ่ม Export Excel ก่อน</div>'; return; }
+
+    var sos = _csSOsForDealer(d.id);
+    var noPoPrefix = '(ไม่มีเลข PO) ';
+    var changes = [], rejects = [];
+    for (var r = headerRowIdx + 1; r < grid.length; r++) {
+      var row = grid[r];
+      var poNo = String(row[poCol] || '').trim();
+      var sku = String(row[skuCol] || '').trim();
+      var model = String(row[modelCol] || '').trim();
+      var remark = String(row[remarkCol] || '').trim();
+      if (!poNo && !sku && !model) continue; // แถวว่าง/บรรทัดข้อความ "ไม่มีรายการ..."
+      var matchKey = sku || model;
+      if (!poNo || !matchKey) continue;
+
+      var candidates = [];
+      sos.forEach(function(s) {
+        var key = s.customerPO || (noPoPrefix + (s.soNumber || s.id));
+        if (key !== poNo) return;
+        (s.items || []).forEach(function(it, idx) {
+          if ((it.sku || it.model) === matchKey) candidates.push({ so: s, idx: idx, it: it });
+        });
+      });
+      if (!candidates.length) { rejects.push({ rowNum: r + 1, reason: 'ไม่พบ PO "' + poNo + '" / สินค้า "' + matchKey + '" ของ Dealer นี้ (อาจถูกลบ หรือเลขไม่ตรงกับปัจจุบัน)' }); continue; }
+
+      var oldSet = {};
+      candidates.forEach(function(c) { oldSet[String(c.it.comment || '').trim()] = true; });
+      var oldKeys = Object.keys(oldSet);
+      if (oldKeys.length === 1 && oldKeys[0] === remark) continue; // ไม่มีอะไรเปลี่ยน
+
+      changes.push({ poNo: poNo, sku: sku, model: model, oldSummary: oldKeys.join(' / '), newRemark: remark, candidates: candidates, rowNum: r + 1 });
+    }
+
+    window._csImportPending = { dealerId: dealerId, changes: changes, rejects: rejects };
+    _csImportSel = {};
+    changes.forEach(function(c, i) { _csImportSel[i] = true; });
+    _csRenderImportRemarksPreview();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function _csRenderImportRemarksPreview() {
+  var prev = document.getElementById('csImpPreview');
+  var pending = window._csImportPending;
+  if (!prev || !pending) return;
+  var selCount = pending.changes.filter(function(c, i) { return _csImportSel[i]; }).length;
+
+  var h = '<div style="font-size:12px;color:var(--text2);background:var(--bg2);border-radius:6px;padding:8px;margin:8px 0">' +
+    '✅ เลือกไว้ <strong style="color:var(--accent)">' + selCount + '/' + pending.changes.length + ' รายการ</strong> จะแก้หมายเหตุ' +
+    (pending.rejects.length ? ' · <span style="color:#ef4444">⚠️ ' + pending.rejects.length + ' แถวถูกข้าม (ดูด้านล่าง)</span>' : '') +
+    '</div>';
+
+  if (pending.changes.length) {
+    h += '<div style="display:flex;gap:6px;margin-bottom:6px">' +
+      '<button class="btn bsm bo" onclick="_csImportRemarksBulkSelect(true)">✅ เลือกทั้งหมด</button>' +
+      '<button class="btn bsm bo" onclick="_csImportRemarksBulkSelect(false)">❌ ไม่เลือกเลย</button></div>';
+    h += '<div style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">';
+    pending.changes.forEach(function(c, i) {
+      var checked = !!_csImportSel[i];
+      h += '<div style="padding:8px 10px;border-bottom:1px solid var(--border);font-size:11.5px;display:flex;gap:8px;align-items:flex-start">';
+      h += '<input type="checkbox" style="margin-top:2px" ' + (checked ? 'checked' : '') + ' onchange="_csImportRemarksToggle(' + i + ',this.checked)">';
+      h += '<div' + (checked ? '' : ' style="opacity:.5"') + ' style="flex:1">';
+      h += '<div style="font-weight:600;margin-bottom:2px">' + sanitize(c.poNo) + ' — ' + sanitize(c.model || c.sku) +
+        (c.candidates.length > 1 ? ' <span style="color:var(--text2);font-weight:400">(' + c.candidates.length + ' รายการ/SO)</span>' : '') + '</div>';
+      h += '<div><span style="color:var(--text2)">' + sanitize(c.oldSummary || '(ว่าง)') + '</span> → <span style="color:#22c55e">' + sanitize(c.newRemark || '(ว่าง)') + '</span></div>';
+      h += '</div></div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div style="padding:10px;font-size:12px;color:var(--text2)">ไม่มีหมายเหตุที่เปลี่ยนจากเดิม</div>';
+  }
+
+  if (pending.rejects.length) {
+    h += '<div style="font-weight:600;font-size:12px;margin:10px 0 4px;color:#ef4444">แถวที่ถูกข้าม (ไม่ import)</div>';
+    h += '<div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">';
+    pending.rejects.forEach(function(rj) {
+      h += '<div style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:11.5px;color:#ef4444">แถว ' + rj.rowNum + ': ' + sanitize(rj.reason) + '</div>';
+    });
+    h += '</div>';
+  }
+  prev.innerHTML = h;
+
+  var canApply = selCount > 0;
+  var wrap = document.getElementById('csImpConfirmWrap');
+  var chk = document.getElementById('csImpConfirm');
+  var btn = document.getElementById('csImpBtn');
+  if (wrap) wrap.style.display = canApply ? 'flex' : 'none';
+  if (btn) { btn.style.display = (canApply && chk && chk.checked) ? 'block' : 'none'; btn.disabled = !canApply || !chk || !chk.checked; }
+  if (chk) chk.onchange = function() {
+    if (btn) { btn.style.display = (canApply && chk.checked) ? 'block' : 'none'; btn.disabled = !canApply || !chk.checked; }
+  };
+}
+
+function _csImportRemarksToggle(i, checked) { _csImportSel[i] = checked; _csRenderImportRemarksPreview(); }
+function _csImportRemarksBulkSelect(val) {
+  var pending = window._csImportPending;
+  if (!pending) return;
+  pending.changes.forEach(function(c, i) { _csImportSel[i] = val; });
+  _csRenderImportRemarksPreview();
+}
+
+// บันทึกหมายเหตุตรงไปที่ it.comment (ฟิลด์เดียวกับคอมเมนต์ในหน้า SO/PO Tracker) โดยไม่เรียก render หน้า SO Detail
+// (ต่างจาก saveSOItemComment ที่สมมติว่ากำลังอยู่หน้า SO Detail อยู่แล้ว) — render ทีเดียวหลัง apply ครบทุกรายการ
+function _csApplySingleRemark(soId, idx, value) {
+  var s = ST.getOne('salesOrders', soId);
+  if (!s || !s.items || !s.items[idx]) return;
+  var items = s.items.slice();
+  items[idx] = Object.assign({}, items[idx], { comment: value });
+  var updated = ST.update('salesOrders', soId, { items: items, updatedAt: new Date().toISOString() });
+  if (typeof syncItemToFirebase === 'function') syncItemToFirebase('salesOrders', updated);
+}
+
+function applyCsImportRemarks() {
+  var pending = window._csImportPending;
+  if (!pending) return;
+  var n = 0;
+  pending.changes.forEach(function(c, i) {
+    if (!_csImportSel[i]) return;
+    c.candidates.forEach(function(cand) { _csApplySingleRemark(cand.so.id, cand.idx, c.newRemark); n++; });
+  });
+  window._csImportPending = null;
+  _csImportSel = {};
+  closeM();
+  toast('💾 บันทึกหมายเหตุแล้ว (' + n + ' รายการ)');
+  render();
 }
 
 function _csProjChip(pid) {
@@ -768,7 +954,7 @@ function _csRenderBySO(d, st) {
       : (cd.days != null ? '<span style="font-size:10.5px;color:var(--text2)">' + cd.days + ' วัน</span>' : '');
     h += '<tr style="cursor:pointer" onclick="go(\'soDetail\',{soId:\'' + s.id + '\'})">' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace;font-weight:600">' + sanitize(s.soNumber || '-') + '</td>' +
-      '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace">' + sanitize(s.customerPO || '-') + _csProjChip(s.projectId) + '</td>' +
+      '<td style="padding:9px 8px;border-top:1px solid var(--border);font-family:monospace">' + sanitize(s.customerPO || '-') + _csProjChip(typeof _soDisplayProjectId === 'function' ? _soDisplayProjectId(s) : s.projectId) + '</td>' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + _soStatusBadge(s.status) + '</td>' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + sanitize((s.createdAt || '').slice(0, 10)) + '</td>' +
       '<td style="padding:9px 8px;border-top:1px solid var(--border)">' + creditNote + '</td>' +
