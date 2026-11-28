@@ -136,7 +136,36 @@ const ST = {
       return true;
     }
     try { localStorage.setItem(key, JSON.stringify(data)); this._rev++; return true; }
-    catch(e) { console.error('Storage error:', e); if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม! ไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง ดูว่าอะไรกินที่อยู่', true); return false; }
+    catch(e) {
+      console.error('Storage error:', e);
+      if(window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม! ไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง ดูว่าอะไรกินที่อยู่', true);
+      // พื้นที่เต็มจนเขียนไม่ได้ (QuotaExceededError) — localStorage.setItem ไม่เขียนอะไรเลยถ้าพลาด ของเดิมจึง
+      // ไม่เสีย แต่ข้อมูล "ที่กำลังจะบันทึก" ตอนนี้ (ฟอร์ม/รายงานที่ผู้ใช้เพิ่งกรอก) จะหายไปเงียบๆ เพราะผู้เรียก
+      // ส่วนใหญ่ (เช่น saveVisit ใน modals.js) ไม่เช็คค่าที่ _set คืนมา เดินหน้า toast "บันทึกแล้ว" ทันที —
+      // ดาวน์โหลดสิ่งที่กำลังจะเขียนออกมาเป็นไฟล์กันเหนียวไว้ก่อนเลย กันข้อมูลที่เพิ่งกรอกหายจริง
+      this._emergencySave(key, data);
+      return false;
+    }
+  },
+
+  // กู้ข้อมูลก้อนที่เขียน localStorage ไม่ลงเพราะพื้นที่เต็ม ด้วยการดาวน์โหลดเป็นไฟล์ .json ให้ทันที
+  // ผู้ใช้เปิดไฟล์นี้กู้ข้อมูลคืนได้เอง (หรือส่งให้ทีมช่วยกู้) แม้ localStorage จะเขียนไม่ได้เลยก็ตาม
+  _emergencySave(key, data) {
+    try {
+      var blob = new Blob([JSON.stringify({ key: key, savedAt: new Date().toISOString(), data: data }, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'กู้ข้อมูล-' + key + '-' + Date.now() + '.json';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+      alert('⚠️ พื้นที่เก็บข้อมูลในเครื่องเต็ม บันทึกข้อมูลที่เพิ่งกรอกไม่ได้!\n\n' +
+        'ระบบดาวน์โหลดไฟล์สำรองของข้อมูลนี้ให้แล้ว (เช็คโฟลเดอร์ Download) เก็บไฟล์นี้ไว้ก่อน\n\n' +
+        'จากนั้นไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง เพื่อดูว่าอะไรกินพื้นที่มากสุด แล้วกด Backup ทันที');
+    } catch(e) {
+      console.error('emergency save failed', e);
+      alert('⚠️ พื้นที่เก็บข้อมูลเต็ม และไม่สามารถสำรองข้อมูลที่เพิ่งกรอกไว้อัตโนมัติได้\n\n' +
+        'กรุณาคัดลอกข้อความสำคัญที่พิมพ์ไว้เก็บไว้ก่อน แล้วไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง');
+    }
   },
 
   // เลขรุ่นของข้อมูลในเครื่อง — ขยับทุกครั้งที่มีการเขียนจริง หน้าที่ทำ index ไว้ในหน่วยความจำ (เช่น
