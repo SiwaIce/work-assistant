@@ -538,7 +538,10 @@ function rAdmin(el) {
 }
 
 function switchAdminTab(id) {
-  localStorage.setItem('v7_admin_tab', id);
+  // จำแท็บล่าสุดไว้แค่สำหรับความสะดวก (เปิดแอปรอบหน้าจะได้ยังอยู่แท็บเดิม) ถ้าพื้นที่เต็มจนเขียนไม่ได้
+  // ต้องไม่ให้พังจนสลับแท็บไม่ได้เลย — เคยเจอเคสจริง: ผู้ใช้กด "ขั้นสูง" แล้วหน้าเปล่า เพราะ setItem
+  // ตรงนี้โยน QuotaExceededError แล้วตัดโค้ดที่ toggle class แสดง/ซ่อนแท็บด้านล่างทั้งหมดไปด้วย
+  try { localStorage.setItem('v7_admin_tab', id); } catch(e) { console.warn('จำแท็บที่เปิดไม่ได้ (พื้นที่เต็ม)', e); }
   document.querySelectorAll('.admin-tab').forEach(function(t) {
     t.classList.toggle('act', t.getAttribute('onclick').indexOf("'" + id + "'") !== -1);
   });
@@ -1741,7 +1744,8 @@ function getSalesMembers() {
 }
 
 function saveSalesMembers(members) {
-  localStorage.setItem('v7_salesMembers', JSON.stringify(members));
+  try { localStorage.setItem('v7_salesMembers', JSON.stringify(members)); }
+  catch(e) { console.error('บันทึกรายชื่อทีมไม่สำเร็จ (พื้นที่เต็ม)', e); if (window.toast) toast('⚠️ เนื้อที่เก็บข้อมูลเต็ม! บันทึกรายชื่อทีมไม่ได้ ไปที่ ⚙️ ตั้งค่า ▸ ขั้นสูง', true); }
   if (typeof syncToFirebase === 'function') syncToFirebase('salesMembers', members);
   if (typeof publishTeamConfig === 'function') publishTeamConfig(members);
 }
